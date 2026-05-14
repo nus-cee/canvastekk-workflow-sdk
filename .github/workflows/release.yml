@@ -147,6 +147,7 @@ jobs:
 
       - name: Create GitHub Release
         if: steps.git-cliff.outputs.version != ''
+        id: create_release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
@@ -158,12 +159,12 @@ jobs:
             --title "${NEW_VERSION}" \
             --notes-file /tmp/release-notes.md
 
-      - name: Publish Python SDK to GitHub Packages
+      - name: Build and upload Python SDK to GitHub Release
         if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
         working-directory: python
         env:
-          GH_PAT: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
         run: |
-          pip install twine
           poetry build
-          twine upload --repository-url https://pypi.pkg.github.com/nus-cee/ -u __token__ -p "$GH_PAT" dist/*
+          gh release upload "${NEW_VERSION}" dist/*
