@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.9] - 2026-05-14
+
+### Bug Fixes
+
+- **release**: Upload Python SDK as release assets instead of GitHub Packages
+
+
 ## [0.4.8] - 2026-05-14
 
 ### Bug Fixes
 
 - **release**: Use twine for GitHub Packages publish
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.4.8
 
 
 ## [0.4.7] - 2026-05-14
