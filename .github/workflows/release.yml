@@ -162,6 +162,7 @@ jobs:
         if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
         working-directory: python
         run: |
+          poetry config repositories.github https://pypi.pkg.github.com/nus-cee/
           poetry config http-basic.github "__token__" "${{ secrets.GITHUB_TOKEN }}"
           poetry build
           poetry publish --repository github
