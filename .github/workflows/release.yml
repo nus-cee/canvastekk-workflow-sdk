@@ -163,6 +163,6 @@ jobs:
         working-directory: python
         run: |
           poetry config repositories.github https://pypi.pkg.github.com/nus-cee/
-          poetry config http-basic.github "__token__" "${{ secrets.GITHUB_TOKEN }}"
+          poetry config http-basic.github "__token__" "${{ secrets.GH_PAT }}"
           poetry build
           poetry publish --repository github
