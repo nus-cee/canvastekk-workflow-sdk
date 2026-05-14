@@ -10,12 +10,13 @@ on:
 permissions:
   contents: write
   packages: write
-  pull-requests: read
 
 jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -33,51 +34,17 @@ jobs:
           OUTPUT: CHANGELOG.md
           GITHUB_REPO: ${{ github.repository }}
 
-      - name: Detect changed language directories
-        id: detect
+      - name: Bump version in ALL language configs
+        if: steps.git-cliff.outputs.version != ''
         env:
           NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
         run: |
-          if [ -z "$NEW_VERSION" ]; then
-            echo "No version bump detected, skipping."
-            exit 0
-          fi
-
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          BASE_REF="${PREV_TAG:-HEAD^}"
-
-          echo "Comparing against: $BASE_REF"
-
-          changed_dirs=""
-          for dir in python typescript dotnet; do
-            if [ -d "$dir" ]; then
-              if git diff --name-only "$BASE_REF" HEAD -- "$dir/" | grep -q .; then
-                changed_dirs="$changed_dirs $dir"
-                echo "$dir changed: yes"
-              else
-                echo "$dir changed: no"
-              fi
-            fi
-          done
-
-          echo "changed_dirs=$changed_dirs" >> "$GITHUB_OUTPUT"
-
-      - name: Bump version in changed language configs
-        env:
-          NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
-          CHANGED_DIRS: ${{ steps.detect.outputs.changed_dirs }}
-        run: |
-          if [ -z "$NEW_VERSION" ]; then
-            exit 0
-          fi
-
           export version="${NEW_VERSION#v}"
 
-          python3 << EOF
-          import os
+          python3 << 'PYEOF'
+          import os, json, re
 
-          version = os.environ.get("version", "")
-          changed_dirs = os.environ.get("CHANGED_DIRS", "").strip().split()
+          version = os.environ["version"]
 
           version_files = {
               "python": "python/pyproject.toml",
@@ -85,88 +52,115 @@ jobs:
               "dotnet": "dotnet/Directory.Build.props",
           }
 
-          for lang_dir in changed_dirs:
-              lang = lang_dir.strip()
-              if not lang:
-                  continue
-              path = version_files.get(lang)
-              if not path or not os.path.exists(path):
-                  print(f"SKIP: {lang} — no version file found at {path}")
+          bumped = []
+
+          for lang, path in version_files.items():
+              if not os.path.exists(path):
+                  print(f"SKIP: {lang} — {path} does not exist")
                   continue
 
               with open(path, "r") as f:
-                  lines = f.readlines()
+                  content = f.read()
 
               if path.endswith(".toml"):
+                  new_content, count = re.subn(
+                      r'(\[tool\.poetry\][^\[]*?)version\s*=\s*"[^"]*"',
+                      rf'\1version = "{version}"',
+                      content,
+                      flags=re.DOTALL,
+                  )
+                  if count == 0:
+                      new_content, count = re.subn(
+                          r'version\s*=\s*"[^"]*"',
+                          f'version = "{version}"',
+                          content,
+                          count=1,
+                      )
                   with open(path, "w") as f:
-                      for line in lines:
-                          stripped = line.strip()
-                          key = stripped.split("=", 1)[0].strip()
-                          if key == "version" and stripped.startswith("version"):
-                              f.write(f'version = "{version}"\n')
-                          else:
-                              f.write(line)
+                      f.write(new_content)
+                  bumped.append(lang)
                   print(f"BUMPED: {path} -> {version}")
+
               elif path.endswith(".json"):
-                  import json
-                  data = json.loads("".join(lines))
+                  data = json.loads(content)
                   data["version"] = version
                   with open(path, "w") as f:
                       json.dump(data, f, indent=2)
                       f.write("\n")
+                  bumped.append(lang)
                   print(f"BUMPED: {path} -> {version}")
-          EOF
 
-      - name: Update poetry.lock if Python changed
-        if: contains(steps.detect.outputs.changed_dirs, 'python')
+              elif path.endswith(".props"):
+                  import xml.etree.ElementTree as ET
+                  tree = ET.parse(path)
+                  root = tree.getroot()
+                  for elem in root.iter("Version"):
+                      elem.text = version
+                  tree.write(path, xml_declaration=True, encoding="utf-8")
+                  bumped.append(lang)
+                  print(f"BUMPED: {path} -> {version}")
+
+          if not bumped:
+              print("WARNING: No version files were bumped!")
+          PYEOF
+
+      - name: Set up Python
+        if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
+        run: pip install poetry
+
+      - name: Update poetry.lock
+        if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
         working-directory: python
-        run: |
-          pip install poetry
-          poetry lock --no-update
+        run: poetry lock --no-update
 
       - name: Commit, tag and push
-        id: commit
+        if: steps.git-cliff.outputs.version != ''
         env:
           NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
         run: |
-          if [ -z "$NEW_VERSION" ]; then
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
           git add CHANGELOG.md
-          for f in python/pyproject.toml python/poetry.lock typescript/package.json dotnet/Directory.Build.props; do
+          for f in python/pyproject.toml python/poetry.lock \
+                   typescript/package.json typescript/package-lock.json \
+                   dotnet/Directory.Build.props; do
             [ -f "$f" ] && git add "$f"
           done
-          git diff --cached --quiet && echo "No changes to commit" && exit 0
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
           git commit -m "chore(release): prepare ${NEW_VERSION}"
           git tag "${NEW_VERSION}"
           git push
           git push --tags
 
       - name: Create GitHub Release
+        if: steps.git-cliff.outputs.version != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
         run: |
-          if [ -z "$NEW_VERSION" ]; then
-            exit 0
-          fi
+          CURRENT_NOTES=$(awk "/^## \[${NEW_VERSION#v}\]/,/^## \[/ { print }" CHANGELOG.md | head -n -1)
+          echo "$CURRENT_NOTES" > /tmp/release-notes.md
+
           gh release create "${NEW_VERSION}" \
             --title "${NEW_VERSION}" \
-            --notes-file CHANGELOG.md
-
-      - name: Set up Python 3.12
-        if: contains(steps.detect.outputs.changed_dirs, 'python')
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
+            --notes-file /tmp/release-notes.md
 
       - name: Publish Python SDK to GitHub Packages
-        if: contains(steps.detect.outputs.changed_dirs, 'python')
+        if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
         working-directory: python
         run: |
-          pip install poetry
           poetry config http-basic.github "__token__" "${{ secrets.GITHUB_TOKEN }}"
           poetry build
           poetry publish --repository github
