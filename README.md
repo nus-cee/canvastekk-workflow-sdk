@@ -1,0 +1,999 @@
+# Workflow SDK
+
+Node SDK for CanvasTEKK Workflow Engine. Handles HTTP endpoint boilerplate so node authors can focus on business logic.
+
+## Installation
+
+The SDK lives in the monorepo at `canvastekk-workflow-sdk/`. In `fastapi_app/`, it's linked via a symlink so `poetry install` resolves it automatically.
+
+### Developing the SDK
+
+```bash
+cd canvastekk-workflow-sdk
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install poetry
+poetry install
+```
+
+### Using the SDK in fastapi_app
+
+No manual install needed — the symlink (`fastapi_app/canvastekk-workflow-sdk → ../canvastekk-workflow-sdk`) is resolved by Poetry:
+
+```bash
+cd fastapi_app
+poetry install  # SDK + all runtime deps installed automatically
+```
+
+### Linting & Testing
+
+```bash
+# Lint
+poetry run ruff check canvastekk_workflow_sdk/ tests/
+
+# Test
+poetry run pytest -v
+```
+
+### Runtime Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| Python | ^3.12 | Runtime |
+| FastAPI | ^0.135 | HTTP framework |
+| Pydantic | ^2.12 | Data validation |
+| Uvicorn | ^0.43 | ASGI server |
+| python-multipart | >=0.0.22 | File upload support |
+
+### Dev Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| pytest | ^9.0 | Test runner |
+| pytest-asyncio | ^1.3 | Async test support |
+| httpx | ^0.28 | HTTP client for testing |
+| ruff | ^0.15 | Linter & formatter |
+
+---
+
+## Creating Your First Node
+
+### Step 1: Install the SDK
+
+If you're creating a node in the monorepo, the SDK is already available via symlink in `fastapi_app/`. For a standalone project (future, when SDK is published):
+
+```bash
+mkdir my-node && cd my-node
+poetry init -n
+poetry add canvastekk-workflow-sdk
+```
+
+### Step 2: Define Your Node
+
+Create a file (e.g. `handler.py`) and subclass `BaseNode`:
+
+```python
+# handler.py
+from canvastekk_workflow_sdk import BaseNode, NodeDefinition, ExecutionContext
+
+
+class UppercaseNode(BaseNode):
+    definition = NodeDefinition(
+        id="uppercase-v1.0.0",
+        name="uppercase",
+        version="1.0.0",
+        title="Uppercase",
+        description="Converts text to uppercase",
+        input_schema={
+            "type": "object",
+            "properties": {"text": {"type": "string"}},
+            "required": ["text"],
+        },
+        output_schema={
+            "type": "object",
+            "properties": {"result": {"type": "string"}},
+        },
+    )
+
+    def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+        context.report_progress(0.5, "Processing text")
+        return {"result": inputs["text"].upper()}
+
+
+app = UppercaseNode().create_app()
+```
+
+The four requirements:
+
+1. **Subclass `BaseNode`** — inherit from `canvastekk_workflow_sdk.BaseNode`
+2. **Define `definition`** — a `NodeDefinition` with all required fields (`id`, `name`, `version`, `title`, `description`, `input_schema`, `output_schema`)
+3. **Implement `execute(inputs, context)`** — return a dict matching your `output_schema`
+4. **Call `.create_app()`** — get a ready-to-run FastAPI application
+
+### Step 3: Run It
+
+```bash
+# Development
+uvicorn handler:app --reload --port 8001
+
+# Production
+uvicorn handler:app --host 0.0.0.0 --port 8001 --workers 4
+```
+
+### Step 4: Test the Endpoints
+
+```bash
+# Health check
+curl http://localhost:8001/health
+# {"status":"healthy","node_id":"uppercase-v1.0.0","version":"1.0.0","checks":{}}
+
+# Node manifest
+curl http://localhost:8001/manifest
+# {"id":"uppercase-v1.0.0","name":"uppercase","version":"1.0.0",...}
+
+# Execute the node
+curl -X POST http://localhost:8001/execute \
+  -H "Content-Type: application/json" \
+  -d '{"run_id":"run-1","node_id":"node-1","inputs":{"text":"hello world"}}'
+# {"execution_id":"...","status":"pass","outputs":{"result":"HELLO WORLD"},...}
+
+# Metrics
+curl http://localhost:8001/metrics
+# {"total_executions":1,"pass_count":1,"fail_count":0,...}
+```
+
+---
+
+## FastAPI Endpoint Deep Dive
+
+### How It Works
+
+When you call `node.create_app()`, the SDK creates a FastAPI application with these endpoints:
+
+| Endpoint | Method | Handler | Purpose |
+|----------|--------|---------|---------|
+| `/execute` | POST | `node.run(request)` | Execute the node's business logic |
+| `/health` | GET | `node.health_check()` | Health status |
+| `/manifest` | GET | `node.definition.to_dict()` | Node self-description |
+| `/definition` | GET | Redirects to `/manifest` | Deprecated |
+| `/hook` | POST | `node.hook(payload)` | Webhook/callback handler |
+| `/metrics` | GET | `node._metrics_collector.get_summary()` | Execution metrics |
+
+### Request/Response Lifecycle
+
+When `POST /execute` receives a request:
+
+```
+NodeExecutionRequest
+        |
+        v
+  Input Validation  ──(fail)──>  NodeExecutionResponse(status="fail", error_code="VALIDATION_ERROR")
+        |
+     (pass)
+        v
+  ExecutionContext created
+        |
+        v
+  Middleware: on_before_execute(inputs, context)
+        |
+        v
+  node.execute(inputs, context)  ──(exception)──>  Middleware: on_error(...)
+        |                                            |
+     (returns)                                    NodeExecutionResponse(status="fail")
+        v
+  Middleware: on_after_execute(inputs, outputs, context, duration_ms)
+        |
+        v
+  NodeExecutionResponse(status="pass", outputs=...)
+```
+
+### NodeExecutionRequest
+
+The payload sent to `POST /execute`:
+
+```json
+{
+  "run_id": "workflow-run-abc123",
+  "node_id": "node-instance-456",
+  "inputs": { "text": "hello" },
+  "callback_url": "https://orchestrator.example.com/callback",
+  "output_upload_url": {
+    "result_path": "https://s3.amazonaws.com/bucket/file?signature=..."
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `run_id` | `str` | Yes | Workflow run identifier |
+| `node_id` | `str` | Yes | Node instance ID in the workflow |
+| `inputs` | `dict` | No | Input values (validated against `input_schema`) |
+| `callback_url` | `str` | No | URL to POST result to (for async execution) |
+| `output_upload_url` | `dict[str, str]` | No | Mapping of output field name to pre-signed S3 PUT URL |
+
+### NodeExecutionResponse
+
+The response from `POST /execute`:
+
+```json
+{
+  "execution_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "pass",
+  "outputs": { "result": "HELLO" },
+  "token_usage": 0.0,
+  "duration_ms": 12,
+  "error": null,
+  "error_type": null,
+  "error_code": null
+}
+```
+
+On failure:
+
+```json
+{
+  "execution_id": "...",
+  "status": "fail",
+  "outputs": null,
+  "token_usage": 0.0,
+  "duration_ms": 5,
+  "error": "Intentional failure for testing",
+  "error_type": "ValueError",
+  "error_code": null
+}
+```
+
+### Error Types and HTTP Status Codes
+
+The SDK provides structured exceptions. When raised inside `execute()`, they produce specific error codes in the response:
+
+| Exception | Error Code | HTTP Status (when unhandled) | When to Use |
+|-----------|-----------|------------------------------|-------------|
+| `NodeExecutionError` | `EXECUTION_ERROR` | 500 | Generic execution failure |
+| `NodeValidationError` | `VALIDATION_ERROR` | 422 | Input validation failure |
+| `NodeTimeoutError` | `TIMEOUT` | 408 | Execution exceeded time limit |
+| `NodeIOError` | `IO_ERROR` | 500 | File read/write failure |
+| `NodeConfigurationError` | `CONFIGURATION_ERROR` | 500 | Invalid node configuration |
+
+Note: When raised inside `execute()`, the SDK catches them and returns `status: "fail"` with HTTP 200. The structured error codes appear in the `error_code` field. When exceptions escape to the FastAPI exception handler, they produce the HTTP status codes above.
+
+Usage example:
+
+```python
+from canvastekk_workflow_sdk import BaseNode, NodeDefinition, ExecutionContext
+from canvastekk_workflow_sdk.exceptions import NodeIOError, NodeExecutionError
+
+
+class FileProcessorNode(BaseNode):
+    definition = NodeDefinition(
+        id="file-proc-v1.0.0",
+        name="file-proc",
+        version="1.0.0",
+        title="File Processor",
+        description="Processes a file",
+        input_schema={"type": "object", "properties": {"path": {"type": "string"}}},
+        output_schema={"type": "object", "properties": {"line_count": {"type": "integer"}}},
+    )
+
+    def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+        from pathlib import Path
+
+        file_path = Path(inputs.get("path", ""))
+        if not file_path.exists():
+            raise NodeIOError(f"File not found: {file_path}", path=str(file_path))
+
+        content = file_path.read_text()
+        return {"line_count": len(content.splitlines())}
+
+
+app = FileProcessorNode().create_app()
+```
+
+---
+
+## File Handling Guide
+
+### Declaring File Inputs
+
+Mark input fields as binary using `"format": "binary"` in `input_schema`:
+
+```python
+definition = NodeDefinition(
+    id="segment-v1.0.0",
+    name="segment",
+    version="1.0.0",
+    title="Segment",
+    description="Segments a point cloud",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "point_cloud": {"type": "string", "format": "binary", "description": "Point cloud file"},
+            "confidence": {"type": "number", "default": 0.5},
+        },
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "instances": {"type": "string"},
+        },
+    },
+)
+```
+
+When the SDK detects `format: binary`, the field becomes a file input (`definition.file_input_fields` returns `["point_cloud"]`).
+
+### Receiving Files via Multipart/Form-Data
+
+When a client sends `multipart/form-data` to `POST /execute`, the SDK:
+
+1. Saves uploaded files to a temporary directory
+2. Replaces the field value with the local file path
+3. Coerces scalar fields to their declared types (`number` → `float`, `integer` → `int`, `boolean` → `bool`)
+
+```bash
+curl -X POST http://localhost:8001/execute \
+  -F "run_id=run-1" \
+  -F "node_id=node-1" \
+  -F "confidence=0.8" \
+  -F "point_cloud=@/path/to/scan.ply"
+```
+
+Inside `execute()`, `inputs["point_cloud"]` will be a local file path:
+
+```python
+def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+    from pathlib import Path
+
+    cloud_path = Path(inputs["point_cloud"])
+    cloud_data = cloud_path.read_bytes()
+
+    confidence = inputs.get("confidence", 0.5)  # already coerced to float
+
+    # ... process the point cloud ...
+    return {"instances": "42 objects found"}
+```
+
+### Writing Output Files
+
+Use `context.output_dir` and `context.output_path(filename)` for output files:
+
+```python
+def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+    # Write output to the context's output directory
+    output_file = context.output_path("result.json")
+    output_file.write_text('{"status": "done"}')
+
+    return {"result_path": str(output_file)}
+```
+
+`context.output_dir` is created automatically at `/tmp/{run_id}/{node_id}`.
+
+### S3 Output Upload
+
+To have output files uploaded to S3 automatically, declare binary output fields and provide `output_upload_url`:
+
+1. Mark output field as binary: `"format": "binary"` in `output_schema`
+2. Client sends `output_upload_url` mapping field names to pre-signed S3 PUT URLs
+
+```python
+definition = NodeDefinition(
+    id="converter-v1.0.0",
+    name="converter",
+    version="1.0.0",
+    title="Converter",
+    description="Converts file format",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "input_file": {"type": "string", "format": "binary"},
+        },
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "converted": {"type": "string", "format": "binary"},
+            "metadata": {"type": "object"},
+        },
+    },
+)
+```
+
+Client request:
+
+```json
+{
+  "run_id": "run-1",
+  "node_id": "node-1",
+  "inputs": {"input_file": "/tmp/upload.ply"},
+  "output_upload_url": {
+    "converted": "https://s3.amazonaws.com/bucket/result.ply?X-Amz-Signature=..."
+  }
+}
+```
+
+The SDK uploads the file at `outputs["converted"]` to the pre-signed URL after a successful execution. If execution fails (`status: "fail"`), the upload is skipped.
+
+For multipart/form-data, pass `output_upload_url` as a JSON string:
+
+```bash
+curl -X POST http://localhost:8001/execute \
+  -F "run_id=run-1" \
+  -F "node_id=node-1" \
+  -F 'output_upload_url={"converted":"https://s3.amazonaws.com/bucket/result.ply?..."}' \
+  -F "input_file=@/path/to/file.ply"
+```
+
+---
+
+## Deploying a Node
+
+### Uvicorn (Production)
+
+```bash
+# Single worker (development)
+uvicorn handler:app --host 0.0.0.0 --port 8001
+
+# Multiple workers (production)
+uvicorn handler:app --host 0.0.0.0 --port 8001 --workers 4
+
+# With SSL
+uvicorn handler:app --host 0.0.0.0 --port 8443 --ssl-keyfile=key.pem --ssl-certfile=cert.pem
+
+# With timeout and access log
+uvicorn handler:app --host 0.0.0.0 --port 8001 --timeout-keep-alive 30 --access-log
+```
+
+### Docker
+
+```dockerfile
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY pyproject.toml poetry.lock ./
+RUN pip install poetry && \
+    poetry config virtualenvs.create false && \
+    poetry install --without dev --no-interaction --no-ansi
+
+COPY handler.py .
+
+EXPOSE 8001
+
+CMD ["uvicorn", "handler:app", "--host", "0.0.0.0", "--port", "8001"]
+```
+
+Build and run:
+
+```bash
+docker build -t my-node .
+docker run -p 8001:8001 my-node
+```
+
+### Docker Compose
+
+```yaml
+services:
+  my-node:
+    build: .
+    ports:
+      - "8001:8001"
+    environment:
+      - LOG_LEVEL=info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+```
+
+---
+
+## Testing Your Node
+
+### Unit Testing with `node.run()`
+
+Test business logic directly without HTTP:
+
+```python
+# tests/test_my_node.py
+from my_node import MyNode
+from canvastekk_workflow_sdk import NodeExecutionRequest
+
+
+def test_execute_returns_uppercase():
+    node = MyNode()
+    request = NodeExecutionRequest(
+        run_id="test-run",
+        node_id="test-node",
+        inputs={"text": "hello"},
+    )
+    response = node.run(request)
+
+    assert response.status == "pass"
+    assert response.outputs == {"result": "HELLO"}
+    assert response.duration_ms >= 0
+
+
+def test_execute_failure_returns_fail_status():
+    node = MyNode()
+    request = NodeExecutionRequest(
+        run_id="test-run",
+        node_id="test-node",
+        inputs={},  # missing required "text"
+    )
+    response = node.run(request)
+
+    assert response.status == "fail"
+    assert response.error_type == "NodeValidationError"
+    assert response.error_code == "VALIDATION_ERROR"
+```
+
+### Integration Testing with FastAPI TestClient
+
+Test the full HTTP stack including multipart uploads:
+
+```python
+# tests/test_my_node_api.py
+import io
+from fastapi.testclient import TestClient
+from my_node import app
+
+
+client = TestClient(app)
+
+
+def test_execute_endpoint():
+    response = client.post(
+        "/execute",
+        json={
+            "run_id": "test-run",
+            "node_id": "test-node",
+            "inputs": {"text": "hello"},
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "pass"
+    assert data["outputs"]["result"] == "HELLO"
+
+
+def test_health_endpoint():
+    response = client.get("/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "healthy"
+    assert data["node_id"] == "my-node-v1.0.0"
+
+
+def test_manifest_endpoint():
+    response = client.get("/manifest")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] == "my-node"
+    assert "input_schema" in data
+
+
+def test_metrics_endpoint():
+    # Execute first to generate metrics
+    client.post("/execute", json={
+        "run_id": "r1", "node_id": "n1", "inputs": {"text": "test"},
+    })
+
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_executions"] >= 1
+
+
+def test_multipart_file_upload():
+    file_content = b"x,y,z\n1.0,2.0,3.0"
+    response = client.post(
+        "/execute",
+        data={"run_id": "test-run", "node_id": "test-node"},
+        files={"point_cloud": ("cloud.csv", io.BytesIO(file_content), "text/csv")},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "pass"
+```
+
+### Running Tests
+
+```bash
+# From the SDK directory
+poetry run pytest
+
+# With verbose output
+poetry run pytest -v
+
+# Specific test file
+poetry run pytest tests/test_my_node.py
+```
+
+---
+
+## SDK Components
+
+### NodeDefinition
+
+Defines what a node is. **Required fields:** `id`, `name`, `version`, `title`, `description`, `input_schema`, `output_schema`.
+
+```python
+from canvastekk_workflow_sdk import NodeDefinition, RetryConfig, NodeStyles
+from canvastekk_workflow_sdk.definition import ColorPreset
+
+definition = NodeDefinition(
+    id="my-node-v1.0.0",
+    name="my-node",
+    version="1.0.0",
+    title="My Node",
+    description="Does something useful",
+    input_schema={
+        "type": "object",
+        "properties": {"input": {"type": "string"}},
+    },
+    output_schema={
+        "type": "object",
+        "properties": {"output": {"type": "string"}},
+    },
+    token_cost=0.5,
+    default_retry=RetryConfig(max_attempts=3, initial_delay_ms=1000),
+    category="inference",
+    timeout_seconds=60,
+    is_control_flow=False,
+    styles=NodeStyles(icon="Brain", color="emerald"),
+)
+```
+
+Optional fields with defaults:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `token_cost` | 0.0 | Cost per execution |
+| `default_retry` | `RetryConfig(1 attempt)` | Retry policy |
+| `category` | `"utility"` | Node category (`transform`, `inference`, `utility`, `control-flow`) |
+| `timeout_seconds` | 30 | Max execution time |
+| `is_control_flow` | `False` | Run in orchestrator, not HTTP |
+| `styles` | `None` | Icon/color for UI |
+
+### ExecutionContext
+
+Provided to `execute()` method:
+
+```python
+def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+    # Identifiers
+    context.run_id    # "workflow-run-abc123"
+    context.node_id   # "node-instance-456"
+
+    # File outputs
+    context.output_dir                 # Path("/tmp/run-abc123/node-456")
+    output_file = context.output_path("result.json")  # Path("/tmp/run-abc123/node-456/result.json")
+
+    # Logging
+    context.logger.info("Processing started")
+
+    # Progress reporting (0.0 - 1.0)
+    context.report_progress(0.5, "Halfway done")
+
+    # Token usage (for LLM nodes)
+    context.record_token_usage(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+    context.token_usage  # {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+
+    return {}
+```
+
+### Data Contracts
+
+Standard data formats for passing structured data between nodes:
+
+#### InstanceSet — Detected Objects
+
+```python
+from canvastekk_workflow_sdk.contracts import InstanceSet, Instance, BoundingBox3D, Point3D
+
+# Producing instances
+instance_set = InstanceSet(
+    instances=[
+        Instance(
+            instance_id=1,
+            class_id=4,
+            class_name="vent",
+            confidence=0.95,
+            point_indices=[0, 1, 2, 3],
+            centroid=Point3D(x=100.0, y=200.0, z=50.0),
+            bounding_box=BoundingBox3D(
+                min_point=Point3D(x=80.0, y=180.0, z=30.0),
+                max_point=Point3D(x=120.0, y=220.0, z=70.0),
+            ),
+        ),
+    ],
+    class_names=["floor", "ceiling", "wall", "door", "vent"],
+    point_count=10000,
+    source_node="segment",
+    source_file="scan.ply",
+)
+
+# Save to file
+instance_set.save_json("/tmp/instances.json")
+
+# Consuming instances in another node
+instances = InstanceSet.load_json(inputs["instances_path"])
+vents = instances.get_instances_by_class("vent")
+for vent in vents:
+    print(f"Vent {vent.instance_id}: {vent.num_points} points, confidence={vent.confidence}")
+```
+
+#### MeasurementSet — Measurements
+
+```python
+from canvastekk_workflow_sdk.contracts import MeasurementSet, Measurement, Point3D
+
+measurements = MeasurementSet(
+    measurements=[
+        Measurement(
+            name="ceiling_height",
+            value=2800.0,
+            unit="mm",
+            method="plane_to_plane",
+            confidence=0.98,
+            points=[Point3D(x=0, y=0, z=0), Point3D(x=0, y=0, z=2800)],
+        ),
+        Measurement(
+            name="vent_width",
+            value=300.0,
+            unit="mm",
+            method="bounding_box",
+        ),
+    ],
+    source_node="measure",
+)
+
+# Access measurements
+height = measurements.get_value("ceiling_height")  # 2800.0
+```
+
+#### PlaneSet — Detected Planes
+
+```python
+from canvastekk_workflow_sdk.contracts import PlaneSet, Plane, Point3D
+
+planes = PlaneSet(
+    planes=[
+        Plane(
+            point=Point3D(x=0, y=0, z=0),
+            normal=Point3D(x=0, y=0, z=1),
+            label="floor",
+        ),
+        Plane(
+            point=Point3D(x=0, y=0, z=2800),
+            normal=Point3D(x=0, y=0, z=-1),
+            label="ceiling",
+        ),
+    ],
+    source_node="plane_detect",
+)
+
+floor = planes.get_plane_by_label("floor")
+```
+
+#### Serialization
+
+All contracts extend `BaseContract` which provides:
+
+```python
+# Save to JSON
+instance_set.save_json("output.json")
+
+# Load from JSON
+loaded = InstanceSet.load_json("output.json")
+
+# Access metadata
+print(loaded.contract_version)  # "1.0.0"
+print(loaded.source_node)       # "segment"
+print(loaded.source_file)       # "scan.ply"
+```
+
+### NodeExecutionRequest
+
+Request payload for `POST /execute`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `run_id` | `str` | Workflow run identifier |
+| `node_id` | `str` | Node instance ID |
+| `inputs` | `dict` | Input values |
+| `callback_url` | `str \| None` | For async execution (optional) |
+| `output_upload_url` | `dict[str, str] \| None` | Pre-signed S3 URLs for file outputs (optional) |
+
+### NodeExecutionResponse
+
+Response from `POST /execute`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `execution_id` | `str` | Unique execution ID |
+| `status` | `"pass" \| "fail"` | Execution result |
+| `outputs` | `dict \| None` | Output values (if pass) |
+| `token_usage` | `float` | Tokens consumed |
+| `duration_ms` | `int` | Execution time |
+| `error` | `str \| None` | Error message (if fail) |
+| `error_type` | `str \| None` | Error class name (if fail) |
+| `error_code` | `str \| None` | Structured error code (e.g. `TIMEOUT`) |
+
+---
+
+## Advanced: Middleware, Health Checks, and Hooks
+
+### Custom Middleware
+
+Middleware provides hooks around `execute()` for cross-cutting concerns:
+
+```python
+from typing import Any
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition
+from canvastekk_workflow_sdk.middleware import NodeMiddleware
+
+
+class AuditMiddleware:
+    def on_before_execute(
+        self, inputs: dict[str, Any], context: ExecutionContext
+    ) -> dict[str, Any]:
+        context.logger.info(f"Audit: execution started for {context.node_id}")
+        return inputs
+
+    def on_after_execute(
+        self,
+        inputs: dict[str, Any],
+        outputs: dict[str, Any],
+        context: ExecutionContext,
+        duration_ms: int,
+    ) -> None:
+        context.logger.info(f"Audit: execution completed in {duration_ms}ms")
+
+    def on_error(
+        self,
+        inputs: dict[str, Any],
+        error: Exception,
+        context: ExecutionContext,
+        duration_ms: int,
+    ) -> None:
+        context.logger.error(f"Audit: execution failed: {error}")
+
+
+# Register middleware (supports chaining)
+node = MyNode()
+node.add_middleware(AuditMiddleware())
+app = node.create_app()
+```
+
+Built-in middleware:
+
+| Middleware | Description |
+|-----------|-------------|
+| `LoggingMiddleware` | Logs execution lifecycle with correlation IDs (added by default) |
+| `TimingMiddleware` | Records execution timing as structured data |
+
+### Custom Health Checks
+
+Override `health_check()` to report on external dependencies:
+
+```python
+class ModelInferenceNode(BaseNode):
+    definition = NodeDefinition(...)
+
+    def __init__(self):
+        super().__init__()
+        self.model = None
+
+    def health_check(self) -> dict[str, bool]:
+        return {
+            "model_loaded": self.model is not None,
+            "gpu_available": self._check_gpu(),
+        }
+
+    def _check_gpu(self) -> bool:
+        try:
+            import torch
+            return torch.cuda.is_available()
+        except ImportError:
+            return False
+
+    def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+        if self.model is None:
+            self.model = self._load_model()
+        # ...
+```
+
+Health status logic:
+- All checks `True` → `"healthy"`
+- Some checks `True` → `"degraded"`
+- All checks `False` → `"unhealthy"`
+- No checks defined → `"healthy"`
+
+### Webhook Hooks
+
+Override `hook()` to handle async callbacks:
+
+```python
+class AsyncTaskNode(BaseNode):
+    definition = NodeDefinition(...)
+
+    def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+        # Start a long-running task, return immediately
+        task_id = self._start_task(inputs)
+        return {"task_id": task_id, "status": "processing"}
+
+    def hook(self, payload: dict) -> dict | None:
+        # Handle callback when task completes
+        task_id = payload.get("task_id")
+        result = payload.get("result")
+
+        if task_id and result:
+            return {"task_id": task_id, "status": "completed", "result": result}
+
+        return None
+```
+
+By default, `hook()` returns `None` which produces a `501 Not Implemented` response.
+
+### Custom Metrics Collector
+
+```python
+from canvastekk_workflow_sdk import BaseNode
+from canvastekk_workflow_sdk.observability import MetricsCollector, ExecutionMetric
+
+
+class RemoteMetricsCollector(MetricsCollector):
+    def record(self, metric: ExecutionMetric) -> None:
+        super().record(metric)
+        # Forward to external system (e.g. Prometheus, Datadog)
+        self._push_to_monitoring(metric)
+
+    def _push_to_monitoring(self, metric: ExecutionMetric) -> None:
+        # Send metric.to_dict() to your monitoring backend
+        pass
+
+
+node = MyNode()
+node.set_metrics_collector(RemoteMetricsCollector())
+app = node.create_app()
+```
+
+---
+
+## Endpoints
+
+Every node exposes these endpoints automatically:
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/execute` | POST | Run the node (JSON or multipart/form-data) |
+| `/health` | GET | Health check |
+| `/manifest` | GET | Node self-description (NodeDefinition) |
+| `/definition` | GET | Deprecated, redirects to `/manifest` |
+| `/hook` | POST | Webhook/callback handler (override `hook()`) |
+| `/metrics` | GET | Execution metrics summary |
+
+---
+
+## Philosophy
+
+The SDK is a convenience layer, not a hard dependency. Nodes can "eject" by copying SDK code if true independence is needed.
+
+**When to eject:**
+- Node needs behavior the SDK doesn't support
+- Node is in a different language
+- Team wants zero shared dependencies
+- SDK abstraction is fighting you more than helping
+
+---
+
+## Roadmap
+
+- [ ] JWT authentication
+- [ ] Signed URL handling for file inputs/outputs
+- [ ] Idempotency checks (S3 output exists?)
+- [ ] Async callback support
+- [ ] Input validation against JSON Schema
+# canvastekk-workflow-sdk
