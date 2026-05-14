@@ -1,0 +1,123 @@
+"""
+Structured Exception Hierarchy
+
+Provides typed exceptions that the SDK and node authors can raise.
+Each exception maps to a specific HTTP status code for consistent error handling.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+class NodeExecutionError(Exception):
+    """Base exception for all node execution errors."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str = "EXECUTION_ERROR",
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.message = message
+        self.error_code = error_code
+        self.details = details or {}
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "error_code": self.error_code,
+            "message": self.message,
+            "details": self.details,
+        }
+
+
+class NodeTimeoutError(NodeExecutionError):
+    """Raised when node execution exceeds the configured timeout."""
+
+    def __init__(
+        self,
+        timeout_seconds: int,
+        *,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            f"Node execution timed out after {timeout_seconds}s",
+            error_code="TIMEOUT",
+            details=details or {"timeout_seconds": timeout_seconds},
+        )
+        self.timeout_seconds = timeout_seconds
+
+
+class NodeValidationError(NodeExecutionError):
+    """Raised when input validation against JSON Schema fails."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        errors: list[dict[str, Any]] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code="VALIDATION_ERROR",
+            details=details or {},
+        )
+        self.errors = errors or []
+
+    def to_dict(self) -> dict[str, Any]:
+        result = super().to_dict()
+        result["errors"] = self.errors
+        return result
+
+
+class NodeIOError(NodeExecutionError):
+    """Raised when file I/O operations fail."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        path: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        merged_details: dict[str, Any] = details or {}
+        if path:
+            merged_details["path"] = path
+        super().__init__(
+            message,
+            error_code="IO_ERROR",
+            details=merged_details,
+        )
+        self.path = path
+
+
+class NodeConfigurationError(NodeExecutionError):
+    """Raised when node configuration is invalid."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code="CONFIGURATION_ERROR",
+            details=details or {},
+        )
+
+
+ERROR_CODE_TO_HTTP_STATUS: dict[str, int] = {
+    "EXECUTION_ERROR": 500,
+    "TIMEOUT": 408,
+    "VALIDATION_ERROR": 422,
+    "IO_ERROR": 500,
+    "CONFIGURATION_ERROR": 500,
+}
+
+
+def get_http_status_for_error(exc: NodeExecutionError) -> int:
+    return ERROR_CODE_TO_HTTP_STATUS.get(exc.error_code, 500)
