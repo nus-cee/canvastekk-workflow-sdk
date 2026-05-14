@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.7] - 2026-05-14
+
+### Bug Fixes
+
+- **release**: Use GH_PAT for GitHub Packages publish
+
+
 ## [0.4.6] - 2026-05-14
 
 ### Bug Fixes
 
 - **release**: Configure poetry publish repository URL for GitHub Packages
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.4.6
 
 
 ## [0.4.5] - 2026-05-14
