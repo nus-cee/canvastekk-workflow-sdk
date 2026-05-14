@@ -3,7 +3,7 @@ name: Publish Python SDK
 on:
   push:
     tags:
-      - 'python-v*'
+      - 'v*'
 
 defaults:
   run:
@@ -19,19 +19,36 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Check if python/ changed since last tag
+        id: check
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          BASE_REF="${PREV_TAG:-HEAD^}"
+          if git diff --name-only "$BASE_REF" HEAD -- "python/" | grep -q .; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes in python/, skipping publish."
+          fi
+
       - name: Set up Python 3.12
+        if: steps.check.outputs.changed == 'true'
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
       - name: Install Poetry
+        if: steps.check.outputs.changed == 'true'
         run: pip install poetry
 
       - name: Configure Poetry for GitHub Packages
+        if: steps.check.outputs.changed == 'true'
         run: poetry config http-basic.github "__token__" "${{ secrets.GITHUB_TOKEN }}"
 
       - name: Build package
+        if: steps.check.outputs.changed == 'true'
         run: poetry build
 
       - name: Publish to GitHub Packages
+        if: steps.check.outputs.changed == 'true'
         run: poetry publish --repository github

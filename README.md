@@ -63,3 +63,7 @@ Each language SDK follows the same pattern:
 ## Repository
 
 [github.com/nus-cee/canvastekk-workflow-sdk](https://github.com/nus-cee/canvastekk-workflow-sdk)
+
+## Versioning
+
+All languages share a single version counter (PEP 440). Releases are automated via git-cliff on conventional commits merged to `main`. Only language directories with changes get their version bumped and published. See [`python/README.md`](./python/) for details.
