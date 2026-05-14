@@ -988,6 +988,38 @@ The SDK is a convenience layer, not a hard dependency. Nodes can "eject" by copy
 
 ---
 
+## Releasing
+
+Releases are automated via [git-cliff](https://git-cliff.org/) based on conventional commits.
+
+### How it works
+
+1. Merge a commit with a conventional prefix to `main` (e.g., `feat:`, `fix:`, `BREAKING CHANGE`)
+2. `.github/workflows/release-python.yml` triggers automatically (only when `python/` is affected)
+3. git-cliff determines the next version based on commit history since the last `python-v*` tag
+4. The workflow bumps the version in `python/pyproject.toml`, generates `python/CHANGELOG.md`, commits, and tags
+5. `.github/workflows/publish-python.yml` picks up the tag and publishes to GitHub Packages
+
+### Version bump rules
+
+| Commit prefix | Bump | Example |
+|---------------|------|---------|
+| `feat:` | Minor | 0.4.1 → 0.5.0 |
+| `fix:` | Patch | 0.4.1 → 0.4.2 |
+| `feat!:` or `BREAKING CHANGE` | Major | 0.4.1 → 1.0.0 |
+| `refactor:`, `perf:`, `doc:`, etc. | None | — |
+
+### Conventional commit examples
+
+```bash
+git commit -m "feat: add retry middleware support"       # minor bump
+git commit -m "fix: handle missing input schema"          # patch bump
+git commit -m "feat!: change execute() signature"         # major bump
+git commit -m "feat: new endpoint with BREAKING CHANGE"   # major bump
+```
+
+---
+
 ## Roadmap
 
 - [ ] JWT authentication
@@ -995,4 +1027,3 @@ The SDK is a convenience layer, not a hard dependency. Nodes can "eject" by copy
 - [ ] Idempotency checks (S3 output exists?)
 - [ ] Async callback support
 - [ ] Input validation against JSON Schema
-# canvastekk-workflow-sdk

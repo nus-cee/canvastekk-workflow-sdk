@@ -1,0 +1,97 @@
+name: Release Python SDK
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'python/**'
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate changelog and determine next version
+        id: git-cliff
+        uses: orhun/git-cliff-action@v4.8.0
+        with:
+          config: cliff.toml
+          args: --bump
+        env:
+          OUTPUT: python/CHANGELOG.md
+          GITHUB_REPO: ${{ github.repository }}
+
+      - name: Bump version in python/pyproject.toml
+        env:
+          NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
+        run: |
+          python3 << 'EOF'
+          import os, sys
+          from packaging.version import Version, InvalidVersion
+
+          raw_version = os.environ.get("NEW_VERSION", "")
+          if not raw_version:
+              print("No version bump detected, skipping.")
+              exit(0)
+
+          version = raw_version.removeprefix("v")
+
+          try:
+              Version(version)
+          except InvalidVersion:
+              print(f"ERROR: Invalid PEP 440 version: {version!r}", file=sys.stderr)
+              exit(1)
+
+          path = "python/pyproject.toml"
+          with open(path, "r") as f:
+              lines = f.readlines()
+          with open(path, "w") as f:
+              for line in lines:
+                  stripped = line.strip()
+                  key = stripped.split("=", 1)[0].strip()
+                  if key == "version" and stripped.startswith("version"):
+                      f.write(f'version = "{version}"\n')
+                  else:
+                      f.write(line)
+          EOF
+
+      - name: Commit, tag and push
+        env:
+          NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
+        run: |
+          if [ -z "$NEW_VERSION" ]; then
+            echo "No version bump detected, skipping release."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add python/CHANGELOG.md python/pyproject.toml
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore(release): prepare python ${NEW_VERSION}"
+          git tag "python-${NEW_VERSION}"
+          git push
+          git push --tags
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
+        run: |
+          if [ -z "$NEW_VERSION" ]; then
+            echo "No version bump detected, skipping release creation."
+            exit 0
+          fi
+          gh release create "python-${NEW_VERSION}" \
+            --title "python-${NEW_VERSION}" \
+            --notes-file python/CHANGELOG.md
