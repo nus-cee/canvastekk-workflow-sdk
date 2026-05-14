@@ -118,7 +118,7 @@ jobs:
       - name: Update poetry.lock
         if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
         working-directory: python
-        run: poetry lock --no-update
+        run: poetry lock
 
       - name: Commit, tag and push
         if: steps.git-cliff.outputs.version != ''
