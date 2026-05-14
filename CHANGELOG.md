@@ -2,11 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.5] - 2026-05-14
+
+### Bug Fixes
+
+- **release**: Unconditional version bump, detect only for publish gate
+- **release**: Restore pull-requests read permission for git-cliff GitHub API
+- **release**: Remove --no-update flag incompatible with Poetry 2.x
+
+
 ## [0.4.4] - 2026-05-14
 
 ### Bug Fixes
 
 - **release**: Export version variable for Python bump and sync poetry.lock
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.4.4
 
 
 ## [0.4.3] - 2026-05-14
