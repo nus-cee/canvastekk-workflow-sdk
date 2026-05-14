@@ -24,7 +24,7 @@ jobs:
 
       - name: Generate changelog and determine next version
         id: git-cliff
-        uses: orhun/git-cliff-action@v4
+        uses: orhun/git-cliff-action@v4.8.0
         with:
           config: cliff.toml
           args: --bump
