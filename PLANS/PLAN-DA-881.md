@@ -1,98 +1,50 @@
-# PLAN-DA-881: Add automatic semantic versioning for Python SDK based on conventional commits
+# PLAN — DA-881: Add automatic semantic versioning for Python SDK
 
-**JIRA**: [DA-881](https://betekk.atlassian.net/browse/DA-881)
-**Branch**: `DA-881`
-**Status**: Planning Complete
-
----
-
-## Implementation Phases
-
-### Phase 1: Setup & Configuration
-- [ ] Review existing `python/pyproject.toml` structure and current version
-- [ ] Review existing `.github/workflows/publish-python.yml` tag trigger pattern
-- [ ] Review existing `.github/workflows/ci-python.yml` for any conflicts
-- [ ] Add `[tool.semantic_release]` configuration to `python/pyproject.toml`
-- [ ] Pin `python-semantic-release` version and configure commit parser (Angular/Conventional)
-- [ ] Configure `tag_format = "python-v{version}"` to match existing publish workflow
-- [ ] Configure `build_command = false` (no build step needed for pure Python SDK)
-
-### Phase 2: Release Workflow Implementation
-- [ ] Create `.github/workflows/release-python.yml`
-- [ ] Configure trigger: `push` to `main` with `paths: ["python/**"]`
-- [ ] Add checkout step with `persist-credentials: true`
-- [ ] Set up Python environment with `python-semantic-release` dependency
-- [ ] Configure version determination step (detect if release needed)
-- [ ] Add conditional steps: only tag/publish when version changes
-- [ ] Configure git user identity for commit step
-- [ ] Push version bump commit + tag back to main
-- [ ] Ensure workflow has appropriate permissions (`contents: write`, `id-token: write`)
-
-### Phase 3: Changelog Configuration
-- [ ] Configure `python-semantic-release` changelog settings
-- [ ] Set `changelog_file` to `python/CHANGELOG.md`
-- [ ] Configure `changelog_mode` (update existing or regenerate)
-- [ ] Test changelog generation with sample commit history
-
-### Phase 4: Documentation
-- [ ] Update `python/README.md` with release process section
-- [ ] Document conventional commit requirements (`feat:`, `fix:`, `BREAKING CHANGE`)
-- [ ] Document tag naming convention (`python-v*`)
-- [ ] Document the automated flow: commit -> release workflow -> tag -> publish workflow
-- [ ] Add notes about manual release (if ever needed via `--no-commit` flag)
-
-### Phase 5: Testing & Validation
-- [ ] Test: push `fix:` commit affecting `python/` -> verify patch bump + `python-v*` tag created
-- [ ] Test: push `feat:` commit affecting `python/` -> verify minor bump + `python-v*` tag created
-- [ ] Test: push `feat!:` commit with BREAKING CHANGE footer -> verify major bump
-- [ ] Test: push commit NOT affecting `python/` -> verify no release triggered
-- [ ] Verify `publish-python.yml` triggers on the new `python-v*` tag
-- [ ] Verify `python/pyproject.toml` version is updated correctly
-- [ ] Verify CHANGELOG is generated/updated in `python/`
-- [ ] Verify version number in published package matches `pyproject.toml`
+**Branch:** `DA-881`
+**Jira:** [DA-881](https://betekk.atlassian.net/browse/DA-881)
+**Repo:** https://github.com/nus-cee/canvastekk-workflow-sdk
 
 ---
 
-## Acceptance Criteria
+## Phase 1: Setup & Configuration
 
-- [ ] Pushing a commit with `feat:` prefix to main (affecting python/) triggers a minor version bump
-- [ ] Pushing a commit with `fix:` prefix triggers a patch version bump
-- [ ] Breaking changes trigger a major version bump
-- [ ] Version in `python/pyproject.toml` is updated automatically
-- [ ] A `python-v*` tag is created automatically
-- [ ] The existing publish workflow is triggered by the new tag
-- [ ] No manual version editing required
-- [ ] CHANGELOG is generated/updated automatically
+- [x] Create `cliff.toml` at repo root (adapted from ibis-workflow-nodes)
+- [x] Configure `tag_pattern = "python-v[0-9].*"` to avoid conflicts with future language SDKs
+- [x] Configure conventional commit parsers (feat, fix, perf, refactor, doc, style, test, chore, ci, build)
 
-## Scope
+## Phase 2: Release Workflow
 
-| File | Action |
-|------|--------|
-| `.github/workflows/release-python.yml` | Create new |
-| `.github/workflows/publish-python.yml` | Verify tag trigger (no changes expected) |
-| `.github/workflows/ci-python.yml` | Verify no conflicts (no changes expected) |
-| `python/pyproject.toml` | Add `[tool.semantic_release]` section |
-| `python/CHANGELOG.md` | Auto-generated |
-| `python/README.md` | Update with release process docs |
+- [x] Create `.github/workflows/release-python.yml` matching ibis-workflow-nodes pattern
+- [x] Trigger on push to `main` when `python/**` paths are affected
+- [x] Use `orhun/git-cliff-action@v4` for changelog generation + version bump detection
+- [x] Bump version in `python/pyproject.toml` via Python script (PEP 440 validation)
+- [x] Commit version bump + changelog, tag as `python-v*`, push
+- [x] Create GitHub Release with changelog notes
+- [x] The existing `publish-python.yml` triggers on the new `python-v*` tag
 
-## Technical Notes
+## Phase 3: Documentation
 
-- The `python-v*` tag prefix is critical to avoid conflicts with future SDKs (e.g., `js-v*`, `go-v*`)
-- The existing `publish-python.yml` workflow filters on `python-v*` tags - the release workflow must create tags matching this pattern
-- `python-semantic-release` should be configured with `major_on_zero=false` while version is < 1.0.0
-- Consider using `python-semantic-release` v9+ which supports `toml` configuration natively
-- The release workflow must use a PAT or GITHUB_TOKEN with write permissions to push commits and tags back to main
+- [ ] Document release process in `python/README.md`
+- [ ] Document conventional commit requirements
 
-## Risks & Mitigation
+## Phase 4: Testing & Validation
 
-| Risk | Mitigation |
-|------|-----------|
-| Tag conflicts with other SDKs | Use `python-v*` prefix consistently |
-| Infinite workflow loop (release push triggers itself) | Tag `python-v*` won't match `paths: python/` only trigger |
-| Merge conflicts on pyproject.toml version | Release workflow should rebases before pushing |
-| GITHUB_TOKEN permissions insufficient | Use `permissions: contents: write` in workflow |
-| Existing publish workflow not triggered | Verify tag format matches exactly |
+- [ ] Verify workflow triggers correctly on merge to main affecting python/
+- [ ] Verify `python-v*` tag is created
+- [ ] Verify `publish-python.yml` is triggered by the tag
 
 ---
 
-*Generated by ticket-plan-workflow-skill*
+## Flow
+
+```
+Commit with conventional prefix (feat:/fix:/etc) merged to main
+  → release-python.yml triggers (paths: python/**)
+    → git-cliff analyzes commits since last python-v* tag
+    → Determines next version (major/minor/patch)
+    → Bumps version in python/pyproject.toml
+    → Generates python/CHANGELOG.md
+    → Commits, tags python-v*, pushes
+      → publish-python.yml triggers on python-v* tag
+        → Builds and publishes to GitHub Packages
+```
