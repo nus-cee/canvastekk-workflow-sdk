@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
   pull-requests: read
 
 jobs:
@@ -117,6 +118,7 @@ jobs:
           EOF
 
       - name: Commit, tag and push
+        id: commit
         env:
           NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
         run: |
@@ -125,7 +127,10 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md python/pyproject.toml
+          git add CHANGELOG.md
+          for f in python/pyproject.toml typescript/package.json dotnet/Directory.Build.props; do
+            [ -f "$f" ] && git add "$f"
+          done
           git diff --cached --quiet && echo "No changes to commit" && exit 0
           git commit -m "chore(release): prepare ${NEW_VERSION}"
           git tag "${NEW_VERSION}"
@@ -143,3 +148,18 @@ jobs:
           gh release create "${NEW_VERSION}" \
             --title "${NEW_VERSION}" \
             --notes-file CHANGELOG.md
+
+      - name: Set up Python 3.12
+        if: contains(steps.detect.outputs.changed_dirs, 'python')
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Publish Python SDK to GitHub Packages
+        if: contains(steps.detect.outputs.changed_dirs, 'python')
+        working-directory: python
+        run: |
+          pip install poetry
+          poetry config http-basic.github "__token__" "${{ secrets.GITHUB_TOKEN }}"
+          poetry build
+          poetry publish --repository github
