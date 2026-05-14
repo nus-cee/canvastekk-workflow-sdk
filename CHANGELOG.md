@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.4] - 2026-05-14
+
+### Bug Fixes
+
+- **release**: Export version variable for Python bump and sync poetry.lock
+
+
 ## [0.4.3] - 2026-05-14
 
 ### Refactoring
 
 - Combine release and publish into single workflow (#5)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.4.3
 
 
 ## [0.4.2] - 2026-05-14
