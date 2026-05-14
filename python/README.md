@@ -995,10 +995,11 @@ Releases are automated via [git-cliff](https://git-cliff.org/) based on conventi
 ### How it works
 
 1. Merge a commit with a conventional prefix to `main` (e.g., `feat:`, `fix:`, `BREAKING CHANGE`)
-2. `.github/workflows/release-python.yml` triggers automatically (only when `python/` is affected)
-3. git-cliff determines the next version based on commit history since the last `python-v*` tag
-4. The workflow bumps the version in `python/pyproject.toml`, generates `python/CHANGELOG.md`, commits, and tags
-5. `.github/workflows/publish-python.yml` picks up the tag and publishes to GitHub Packages
+2. `.github/workflows/release.yml` triggers automatically on any push to `main`
+3. git-cliff determines the next version based on commit history since the last `v*` tag
+4. Only language directories with changes since the last tag get their version bumped
+5. The workflow commits version bump + changelog, tags as `v*`, and creates a GitHub Release
+6. `.github/workflows/publish-python.yml` picks up the `v*` tag, checks if `python/` changed, and publishes if so
 
 ### Version bump rules
 
@@ -1008,6 +1009,8 @@ Releases are automated via [git-cliff](https://git-cliff.org/) based on conventi
 | `fix:` | Patch | 0.4.1 → 0.4.2 |
 | `feat!:` or `BREAKING CHANGE` | Major | 0.4.1 → 1.0.0 |
 | `refactor:`, `perf:`, `doc:`, etc. | None | — |
+
+> **Note:** Versions are shared across all languages in this monorepo. If only `python/` changes, only `python/pyproject.toml` gets bumped and published. Other languages stay at their current version until they have changes.
 
 ### Conventional commit examples
 
