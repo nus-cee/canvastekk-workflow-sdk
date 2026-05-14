@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.6] - 2026-05-14
+
+### Bug Fixes
+
+- **release**: Configure poetry publish repository URL for GitHub Packages
+
+
 ## [0.4.5] - 2026-05-14
 
 ### Bug Fixes
@@ -9,6 +16,11 @@ All notable changes to this project will be documented in this file.
 - **release**: Unconditional version bump, detect only for publish gate
 - **release**: Restore pull-requests read permission for git-cliff GitHub API
 - **release**: Remove --no-update flag incompatible with Poetry 2.x
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.4.5
 
 
 ## [0.4.4] - 2026-05-14
