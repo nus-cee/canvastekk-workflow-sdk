@@ -176,14 +176,14 @@ class NodeDefinition(BaseModel):
 
         x_accept = schema.get("x-accept")
         if x_accept:
-            if file_path.suffix not in x_accept:
+            if file_path.suffix.lower() not in [ext.lower() for ext in x_accept]:
                 raise NodeValidationError(
                     f"File extension '{file_path.suffix}' is not allowed for field '{field_name}'. "
                     f"Allowed extensions: {x_accept}"
                 )
 
         x_max_size = schema.get("x-maxSizeBytes")
-        if x_max_size:
+        if x_max_size is not None:
             file_size = file_path.stat().st_size
             if file_size > x_max_size:
                 raise NodeValidationError(

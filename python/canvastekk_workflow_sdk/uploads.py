@@ -59,7 +59,7 @@ class S3PresignedUploader:
             httpx.HTTPStatusError: If the upload fails.
         """
         with open(file_path, "rb") as f:
-            resp = httpx.put(presigned_url, content=f.read(), headers={"Content-Type": "application/octet-stream"})
+            resp = httpx.put(presigned_url, content=f, headers={"Content-Type": "application/octet-stream"})
             resp.raise_for_status()
 
     def upload_outputs(

@@ -293,7 +293,7 @@ app = FileProcessorNode().create_app()
 
 ### Declaring File Inputs
 
-Mark input fields as binary using `"format": "binary"` in `input_schema`:
+Mark input fields as files using `"format": "file"` in `input_schema`. Use `x-accept` and `x-maxSizeBytes` extensions to specify accepted file types and size limits:
 
 ```python
 definition = NodeDefinition(
@@ -305,7 +305,13 @@ definition = NodeDefinition(
     input_schema={
         "type": "object",
         "properties": {
-            "point_cloud": {"type": "string", "format": "binary", "description": "Point cloud file"},
+            "point_cloud": {
+                "type": "string",
+                "format": "file",
+                "description": "Point cloud file",
+                "x-accept": [".ply", ".pcd"],
+                "x-maxSizeBytes": 52428800,  # 50 MB
+            },
             "confidence": {"type": "number", "default": 0.5},
         },
     },
@@ -318,42 +324,56 @@ definition = NodeDefinition(
 )
 ```
 
-When the SDK detects `format: binary`, the field becomes a file input (`definition.file_input_fields` returns `["point_cloud"]`).
+When the SDK detects `format: "file"`, the field becomes a file input (`definition.file_input_fields` returns `["point_cloud"]`).
 
-### Receiving Files via Multipart/Form-Data
+### How File Inputs Work
 
-When a client sends `multipart/form-data` to `POST /execute`, the SDK:
-
-1. Saves uploaded files to a temporary directory
-2. Replaces the field value with the local file path
-3. Coerces scalar fields to their declared types (`number` → `float`, `integer` → `int`, `boolean` → `bool`)
-
-```bash
-curl -X POST http://localhost:8001/execute \
-  -F "run_id=run-1" \
-  -F "node_id=node-1" \
-  -F "confidence=0.8" \
-  -F "point_cloud=@/path/to/scan.ply"
-```
-
-Inside `execute()`, `inputs["point_cloud"]` will be a local file path:
+When the workflow engine executes your node, file input values are presigned GET URLs (strings). The node downloads them:
 
 ```python
+import httpx
+
 def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-    from pathlib import Path
+    # File input is a presigned GET URL
+    presigned_url = inputs["point_cloud"]
 
-    cloud_path = Path(inputs["point_cloud"])
-    cloud_data = cloud_path.read_bytes()
+    # Download the file
+    response = httpx.get(presigned_url)
+    response.raise_for_status()
 
-    confidence = inputs.get("confidence", 0.5)  # already coerced to float
+    cloud_data = response.content
+    confidence = inputs.get("confidence", 0.5)
 
     # ... process the point cloud ...
     return {"instances": "42 objects found"}
 ```
 
+### Runtime Validation
+
+After downloading, validate against the constraints defined in `x-accept` and `x-maxSizeBytes`:
+
+```python
+def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+    import httpx
+    from pathlib import Path
+
+    presigned_url = inputs["point_cloud"]
+    response = httpx.get(presigned_url)
+    response.raise_for_status()
+
+    # Validate file type and size
+    definition.validate_file_input(
+        field_name="point_cloud",
+        data=response.content,
+    )
+
+    # Process the validated data
+    # ...
+```
+
 ### Writing Output Files
 
-Use `context.output_dir` and `context.output_path(filename)` for output files:
+Use `context.output_path(filename)` for output files:
 
 ```python
 def execute(self, inputs: dict, context: ExecutionContext) -> dict:
@@ -366,12 +386,9 @@ def execute(self, inputs: dict, context: ExecutionContext) -> dict:
 
 `context.output_dir` is created automatically at `/tmp/{run_id}/{node_id}`.
 
-### S3 Output Upload
+### Output Upload
 
-To have output files uploaded to S3 automatically, declare binary output fields and provide `output_upload_url`:
-
-1. Mark output field as binary: `"format": "binary"` in `output_schema`
-2. Client sends `output_upload_url` mapping field names to pre-signed S3 PUT URLs
+The engine provides presigned PUT URLs via the `output_upload_url` field in the request. The SDK uploads file outputs automatically after successful execution:
 
 ```python
 definition = NodeDefinition(
@@ -383,13 +400,13 @@ definition = NodeDefinition(
     input_schema={
         "type": "object",
         "properties": {
-            "input_file": {"type": "string", "format": "binary"},
+            "input_file": {"type": "string", "format": "file"},
         },
     },
     output_schema={
         "type": "object",
         "properties": {
-            "converted": {"type": "string", "format": "binary"},
+            "converted": {"type": "string", "format": "file"},
             "metadata": {"type": "object"},
         },
     },
@@ -402,23 +419,94 @@ Client request:
 {
   "run_id": "run-1",
   "node_id": "node-1",
-  "inputs": {"input_file": "/tmp/upload.ply"},
+  "inputs": {
+    "input_file": "https://s3.amazonaws.com/bucket/input.ply?X-Amz-Signature=..."
+  },
   "output_upload_url": {
     "converted": "https://s3.amazonaws.com/bucket/result.ply?X-Amz-Signature=..."
   }
 }
 ```
 
-The SDK uploads the file at `outputs["converted"]` to the pre-signed URL after a successful execution. If execution fails (`status: "fail"`), the upload is skipped.
+After successful execution, the SDK uploads the file at `outputs["converted"]` to the pre-signed PUT URL. If execution fails (`status: "fail"`), the upload is skipped.
 
-For multipart/form-data, pass `output_upload_url` as a JSON string:
+### Complete Example
+
+```python
+from canvastekk_workflow_sdk import BaseNode, NodeDefinition, ExecutionContext
+import httpx
+
+
+class PointCloudSegmenter(BaseNode):
+    definition = NodeDefinition(
+        id="segment-v1.0.0",
+        name="segment",
+        version="1.0.0",
+        title="Segment",
+        description="Segments a point cloud",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "point_cloud": {
+                    "type": "string",
+                    "format": "file",
+                    "description": "Point cloud file",
+                    "x-accept": [".ply", ".pcd"],
+                    "x-maxSizeBytes": 52428800,
+                },
+                "confidence": {"type": "number", "default": 0.5},
+            },
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "instances": {"type": "string", "format": "file"},
+                "count": {"type": "integer"},
+            },
+        },
+    )
+
+    def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+        # Download file from presigned URL
+        response = httpx.get(inputs["point_cloud"])
+        response.raise_for_status()
+
+        # Validate file type and size
+        self.definition.validate_file_input(
+            field_name="point_cloud",
+            data=response.content,
+        )
+
+        # Process the point cloud
+        confidence = inputs.get("confidence", 0.5)
+        result_data = b"Processed point cloud data..."
+
+        # Write output file
+        output_file = context.output_path("instances.ply")
+        output_file.write_bytes(result_data)
+
+        return {
+            "instances": str(output_file),
+            "count": 42,
+        }
+
+
+app = PointCloudSegmenter().create_app()
+```
+
+### Testing with Presigned URLs
 
 ```bash
 curl -X POST http://localhost:8001/execute \
-  -F "run_id=run-1" \
-  -F "node_id=node-1" \
-  -F 'output_upload_url={"converted":"https://s3.amazonaws.com/bucket/result.ply?..."}' \
-  -F "input_file=@/path/to/file.ply"
+  -H "Content-Type: application/json" \
+  -d '{
+    "run_id": "run-1",
+    "node_id": "node-1",
+    "inputs": {
+      "point_cloud": "https://s3.amazonaws.com/bucket/scan.ply?X-Amz-Signature=...",
+      "confidence": 0.8
+    }
+  }'
 ```
 
 ---
@@ -532,7 +620,6 @@ Test the full HTTP stack including multipart uploads:
 
 ```python
 # tests/test_my_node_api.py
-import io
 from fastapi.testclient import TestClient
 from my_node import app
 
@@ -583,12 +670,20 @@ def test_metrics_endpoint():
     assert data["total_executions"] >= 1
 
 
-def test_multipart_file_upload():
-    file_content = b"x,y,z\n1.0,2.0,3.0"
+def test_presigned_url_file_input():
+    # Simulate a presigned URL GET endpoint (mock server would provide this)
+    presigned_url = "https://s3.amazonaws.com/bucket/scan.ply?X-Amz-Signature=..."
+
     response = client.post(
         "/execute",
-        data={"run_id": "test-run", "node_id": "test-node"},
-        files={"point_cloud": ("cloud.csv", io.BytesIO(file_content), "text/csv")},
+        json={
+            "run_id": "test-run",
+            "node_id": "test-node",
+            "inputs": {
+                "point_cloud": presigned_url,
+                "confidence": 0.8,
+            },
+        },
     )
     assert response.status_code == 200
     data = response.json()
@@ -1002,7 +1097,7 @@ Every node exposes these endpoints automatically:
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/execute` | POST | Run the node (JSON or multipart/form-data) |
+| `/execute` | POST | Run the node (JSON body) |
 | `/health` | GET | Health check |
 | `/manifest` | GET | Node self-description (NodeDefinition) |
 | `/definition` | GET | Deprecated, redirects to `/manifest` |

@@ -19,6 +19,12 @@ def _load_definition(module_path: str):
     module_name, attr_name = module_path.rsplit(":", 1)
     module = importlib.import_module(module_name)
     definition = getattr(module, attr_name)
+
+    from canvastekk_workflow_sdk.definition import NodeDefinition
+
+    if not isinstance(definition, NodeDefinition):
+        raise TypeError(f"Expected NodeDefinition, got {type(definition).__name__}")
+
     return definition
 
 
@@ -72,7 +78,14 @@ def main() -> None:
         print()
         print("Options:")
         print("  --json      Output validation results as JSON")
+        print("  --version   Show SDK version")
         print("  --help      Show this help message")
+        sys.exit(0)
+
+    if args[0] == "--version":
+        from canvastekk_workflow_sdk import __version__
+
+        print(f"canvastekk-workflow-sdk {__version__}")
         sys.exit(0)
 
     if args[0] != "validate":

@@ -55,7 +55,8 @@ class EchoNode(BaseNode):
         url = inputs["input_file"]
         context.report_progress(0.1, "Downloading input file")
 
-        local_path = context.output_dir / "input_download"
+        suffix = Path(url.split("?")[0]).suffix or ".txt"
+        local_path = context.output_dir / f"input_download{suffix}"
         self._download(url, local_path)
 
         context.report_progress(0.5, "Validating input file")

@@ -224,7 +224,7 @@ class TestRegisterNode:
         call_kwargs = mock_post.call_args[1]
         assert call_kwargs["json"]["invoke_type"] == "http"
 
-    def test_custom_timeout_passed_to_urlopen(self) -> None:
+    def test_custom_timeout_passed_to_httpx(self) -> None:
         """Test that custom timeout is passed to httpx.post."""
         node = DummyNode()
         registry_url = "https://registry.example.com/api/nodes"
