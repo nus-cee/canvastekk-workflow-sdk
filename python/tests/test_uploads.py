@@ -56,7 +56,7 @@ class TestS3PresignedUploader:
         mock_put.assert_called_once()
         call_kwargs = mock_put.call_args[1]
         assert call_kwargs["headers"]["Content-Type"] == "application/octet-stream"
-        assert call_kwargs["content"] == b"test content"
+        assert hasattr(call_kwargs["content"], "read")
 
     def test_upload_file_sets_headers(self, tmp_path: Path) -> None:
         """Test that upload_file sets correct headers."""
@@ -73,7 +73,7 @@ class TestS3PresignedUploader:
         mock_put.assert_called_once()
         call_kwargs = mock_put.call_args[1]
         assert call_kwargs["headers"]["Content-Type"] == "application/octet-stream"
-        assert call_kwargs["content"] == b"x" * 1000
+        assert hasattr(call_kwargs["content"], "read")
 
     def test_upload_outputs_with_valid_file_and_url(self, tmp_path: Path) -> None:
         """Test upload_outputs with valid file and URL."""

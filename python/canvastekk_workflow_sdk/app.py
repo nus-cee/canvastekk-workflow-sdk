@@ -169,7 +169,13 @@ def create_node_app(
         The engine sends presigned GET URLs for file input fields.
         Outputs are uploaded via presigned PUT URLs after successful execution.
         """
-        body = await request.json()
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Invalid JSON body"},
+            )
         exec_request = NodeExecutionRequest(**body)
 
         timeout = node.definition.timeout_seconds
