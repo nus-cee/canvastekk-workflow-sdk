@@ -367,11 +367,37 @@ This is a **coordinated cross-repo release** (per DA-889 design decisions). Engi
 - [ ] Test: `python -m canvastekk_workflow_sdk validate` exits 1 on invalid manifest (format:"binary")
 - [ ] Test: `python -m canvastekk_workflow_sdk validate --json` produces structured output
 
+### 6.3 Add echo node reference
+- [ ] Add "Echo Node Example" section showing a minimal node with file I/O
+- [ ] Reference `examples/echo_node/` directory
+- [ ] Show CLI validation: `python -m canvastekk_workflow_sdk validate echo_node:app`
+
 ---
 
-## Phase 5: Documentation Updates — README.md
+## Phase 5: Echo Node Example — `examples/echo_node/`
 
-### 5.1 Rewrite File Handling Guide
+### 5.1 Create echo node example
+- [ ] Create `examples/echo_node/handler.py` — minimal `EchoNode` with:
+  - One file input (`input_file`: `format: "file"`, `x-accept: [".txt", ".csv"]`, `x-maxSizeBytes: 10485760`)
+  - One file output (`output_file`: `format: "file"`)
+  - `execute()` downloads from presigned URL, validates, writes to `context.output_path()`
+- [ ] Create `examples/echo_node/pyproject.toml` — minimal project with `canvastekk-workflow-sdk` as dependency
+- [ ] Create `examples/echo_node/README.md` — step-by-step walkthrough:
+  1. Install SDK
+  2. Create node definition
+  3. Implement execute()
+  4. Run locally with uvicorn
+  5. Test with curl (JSON POST with presigned URL)
+  6. Validate manifest with CLI
+  7. Build Docker image
+- [ ] Create `examples/echo_node/Dockerfile`
+- [ ] Create `examples/echo_node/tests/test_echo_node.py` — unit + integration test examples
+
+---
+
+## Phase 6: Documentation Updates — python/README.md
+
+### 6.1 Rewrite File Handling Guide
 - [ ] Replace `format: "binary"` → `format: "file"` in all examples
 - [ ] Remove "Receiving Files via Multipart/Form-Data" section and curl multipart examples
 - [ ] Add presigned URL flow documentation: engine sends presigned GET URL in JSON, node downloads itself
@@ -381,19 +407,29 @@ This is a **coordinated cross-repo release** (per DA-889 design decisions). Engi
 - [ ] Add section on `x-*` file field extensions with examples
 - [ ] Add full node definition example showing file fields with conditions
 
-### 5.2 Add download example
+### 6.2 Add download example
 - [ ] Show how to download from presigned URL using `httpx` (promoted to runtime dep — async, timeout, redirect support)
 - [ ] Show `validate_file_input()` usage after download
 
 ---
 
-## Phase 6: Version Bump & Validation
+## Phase 7: Documentation Updates — root README.md
 
-### 6.1 Bump version
+### 7.1 Add Utilities section
+- [ ] Add "Utilities" section documenting CLI tools available to node authors:
+  - `python -m canvastekk_workflow_sdk validate <module>:definition` — offline manifest validation
+  - `python -m canvastekk_workflow_sdk validate --json` — structured output for CI
+- [ ] Add "Examples" section referencing `examples/echo_node/`
+
+---
+
+## Phase 8: Version Bump & Validation
+
+### 8.1 Bump version
 - [ ] Update `__version__` in `python/canvastekk_workflow_sdk/__init__.py` from `"0.5.0"` → `"0.6.0"`
 - [ ] Update version in `python/pyproject.toml`
 
-### 6.2 Run validation
+### 8.2 Run validation
 - [ ] All existing tests pass: `cd python && python -m pytest`
 - [ ] Ruff lint passes: `ruff check python/`
 - [ ] Verify `format: "file"` fields are detected correctly (no `"binary"` fallback)
@@ -410,6 +446,8 @@ This is a **coordinated cross-repo release** (per DA-889 design decisions). Engi
 - [ ] SDK version (`0.6.0`) is the manifest format contract — `pip install canvastekk-workflow-sdk==0.6.0` enforces `format: "file"`
 - [ ] `validate_file_input()` helper validates file constraints from `x-*` extensions
 - [ ] CLI `python -m canvastekk_workflow_sdk validate` works for offline manifest validation
+- [ ] Echo node example in `examples/echo_node/` demonstrates file I/O, validation, and CLI usage
+- [ ] Root README.md documents CLI utilities and examples directory
 - [ ] Multipart handling removed from app.py — JSON-only `/execute`
 - [ ] `python-multipart` dependency removed
 - [ ] `httpx` promoted to runtime dependency, replaces `urllib.request` in uploads/registry
@@ -442,10 +480,16 @@ This is a **coordinated cross-repo release** (per DA-889 design decisions). Engi
 | `python/canvastekk_workflow_sdk/app.py` | Remove multipart handling, remove `_coerce_form_value`, remove dead imports |
 | `python/canvastekk_workflow_sdk/base.py` | Update execute() docstring for presigned URL flow |
 | `python/canvastekk_workflow_sdk/__main__.py` | CLI `validate` subcommand for offline manifest validation |
+| `examples/echo_node/handler.py` | Minimal echo node with file I/O |
+| `examples/echo_node/pyproject.toml` | Example project config |
+| `examples/echo_node/README.md` | Step-by-step walkthrough |
+| `examples/echo_node/Dockerfile` | Container build for echo node |
+| `examples/echo_node/tests/test_echo_node.py` | Unit + integration test examples |
 | `python/canvastekk_workflow_sdk/uploads.py` | Replace `urllib.request` with `httpx` |
 | `python/canvastekk_workflow_sdk/registry.py` | Replace `urllib.request` with `httpx` |
 | `python/canvastekk_workflow_sdk/__init__.py` | Bump `__version__` to `"0.6.0"` |
 | `python/pyproject.toml` | Bump version, remove `python-multipart`, promote `httpx` to runtime dep |
 | `python/tests/test_definition.py` | Update format values, add file validation tests |
 | `python/tests/test_app.py` | Remove multipart tests, update format values, add presigned URL tests |
-| `python/README.md` | Rewrite File Handling Guide, add `x-*` extensions docs, `httpx` download examples |
+| `python/README.md` | Rewrite File Handling Guide, add `x-*` extensions docs, `httpx` download examples, echo node reference |
+| `README.md` | Add Utilities section (CLI validate), Examples section (echo node) |
