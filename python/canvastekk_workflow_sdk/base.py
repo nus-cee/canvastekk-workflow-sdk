@@ -201,22 +201,12 @@ class BaseNode(ABC):
             self._validate_inputs(request.inputs)
 
             context = ExecutionContext(request)
-            timeout = self.definition.timeout_seconds
 
             inputs = request.inputs
             for mw in self._middleware:
                 inputs = mw.on_before_execute(inputs, context)
 
-            try:
-                outputs = self.execute(inputs, context)
-            except RecursionError:
-                raise
-            except Exception:
-                if timeout > 0:
-                    elapsed = time.perf_counter() - start_time
-                    if elapsed >= timeout:
-                        raise NodeTimeoutError(timeout)
-                raise
+            outputs = self.execute(inputs, context)
 
             self._validate_outputs(outputs)
 

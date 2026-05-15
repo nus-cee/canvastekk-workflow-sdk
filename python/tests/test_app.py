@@ -885,3 +885,83 @@ class TestApiKeyAuthIntegration:
 
         response = client.get("/health", headers=headers)
         assert response.status_code == 200
+
+
+class TestIntegrationLifecycle:
+    """Full integration test: auth + execute + S3 upload + lifecycle hooks."""
+
+    def test_full_lifecycle_with_api_key_auth_and_s3_upload(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from canvastekk_workflow_sdk.auth import NodeAuth
+
+        monkeypatch.setenv("CANVASTEKK_API_KEY", "test-integration-key")
+
+        auth = NodeAuth.api_key()
+        node = FileOutputNode()
+        startup_called: list[bool] = []
+        shutdown_called: list[bool] = []
+
+        original_startup = node.on_startup
+        original_shutdown = node.on_shutdown
+
+        async def custom_startup() -> None:
+            startup_called.append(True)
+            await original_startup()
+
+        async def custom_shutdown() -> None:
+            shutdown_called.append(True)
+            await original_shutdown()
+
+        node.on_startup = custom_startup
+        node.on_shutdown = custom_shutdown
+
+        app = create_node_app(node, dependencies=[Depends(auth)])
+        headers = {"X-API-Key": "test-integration-key"}
+
+        with TestClient(app) as client:
+            assert startup_called
+
+            response = client.get("/health", headers=headers)
+            assert response.status_code == 200
+            assert response.json()["status"] == "healthy"
+
+            response = client.get("/manifest", headers=headers)
+            assert response.status_code == 200
+            assert response.json()["name"] == "file-output"
+
+            with patch("canvastekk_workflow_sdk.uploads.S3PresignedUploader.upload_file") as mock_upload:
+                response = client.post(
+                    "/execute",
+                    json={
+                        "run_id": "integration-run",
+                        "node_id": "integration-node",
+                        "inputs": {"input_data": "integration test"},
+                        "output_upload_url": {
+                            "result_path": "https://s3.amazonaws.com/presigned-put",
+                        },
+                    },
+                    headers=headers,
+                )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "pass"
+            assert data["outputs"]["summary"] == "done"
+            mock_upload.assert_called_once()
+
+            response = client.get(
+                "/execute",
+                headers=headers,
+            )
+            assert response.status_code == 405
+
+            no_auth_response = client.post(
+                "/execute",
+                json={
+                    "run_id": "integration-run",
+                    "node_id": "integration-node",
+                    "inputs": {"input_data": "should fail"},
+                },
+            )
+            assert no_auth_response.status_code == 401
+
+        assert shutdown_called

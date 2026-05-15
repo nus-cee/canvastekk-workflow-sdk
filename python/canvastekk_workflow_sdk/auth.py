@@ -27,8 +27,10 @@ Example::
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
+import time as _time
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -73,11 +75,11 @@ class _ApiKeyAuth(_AuthBackend):
 
         expected_key = os.environ.get(self._key_env_var, "")
         if not expected_key:
-            logger.warning(f"Auth env var {self._key_env_var} is not set — rejecting all requests")
+            logger.warning("Auth env var %s is not set — rejecting all requests", self._key_env_var)
             raise HTTPException(status_code=401, detail="Authentication not configured")
 
         provided_key = request.headers.get("X-API-Key", "")
-        if provided_key != expected_key:
+        if not hmac.compare_digest(provided_key.encode(), expected_key.encode()):
             raise HTTPException(status_code=401, detail="Invalid API key")
 
         return {"auth_mode": "api_key"}
@@ -166,6 +168,9 @@ class _KeycloakAuth(_AuthBackend):
         self._audience = audience or os.environ.get("CANVASTEKK_KEYCLOAK_AUDIENCE")
         self._algorithm = algorithm
         self._jwt_module: Any = None
+        self._jwks_cache: Any = None
+        self._jwks_fetched_at: float = 0.0
+        self._jwks_ttl: float = 300.0
 
     def _get_jwt(self) -> Any:
         if self._jwt_module is None:
@@ -181,6 +186,10 @@ class _KeycloakAuth(_AuthBackend):
         return self._jwt_module
 
     def _fetch_jwks(self) -> Any:
+        now = _time.monotonic()
+        if self._jwks_cache is not None and (now - self._jwks_fetched_at) < self._jwks_ttl:
+            return self._jwks_cache
+
         import json
         import urllib.request
 
@@ -196,7 +205,10 @@ class _KeycloakAuth(_AuthBackend):
             raise HTTPException(status_code=503, detail=f"Failed to fetch JWKS from Keycloak: {e}")
 
         jwt = self._get_jwt()
-        return jwt.PyJWKSet.from_dict(jwks_data)
+        jwks = jwt.PyJWKSet.from_dict(jwks_data)
+        self._jwks_cache = jwks
+        self._jwks_fetched_at = _time.monotonic()
+        return jwks
 
     def authenticate(self, request: Request) -> dict[str, Any]:
         if _is_dev_mode():

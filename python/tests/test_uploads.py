@@ -137,7 +137,7 @@ class TestS3PresignedUploader:
         with patch("canvastekk_workflow_sdk.uploads.logger") as mock_logger:
             uploader.upload_outputs(response, upload_urls, file_output_fields)
             mock_logger.warning.assert_called_once()
-            assert "Output field 'result_path' value is not a local file" in str(mock_logger.warning.call_args)
+            assert "Output field '%s' value is not a local file" in str(mock_logger.warning.call_args)
 
     def test_upload_outputs_logs_error_but_doesnt_raise(self, tmp_path: Path) -> None:
         """Test that upload failure logs error but doesn't raise exception."""
@@ -157,7 +157,7 @@ class TestS3PresignedUploader:
         with patch("urllib.request.urlopen", mock_urlopen), patch("canvastekk_workflow_sdk.uploads.logger") as mock_logger:
             uploader.upload_outputs(response, upload_urls, file_output_fields)
             mock_logger.error.assert_called_once()
-            assert "Failed to upload output 'result_path' to S3" in str(mock_logger.error.call_args)
+            assert "Failed to upload output '%s' to S3" in str(mock_logger.error.call_args)
 
     def test_upload_outputs_with_no_outputs(self) -> None:
         """Test that upload_outputs returns early when outputs is None."""

@@ -37,7 +37,7 @@ def create_multi_node_app(
     nodes: dict[str, BaseNode],
     *,
     global_dependencies: list[Any] | None = None,
-    **fastapi_kwargs: object,
+    **fastapi_kwargs: Any,
 ) -> FastAPI:
     """Create a FastAPI app hosting multiple nodes under URL prefixes.
 

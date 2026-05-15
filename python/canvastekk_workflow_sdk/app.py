@@ -18,13 +18,13 @@ import tempfile
 from collections.abc import Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.datastructures import UploadFile
 
-from canvastekk_workflow_sdk.exceptions import NodeExecutionError, get_http_status_for_error
+from canvastekk_workflow_sdk.exceptions import NodeExecutionError, NodeTimeoutError, get_http_status_for_error
 from canvastekk_workflow_sdk.request import NodeExecutionRequest
 from canvastekk_workflow_sdk.response import HealthResponse, NodeExecutionResponse
 from canvastekk_workflow_sdk.uploads import get_default_uploader
@@ -102,7 +102,7 @@ def create_node_app(
     *,
     dependencies: Sequence[Any] | None = None,
     extra_routes: list[APIRouter] | None = None,
-    **fastapi_kwargs: object,
+    **fastapi_kwargs: Any,
 ) -> FastAPI:
     """
     Create a FastAPI application with standard node endpoints.
@@ -250,7 +250,17 @@ def create_node_app(
             body = await request.json()
             exec_request = NodeExecutionRequest(**body)
 
-        response = await asyncio.to_thread(node.run, exec_request)
+        timeout = node.definition.timeout_seconds
+        if timeout and timeout > 0:
+            try:
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(node.run, exec_request),
+                    timeout=timeout,
+                )
+            except TimeoutError:
+                raise NodeTimeoutError(timeout)
+        else:
+            response = await asyncio.to_thread(node.run, exec_request)
 
         if exec_request.output_upload_url and response.status == "pass":
             file_output_fields = node.definition.file_output_fields
@@ -282,7 +292,7 @@ def create_node_app(
 
         # Determine overall status from checks
         if not checks:
-            status = "healthy"
+            status: Literal["healthy", "unhealthy", "degraded"] = "healthy"
         elif all(checks.values()):
             status = "healthy"
         elif any(checks.values()):

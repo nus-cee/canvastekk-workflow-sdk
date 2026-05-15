@@ -27,6 +27,8 @@ class OutputUploader(Protocol):
     after a successful execution when upload URLs are available.
     """
 
+    def upload_file(self, file_path: str, presigned_url: str) -> None: ...
+
     def upload_outputs(
         self,
         response: NodeExecutionResponse,
@@ -93,15 +95,15 @@ class S3PresignedUploader:
                 continue
 
             if not os.path.isfile(value):
-                logger.warning(f"Output field '{field_name}' value is not a local file: {value}")
+                logger.warning("Output field '%s' value is not a local file: %s", field_name, value)
                 continue
 
             presigned_url = upload_urls[field_name]
             try:
                 self.upload_file(value, presigned_url)
-                logger.info(f"Uploaded output '{field_name}' to S3 ({os.path.getsize(value)} bytes)")
+                logger.info("Uploaded output '%s' to S3 (%d bytes)", field_name, os.path.getsize(value))
             except Exception as e:
-                logger.error(f"Failed to upload output '{field_name}' to S3: {e}")
+                logger.error("Failed to upload output '%s' to S3: %s", field_name, e)
 
 
 _default_uploader = S3PresignedUploader()
