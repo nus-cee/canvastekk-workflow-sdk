@@ -7,6 +7,7 @@ import pytest
 from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, NodeExecutionRequest
 from canvastekk_workflow_sdk.exceptions import (
     NodeIOError,
+    NodeOutputValidationError,
     NodeTimeoutError,
 )
 from canvastekk_workflow_sdk.middleware import TimingMiddleware
@@ -351,3 +352,143 @@ class TestBaseNodeInitSubclass:
             pass
 
         assert not hasattr(MiddleNode, "definition") or MiddleNode.definition is None
+
+
+class OutputValidationNode(BaseNode):
+    """Node with strict output schema for validation testing."""
+
+    definition = NodeDefinition(
+        id="output-val-v1.0.0",
+        name="output-val",
+        version="1.0.0",
+        title="Output Validation",
+        description="Has strict output schema",
+        input_schema={
+            "type": "object",
+            "properties": {"value": {"type": "integer"}},
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "result": {"type": "integer"},
+                "message": {"type": "string"},
+            },
+            "required": ["result", "message"],
+        },
+    )
+
+    def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+        val = inputs.get("value", 0)
+        return {"result": val * 2, "message": f"Doubled: {val * 2}"}
+
+
+class OutputValidationErrorNode(BaseNode):
+    """Node that returns invalid output type."""
+
+    definition = NodeDefinition(
+        id="output-err-v1.0.0",
+        name="output-err",
+        version="1.0.0",
+        title="Output Error",
+        description="Returns invalid output",
+        input_schema={"type": "object"},
+        output_schema={
+            "type": "object",
+            "properties": {"count": {"type": "integer"}},
+        },
+    )
+
+    def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+        return {"count": "not an integer"}
+
+
+class OutputMissingRequiredNode(BaseNode):
+    """Node that returns missing required field."""
+
+    definition = NodeDefinition(
+        id="output-missing-v1.0.0",
+        name="output-missing",
+        version="1.0.0",
+        title="Output Missing",
+        description="Returns missing required field",
+        input_schema={"type": "object"},
+        output_schema={
+            "type": "object",
+            "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+            "required": ["name", "age"],
+        },
+    )
+
+    def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+        return {"name": "John"}
+
+
+class TrivialOutputSchemaNode(BaseNode):
+    """Node with trivial output schema."""
+
+    definition = NodeDefinition(
+        id="trivial-v1.0.0",
+        name="trivial",
+        version="1.0.0",
+        title="Trivial",
+        description="Has trivial output schema",
+        input_schema={"type": "object"},
+        output_schema={"type": "object"},
+    )
+
+    def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+        return {"anything": "goes"}
+
+
+class TestBaseNodeOutputValidation:
+    """Tests for output schema validation (Phase 1)."""
+
+    def test_valid_output_passes_validation(self) -> None:
+        """Test that valid output passes schema validation."""
+        node = OutputValidationNode()
+        response = node.run(
+            NodeExecutionRequest(run_id="r1", node_id="n1", inputs={"value": 5})
+        )
+        assert response.status == "pass"
+        assert response.outputs == {"result": 10, "message": "Doubled: 10"}
+        assert response.error is None
+
+    def test_invalid_output_wrong_type_raises_error(self) -> None:
+        """Test that invalid output type raises NodeOutputValidationError."""
+        node = OutputValidationErrorNode()
+        response = node.run(NodeExecutionRequest(run_id="r1", node_id="n1", inputs={}))
+        assert response.status == "fail"
+        assert response.error_type == "NodeOutputValidationError"
+        assert response.error_code == "OUTPUT_VALIDATION_ERROR"
+        assert "output validation failed" in response.error.lower()
+
+    def test_missing_required_output_field_raises_error(self) -> None:
+        """Test that missing required output field raises NodeOutputValidationError."""
+        node = OutputMissingRequiredNode()
+        response = node.run(NodeExecutionRequest(run_id="r1", node_id="n1", inputs={}))
+        assert response.status == "fail"
+        assert response.error_type == "NodeOutputValidationError"
+        assert response.error_code == "OUTPUT_VALIDATION_ERROR"
+        assert "output validation failed" in response.error.lower()
+
+    def test_trivial_output_schema_always_passes(self) -> None:
+        """Test that trivial output schema {'type': 'object'} always passes."""
+        node = TrivialOutputSchemaNode()
+        response = node.run(NodeExecutionRequest(run_id="r1", node_id="n1", inputs={}))
+        assert response.status == "pass"
+        assert response.outputs == {"anything": "goes"}
+
+    def test_output_validation_error_code(self) -> None:
+        """Test that NodeOutputValidationError has correct error_code."""
+        try:
+            raise NodeOutputValidationError("test error")
+        except NodeOutputValidationError as e:
+            assert e.error_code == "OUTPUT_VALIDATION_ERROR"
+
+    def test_output_validation_error_in_response(self) -> None:
+        """Test that error_type is correctly set in response."""
+        node = OutputValidationErrorNode()
+        response = node.run(NodeExecutionRequest(run_id="r1", node_id="n1", inputs={}))
+        assert response.status == "fail"
+        assert response.error_type == "NodeOutputValidationError"
+        assert response.error is not None

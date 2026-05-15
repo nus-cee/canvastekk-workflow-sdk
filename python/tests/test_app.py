@@ -444,8 +444,8 @@ class TestOutputUploadToS3:
     """Tests for S3 output upload via pre-signed URLs."""
 
     def test_output_upload_url_triggers_s3_upload(self, file_output_client: TestClient) -> None:
-        """When output_upload_url is provided and status=pass, _upload_to_presigned is called."""
-        with patch("canvastekk_workflow_sdk.app._upload_to_presigned") as mock_upload:
+        """When output_upload_url is provided and status=pass, upload_file is called."""
+        with patch("canvastekk_workflow_sdk.uploads.S3PresignedUploader.upload_file") as mock_upload:
             response = file_output_client.post(
                 "/execute",
                 json={
@@ -462,17 +462,15 @@ class TestOutputUploadToS3:
             data = response.json()
             assert data["status"] == "pass"
 
-            # Verify _upload_to_presigned was called with the file path and presigned URL
             mock_upload.assert_called_once()
             call_args = mock_upload.call_args
             assert call_args[0][1] == "https://s3.amazonaws.com/presigned-put"
-            # First arg is the file path — verify it exists
             uploaded_file = call_args[0][0]
             assert uploaded_file == data["outputs"]["result_path"]
 
     def test_output_upload_url_skipped_on_failure(self, failing_output_client: TestClient) -> None:
-        """When node returns status=fail, _upload_to_presigned should NOT be called."""
-        with patch("canvastekk_workflow_sdk.app._upload_to_presigned") as mock_upload:
+        """When node returns status=fail, upload_file should NOT be called."""
+        with patch("canvastekk_workflow_sdk.uploads.S3PresignedUploader.upload_file") as mock_upload:
             response = failing_output_client.post(
                 "/execute",
                 json={
@@ -494,7 +492,7 @@ class TestOutputUploadToS3:
 
     def test_output_upload_url_skipped_when_not_provided(self, file_output_client: TestClient) -> None:
         """When output_upload_url is None, no upload is attempted."""
-        with patch("canvastekk_workflow_sdk.app._upload_to_presigned") as mock_upload:
+        with patch("canvastekk_workflow_sdk.uploads.S3PresignedUploader.upload_file") as mock_upload:
             response = file_output_client.post(
                 "/execute",
                 json={
@@ -518,7 +516,7 @@ class TestOutputUploadToS3:
         upload_urls = {"result_path": "https://s3.amazonaws.com/presigned-put"}
 
         file_content = b"point cloud data"
-        with patch("canvastekk_workflow_sdk.app._upload_to_presigned") as mock_upload:
+        with patch("canvastekk_workflow_sdk.uploads.S3PresignedUploader.upload_file") as mock_upload:
             response = client.post(
                 "/execute",
                 data={
@@ -539,3 +537,60 @@ class TestOutputUploadToS3:
             mock_upload.assert_called_once()
             call_args = mock_upload.call_args
             assert call_args[0][1] == "https://s3.amazonaws.com/presigned-put"
+
+
+class TestAsyncExecution:
+    """Tests for async execution with asyncio.to_thread (Phase 1)."""
+
+    def test_execute_endpoint_works_with_async_wrapper(self, echo_client: TestClient) -> None:
+        """Test that POST /execute works correctly with asyncio.to_thread wrapping."""
+        response = echo_client.post(
+            "/execute",
+            json={
+                "run_id": "test-run",
+                "node_id": "test-node",
+                "inputs": {"message": "Async test"},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "pass"
+        assert data["outputs"] == {"message": "Async test"}
+        assert data["error"] is None
+        assert data["execution_id"] is not None
+
+    def test_execute_with_failure_still_works_with_async_wrapper(self, failing_client: TestClient) -> None:
+        """Test that execution failures are correctly handled with async wrapper."""
+        response = failing_client.post(
+            "/execute",
+            json={
+                "run_id": "test-run",
+                "node_id": "test-node",
+                "inputs": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "fail"
+        assert data["outputs"] is None
+        assert data["error"] == "Intentional failure"
+        assert data["error_type"] == "ValueError"
+
+    def test_multipart_with_async_wrapper_and_s3_upload(self, file_proc_client: TestClient) -> None:
+        """Test that multipart requests work with async wrapper and S3 upload."""
+        file_content = b"point cloud async test"
+        with patch("canvastekk_workflow_sdk.uploads.S3PresignedUploader.upload_file"):
+            response = file_proc_client.post(
+                "/execute",
+                data={
+                    "run_id": "run-1",
+                    "node_id": "node-1",
+                    "output_upload_url": '{"result_path": "https://s3.amazonaws.com/upload"}',
+                },
+                files={
+                    "point_cloud": ("cloud.ply", io.BytesIO(file_content), "application/octet-stream"),
+                },
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "pass"
