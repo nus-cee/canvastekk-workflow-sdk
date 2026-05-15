@@ -43,7 +43,7 @@ poetry run pytest -v
 | FastAPI | ^0.135 | HTTP framework |
 | Pydantic | ^2.12 | Data validation |
 | Uvicorn | ^0.43 | ASGI server |
-| python-multipart | >=0.0.22 | File upload support |
+| httpx | ^0.28 | HTTP client (presigned URL downloads, registry, uploads) |
 
 ### Dev Dependencies
 
@@ -51,7 +51,6 @@ poetry run pytest -v
 |---------|---------|---------|
 | pytest | ^9.0 | Test runner |
 | pytest-asyncio | ^1.3 | Async test support |
-| httpx | ^0.28 | HTTP client for testing |
 | ruff | ^0.15 | Linter & formatter |
 
 ---
@@ -822,6 +821,42 @@ Response from `POST /execute`:
 
 ---
 
+## Utilities
+
+### CLI Manifest Validation
+
+Validate your node definition offline without starting the server:
+
+```bash
+# Basic validation
+python -m canvastekk_workflow_sdk validate my_node.handler:definition
+
+# Structured JSON output (for CI)
+python -m canvastekk_workflow_sdk validate my_node.handler:definition --json
+```
+
+The validator checks:
+- All file fields use `format: "file"` (rejects `format: "binary"`)
+- File fields have `type: "string"` (not `"object"` or `"array"`)
+- Warns on file fields missing `x-accept` or `x-maxSizeBytes` extensions
+- Reports detected file input/output fields and their constraints
+
+Exit codes: `0` = valid, `1` = validation errors.
+
+### Echo Node Example
+
+A minimal reference node with file I/O is available at [`examples/echo_node/`](../examples/echo_node/).
+
+It demonstrates:
+- File input/output with `format: "file"` and `x-*` extensions
+- Downloading from presigned URLs with `httpx`
+- Runtime validation with `validate_file_input()`
+- CLI manifest validation
+- Unit and integration tests
+- Docker build
+
+---
+
 ## Advanced: Middleware, Health Checks, and Hooks
 
 ### Custom Middleware
@@ -1026,7 +1061,9 @@ git commit -m "feat: new endpoint with BREAKING CHANGE"   # major bump
 ## Roadmap
 
 - [ ] JWT authentication
-- [ ] Signed URL handling for file inputs/outputs
+- [x] Signed URL handling for file inputs/outputs (v0.6.0 — presigned URL pipeline)
 - [ ] Idempotency checks (S3 output exists?)
 - [ ] Async callback support
-- [ ] Input validation against JSON Schema
+- [x] Input validation against JSON Schema (Draft7Validator)
+- [x] CLI manifest validation (v0.6.0 — `python -m canvastekk_workflow_sdk validate`)
+- [x] File field constraint validation (v0.6.0 — `validate_file_input()` with `x-accept`, `x-maxSizeBytes`)

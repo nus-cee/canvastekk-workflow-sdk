@@ -1,0 +1,12 @@
+[project]
+name = "echo-node"
+version = "1.0.0"
+description = "Echo node example for CanvasTEKK Workflow SDK"
+requires-python = ">=3.12"
+dependencies = [
+    "canvastekk-workflow-sdk>=0.6.0",
+]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
