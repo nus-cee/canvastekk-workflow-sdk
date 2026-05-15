@@ -24,29 +24,232 @@ This is a **coordinated cross-repo release** (per DA-889 design decisions). Engi
 
 **All file inputs go through CDS.** Browser uploads go to CDS (not the engine's temp bucket). The engine resolves CDS references to presigned GET URLs before sending to nodes.
 
+### Full Workflow Diagram
+
 ```
-FE uploads file to CDS
-  → POST /api/projects/{projectId}/reports/{reportId}/files
-  → CDS stores file, returns { file_id }
-  → FE sends { source: "cds", file_id: "789" } in POST /api/runs
-                         │
-                         ▼
-              Engine (DA-889):
-              1. run_service: relax validation for format:"file" fields
-              2. Temporal activity: call CDS API → download → upload to temp bucket
-              3. Generate presigned GET URL for temp bucket object
-              4. JSON POST to node /execute with presigned URL in inputs[field]
-                         │
-                         ▼
-              SDK (DA-894 — THIS TICKET):
-              5. JSON-only /execute (no multipart)
-              6. Pass presigned URL through to node.execute()
-                         │
-                         ▼
-              Node (DA-895):
-              7. Node downloads from presigned URL
-              8. Processes and writes outputs
-              9. SDK uploads outputs via presigned PUT URL to temp bucket
+╔══════════════════════════════════════════════════════════════════════════════════╗
+║                         FLOOR FLATNESS WORKFLOW — DA-889/DA-894                ║
+╚══════════════════════════════════════════════════════════════════════════════════╝
+
+ ┌──────────┐       ┌──────────┐       ┌──────────────────────────────┐
+ │ Frontend │       │   CDS    │       │      Keycloak                │
+ │ (Next.js)│       │ (Defect  │       │   (Auth + Service Acct)      │
+ │          │       │  Service)│       │                              │
+ └────┬─────┘       └────┬─────┘       └──────────────┬───────────────┘
+      │                  │                            │
+      │  1. Upload LAS   │                            │
+      │  POST /api/proj/{id}/reports/{rid}/files      │
+      │ ───────────────► │                            │
+      │                  │ stores in permanent S3     │
+      │  { file_id: 789} │                            │
+      │ ◄─────────────── │                            │
+      │                  │                            │
+      │  2. Start workflow                            │
+      │  POST /api/runs                               │
+      │  {                                            │
+      │    workflow_id: "floor-flatness-app",         │
+      │    project_id: 123,                           │
+      │    inputs: {                                  │
+      │      "ff-1": { pcd_path:                     │
+      │        { source:"cds", file_id:"789" }        │
+      │      },                                       │
+      │      "pub-1": { project_id: 123 }             │
+      │    }                                          │
+      │  }                                            │
+      │ ──────────────────────────────────────────────┼──────────►
+      │                                               │   Engine
+      │  { run_id, status: "running" }                │   (FastAPI +
+      │ ◄──────────────────────────────────────────── │    Temporal)
+      │                                               │
+      │                                               │
+      │         ══════════ INSIDE ENGINE ══════════   │
+      │                                               │
+      │         3. run_service.create_run()            │
+      │            ├─ Load workflow def from DB        │
+      │            ├─ Deep-merge: schema defaults      │
+      │            │  ← workflow defaults              │
+      │            │  ← user overrides                 │
+      │            ├─ Validate merged inputs           │
+      │            │  (skip format:"file" fields)      │
+      │            ├─ Create workflow_runs DB row       │
+      │            └─ Trigger Temporal DAGWorkflow     │
+      │                                               │
+      │         4. Temporal Activity (ff-1)            │
+      │            ├─ Detect: pcd_path =               │
+      │            │  { source:"cds", file_id:"789" }  │
+      │            ├─ Mint service-account JWT ────────┼──────────►│
+      │            ├─ GET CDS /api/proj/123/reports/   │ ◄──────────┘
+      │            │  456/files/789                     │
+      │            ├─ Download from CDS presigned URL  │
+      │            ├─ Upload to temp S3 bucket:        │
+      │            │  runs/{run_id}/ff-1/pcd_path      │
+      │            └─ Generate presigned GET URL ──┐   │
+      │                                           │   │
+      │                                           │   │
+      │         ════════ TO NODE (ff-1) ════════  │   │
+      │                                           │   │
+      │         5. JSON POST to node /execute     │   │
+      │            {                               │   │
+      │              "run_id": "run-abc",          │   │
+      │              "node_id": "ff-1",            │   │
+      │              "inputs": {                   │   │
+      │                "pcd_path":                 │   │
+      │         ┌───   "https://s3.../presigned-GET-URL", ◄─┘
+      │         │      "distance_threshold": 10.0   │
+      │         │    },                             │
+      │         │    "output_upload_url": {         │
+      │         │      "report_bundle_zip":        │
+      │         │        "https://s3.../presigned-PUT-URL"
+      │         │    }                             │
+      │         │  }                               │
+      │         │                                  │
+      │         ▼                                  │
+      │  ┌──────────────────────────────────────┐  │
+      │  │  SDK (DA-894 — canvastekk-workflow-sdk) │
+      │  │                                      │  │
+      │  │  NodeDefinition model_validator:     │  │
+      │  │  ├─ ✅ format:"file" → allowed       │  │
+      │  │  ├─ ❌ format:"binary" → ValueError  │  │
+      │  │  └─ ❌ type != "string" → ValueError │  │
+      │  │                                      │  │
+      │  │  /execute endpoint:                  │  │
+      │  │  ├─ JSON body only (no multipart)    │  │
+      │  │  ├─ Parse NodeExecutionRequest       │  │
+      │  │  ├─ Validate inputs (Draft7Validator)│  │
+      │  │  ├─ asyncio.to_thread(node.run)      │  │
+      │  │  └─ Upload outputs via presigned PUT │  │
+      │  └──────────────┬───────────────────────┘  │
+      │                 │                            │
+      │                 ▼                            │
+      │  ┌──────────────────────────────────────┐  │
+      │  │  Node (DA-895 — floor-flatness-app)  │  │
+      │  │                                      │  │
+      │  │  execute(inputs, context):           │  │
+      │  │  ├─ url = inputs["pcd_path"]         │  │
+      │  │  ├─ httpx.get(url) → download LAS   │  │
+      │  │  ├─ validate_file_input("pcd_path",  │  │
+      │  │  │     local_path)  # x-accept,     │  │
+      │  │  │                   x-maxSizeBytes  │  │
+      │  │  ├─ Process point cloud             │  │
+      │  │  ├─ Write report ZIP to             │  │
+      │  │  │  context.output_path("report.zip")│  │
+      │  │  └─ return {                        │  │
+      │  │       "report_bundle_zip": "/tmp/..."│  │
+      │  │     }                               │  │
+      │  └──────────────┬───────────────────────┘  │
+      │                 │                            │
+      │                 ▼                            │
+      │         SDK auto-uploads:                     │
+      │         PUT presigned-PUT-URL ← /tmp/report.zip
+      │                                               │
+      │         ════════ EDGE PROPAGATION ════════    │
+      │                                               │
+      │         6. Engine replaces output:             │
+      │            /tmp/... → s3://temp-bucket/        │
+      │            runs/{run_id}/ff-1/report_bundle_zip│
+      │                                               │
+      │         7. Temporal Activity (pub-1)           │
+      │            ├─ Read edge: ff-1.report_bundle_zip│
+      │            │  → pub-1.report_zip               │
+      │            ├─ Generate presigned GET URL        │
+      │            ├─ Inject project_id from            │
+      │            │  _request_context                  │
+      │            └─ JSON POST to publisher /execute   │
+      │                                               │
+      │         ════════ TO NODE (pub-1) ══════════   │
+      │                                               │
+      │  ┌──────────────────────────────────────┐  │
+      │  │  Publisher (DA-893 — project-file-   │  │
+      │  │            publisher)                │  │
+      │  │                                      │  │
+      │  │  execute(inputs, context):           │  │
+      │  │  ├─ url = inputs["report_zip"]       │  │
+      │  │  ├─ httpx.get(url) → download ZIP   │  │
+      │  │  ├─ Mint own service-account JWT     │  │
+      │  │  ├─ POST ZIP to CDS                  │  │
+      │  │  │  /api/projects/123/files          │  │
+      │  │  └─ return {                        │  │
+      │  │       "published_file_id": 42,       │  │
+      │  │       "published_files_path": "..."  │  │
+      │  │     }                               │  │
+      │  └──────────────────────────────────────┘  │
+      │                                               │
+      │         ════════ COMPLETION ═══════════════   │
+      │                                               │
+      │         8. update_run_status activity          │
+      │            ├─ DB: status="completed"           │
+      │            ├─ DB: result={ published_file_id } │
+      │            └─ cleanup_run_files()              │
+      │               DELETE runs/{run_id}/** from     │
+      │               temp bucket only                 │
+      │               (CDS permanent files survive)    │
+      │                                               │
+      │         9. Frontend polls                      │
+      │            GET /api/runs/{run_id}               │
+      │            → { status: "completed",             │
+      │                result: { published_file_id: 42 }}
+      │ ◄──────────────────────────────────────────── │
+      │                                               │
+
+
+ ╔══════════════════════════════════════════════════════════════════════════════╗
+ ║  MANIFEST FORMAT ENFORCEMENT (SDK 0.6.0)                                    ║
+ ╠══════════════════════════════════════════════════════════════════════════════╣
+ ║                                                                              ║
+ ║  pip install canvastekk-workflow-sdk==0.6.0                                   ║
+ ║         │                                                                    ║
+ ║         ▼                                                                    ║
+ ║  ┌─────────────────────────────────────────┐                                 ║
+ ║  │  NodeDefinition (Pydantic model)         │                                ║
+ ║  │                                          │                                ║
+ ║  │  @model_validator(mode="after")          │                                ║
+ ║  │  def _validate_file_field_formats():     │                                ║
+ ║  │    for each field in input/output_schema:│                                ║
+ ║  │      ├─ format:"file" + type:"string"   │──── ✅ PASS                    ║
+ ║  │      ├─ format:"binary"                  │──── ❌ ValueError:             ║
+ ║  │      │                                    │      "use format:\"file\""     ║
+ ║  │      └─ format:"file" + type:"object"   │──── ❌ ValueError:             ║
+ ║  │                                           │      "must be type:\"string\"" ║
+ ║  └─────────────────────────────────────────┘                                 ║
+ ║         │                                                                    ║
+ ║         ▼  (passes validation)                                                ║
+ ║  ┌─────────────────────────────────────────┐                                 ║
+ ║  │  GET /manifest → JSON response           │                                ║
+ ║  │  {                                       │                                ║
+ ║  │    "name": "floor-flatness-assessment",  │                                ║
+ ║  │    "version": "1.0.0",                   │                                ║
+ ║  │    "input_schema": {                     │                                ║
+ ║  │      "properties": {                     │                                ║
+ ║  │        "pcd_path": {                     │                                ║
+ ║  │          "type": "string",               │                                ║
+ ║  │          "format": "file",  ◄────────────┼── SDK guarantees this          ║
+ ║  │          "x-accept": [".las",".laz"],    │                                ║
+ ║  │          "x-maxSizeBytes": 500000000     │                                ║
+ ║  │        }                                 │                                ║
+ ║  │      }                                   │                                ║
+ ║  │    },                                    │                                ║
+ ║  │    "output_schema": {                    │                                ║
+ ║  │      "properties": {                     │                                ║
+ ║  │        "report_bundle_zip": {            │                                ║
+ ║  │          "type": "string",               │                                ║
+ ║  │          "format": "file"  ◄─────────────┼── and this                     ║
+ ║  │        }                                 │                                ║
+ ║  │      }                                   │                                ║
+ ║  │    }                                     │                                ║
+ ║  │  }                                       │                                ║
+ ║  └─────────────────────────────────────────┘                                 ║
+ ║         │                                                                    ║
+ ║         ▼                                                                    ║
+ ║  ┌─────────────────────────────────────────┐                                 ║
+ ║  │  Engine reads /manifest                  │                                ║
+ ║  │  ├─ Stores in node_registry DB           │                                ║
+ ║  │  ├─ Detects format:"file" fields         │                                ║
+ ║  │  ├─ Skips validation for file inputs     │                                ║
+ ║  │  │  (accepts CDS refs + S3 URIs)        │                                ║
+ ║  │  └─ Generates presigned GET/PUT URLs     │                                ║
+ ║  └─────────────────────────────────────────┘                                 ║
+ ║                                                                              ║
+ ╚══════════════════════════════════════════════════════════════════════════════╝
 ```
 
 ### Dependencies
