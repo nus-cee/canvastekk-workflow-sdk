@@ -30,32 +30,33 @@ AFTER (format: "file" — DA-889 presigned URL pipeline):
 
 This is a **coordinated cross-repo release** (per DA-889 design decisions). Engine, SDK, and nodes all ship together — no phased migration. The engine (DA-889) already handles both `format: "file"` and `format: "binary"` in its validation and activities. The SDK's dual detection ensures nodes that haven't migrated their schemas yet still work correctly.
 
-### End-to-End File Flow (from target-workflow-reference.md)
+### End-to-End File Flow
+
+**All file inputs go through CDS.** Browser uploads go to CDS (not the engine's temp bucket). The engine resolves CDS references to presigned GET URLs before sending to nodes.
 
 ```
-MODE A (Browser Upload):              MODE B (CDS Reference):
-
-FE uploads to S3                       FE picks file from CDS
-  → "s3://bucket/key"                   → { source: "cds", file_id: "789" }
-        │                                     │
-        └──────── POST /api/runs ─────────────┘
+FE uploads file to CDS
+  → POST /api/projects/{projectId}/reports/{reportId}/files
+  → CDS stores file, returns { file_id }
+  → FE sends { source: "cds", file_id: "789" } in POST /api/runs
                          │
                          ▼
               Engine (DA-889):
               1. run_service: relax validation for format:"file" fields
-              2. Temporal activity: resolve refs → presigned GET URL
-              3. JSON POST to node /execute with URL in inputs[field]
+              2. Temporal activity: call CDS API → download → upload to temp bucket
+              3. Generate presigned GET URL for temp bucket object
+              4. JSON POST to node /execute with presigned URL in inputs[field]
                          │
                          ▼
               SDK (DA-894 — THIS TICKET):
-              4. JSON-only /execute (no multipart)
-              5. Pass presigned URL through to node.execute()
+              5. JSON-only /execute (no multipart)
+              6. Pass presigned URL through to node.execute()
                          │
                          ▼
               Node (DA-895):
-              6. Node downloads from presigned URL
-              7. Processes and writes outputs
-              8. SDK uploads outputs via presigned PUT URL
+              7. Node downloads from presigned URL
+              8. Processes and writes outputs
+              9. SDK uploads outputs via presigned PUT URL to temp bucket
 ```
 
 ### Dependencies
@@ -133,7 +134,7 @@ FE uploads to S3                       FE picks file from CDS
 - [ ] Add presigned URL flow documentation: engine sends presigned GET URL in JSON, node downloads itself
 - [ ] Update "S3 Output Upload" section: remove multipart-specific `output_upload_url` JSON string instructions
 - [ ] Update curl examples to use JSON POST only
-- [ ] Document that `format: "file"` means "this field may contain a presigned GET URL, an S3 URI, or a CDS reference object"
+- [ ] Document that `format: "file"` means "this field receives a presigned GET URL from the engine" — all file inputs are CDS-sourced, the engine resolves references before the node sees them
 
 ---
 
