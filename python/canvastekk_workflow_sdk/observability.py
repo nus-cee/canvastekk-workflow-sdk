@@ -89,10 +89,3 @@ class MetricsCollector:
     def clear(self) -> None:
         with self._lock:
             self._metrics.clear()
-
-
-_default_collector = MetricsCollector()
-
-
-def get_default_collector() -> MetricsCollector:
-    return _default_collector

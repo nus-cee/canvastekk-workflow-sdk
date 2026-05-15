@@ -65,9 +65,11 @@ from canvastekk_workflow_sdk.exceptions import (
     NodeValidationError,
 )
 from canvastekk_workflow_sdk.middleware import LoggingMiddleware, NodeMiddleware, TimingMiddleware
-from canvastekk_workflow_sdk.observability import ExecutionMetric, MetricsCollector, get_default_collector
+from canvastekk_workflow_sdk.observability import ExecutionMetric, MetricsCollector
+from canvastekk_workflow_sdk.registry import RegistrationError, register_node
 from canvastekk_workflow_sdk.request import NodeExecutionRequest
 from canvastekk_workflow_sdk.response import HealthResponse, NodeExecutionResponse
+from canvastekk_workflow_sdk.router import create_multi_node_app
 from canvastekk_workflow_sdk.uploads import OutputUploader, S3PresignedUploader, get_default_uploader
 
 __all__ = [
@@ -103,10 +105,12 @@ __all__ = [
     "RetryConfig",
     "S3PresignedUploader",
     "TimingMiddleware",
+    "RegistrationError",
+    "create_multi_node_app",
     "create_node_app",
     "export_definition",
-    "get_default_collector",
     "get_default_uploader",
+    "register_node",
 ]
 
 __version__ = "0.2.0"

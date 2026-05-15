@@ -26,7 +26,7 @@ from canvastekk_workflow_sdk.exceptions import (
     NodeValidationError,
 )
 from canvastekk_workflow_sdk.middleware import LoggingMiddleware, NodeMiddleware
-from canvastekk_workflow_sdk.observability import ExecutionMetric, MetricsCollector, get_default_collector
+from canvastekk_workflow_sdk.observability import ExecutionMetric, MetricsCollector
 from canvastekk_workflow_sdk.request import NodeExecutionRequest
 from canvastekk_workflow_sdk.response import NodeExecutionResponse
 
@@ -61,7 +61,7 @@ class BaseNode(ABC):
 
     def __init__(self) -> None:
         self._middleware: list[NodeMiddleware] = [LoggingMiddleware()]
-        self._metrics_collector: MetricsCollector = get_default_collector()
+        self._metrics_collector: MetricsCollector = MetricsCollector()
 
     def add_middleware(self, middleware: NodeMiddleware) -> BaseNode:
         """Register a middleware instance. Returns self for chaining.
