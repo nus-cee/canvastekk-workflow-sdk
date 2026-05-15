@@ -112,12 +112,8 @@ All changes are **additive and backward-compatible**. Existing `BaseNode` subcla
 - [x] Add any missing fields required by engine registry
 - [x] Add test for registry-compatible manifest output
 
-### 3.4 Deployment documentation
-- [ ] Add Dockerfile pattern to `python/README.md` (multi-stage build, uvicorn entrypoint)
-- [ ] Add Traefik/reverse-proxy config example
-- [ ] Add serverless deployment notes (AWS Lambda, GCP Cloud Run)
-- [ ] Document auth configuration (layered: API key → JWT → Keycloak)
-- [ ] Document `CANVASTEKK_OUTPUT_DIR`, `CANVASTEKK_API_KEY`, and new env vars
+### ~~3.4 Deployment documentation~~ (removed)
+Deployment docs (Dockerfile, Traefik, serverless) belong in a node-template repo, not the SDK itself. Customers install the SDK via pip — they don't deploy it.
 
 ### 3.5 Remove global MetricsCollector singleton
 - [x] Remove `_default_collector` module-level singleton from `observability.py`
@@ -132,8 +128,8 @@ All changes are **additive and backward-compatible**. Existing `BaseNode` subcla
 - [x] All existing tests pass without modification (backward compatibility)
 - [x] New modules (`auth.py`, `uploads.py`, `registry.py`, `router.py`) have test coverage >= 80%
 - [x] Ruff lint passes clean: `ruff check python/`
-- [ ] Type checking passes: `mypy python/` (if configured) or verify type hints
-- [ ] Integration test: full lifecycle — create node with auth, execute, verify JWT, upload output
+- [x] Type checking passes: `mypy python/` (if configured) or verify type hints
+- [x] Integration test: full lifecycle — create node with auth, execute, verify JWT, upload output
 - [x] Verify `node.run()` does not block async event loop
 - [x] Verify thread safety of `MetricsCollector` under concurrent load
 
@@ -150,8 +146,36 @@ All changes are **additive and backward-compatible**. Existing `BaseNode` subcla
 - [x] `on_startup()` / `on_shutdown()` lifecycle hooks work on FastAPI app events
 - [x] Output directory configurable via `CANVASTEKK_OUTPUT_DIR` env var
 - [x] All existing tests pass without modification (backward compatibility)
-- [ ] New modules have test coverage >= 80%
-- [ ] Ruff lint + mypy pass clean
+- [x] New modules have test coverage >= 80%
+- [x] Ruff lint + mypy pass clean
+
+---
+
+## Phase 5: Code Review Fixes
+
+### 5.1 Fix racy timeout enforcement (Critical)
+- [x] Remove post-hoc `time.perf_counter()` timeout heuristic from `base.py:run()`
+- [x] Use `asyncio.wait_for()` in `app.py:253` to actively enforce timeout around `asyncio.to_thread(node.run, ...)`
+- [x] Update existing timeout tests to verify active enforcement
+- [x] Verify no exception misclassification (e.g., `ValueError` near timeout threshold)
+
+### 5.2 Constant-time API key comparison (Major — Security)
+- [x] Replace `!=` string comparison in `auth.py:80` with `hmac.compare_digest()`
+- [x] Add test for timing-safe comparison
+
+### 5.3 JWKS caching with TTL (Major — Performance)
+- [x] Add TTL-based JWKS cache to `_KeycloakAuth` (5-minute TTL)
+- [x] Cache `_jwks_data` and `_jwks_fetched_at` as instance attributes
+- [x] Update tests to verify caching behavior (single fetch across multiple requests)
+
+### 5.4 Fix OutputUploader protocol mismatch (Major — Design)
+- [x] Add `upload_file()` method to `OutputUploader` protocol
+- [x] Update return type of `get_default_uploader()` to `OutputUploader`
+- [x] Verify custom uploader implementations work with both protocol methods
+
+### 5.5 Fix fastapi_kwargs typing in app.py (Major — Types)
+- [x] Change `**fastapi_kwargs: object` to `**fastapi_kwargs: Any` in `app.py:create_node_app()`
+- [x] Verify mypy passes
 
 ---
 
@@ -205,4 +229,11 @@ Phase 4: Testing & Validation
   → New modules >= 80% coverage
   → Ruff + mypy clean
   → Integration test (auth + execute + upload)
+
+Phase 5: Code Review Fixes
+  → Critical: Fix racy timeout enforcement (asyncio.wait_for)
+  → Major: Constant-time API key comparison (hmac.compare_digest)
+  → Major: JWKS caching with TTL in _KeycloakAuth
+  → Major: Fix OutputUploader protocol / upload_file mismatch
+  → Major: Fix fastapi_kwargs typing in app.py
 ```
