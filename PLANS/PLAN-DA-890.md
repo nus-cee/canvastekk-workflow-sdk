@@ -62,32 +62,32 @@ All changes are **additive and backward-compatible**. Existing `BaseNode` subcla
 ## Phase 2: Auth & Security Integration (P1 — ~2 days)
 
 ### 2.1 FastAPI dependency injection point
-- [ ] Add `dependencies` parameter to `create_node_app()` in `app.py` (list of FastAPI `Depends()` items)
-- [ ] Apply dependencies globally via `app.include_router()` or per-endpoint
-- [ ] Ensure backward-compatible: default is `None` (no auth)
-- [ ] Add test: custom dependency is invoked on each endpoint
+- [x] Add `dependencies` parameter to `create_node_app()` in `app.py` (list of FastAPI `Depends()` items)
+- [x] Apply dependencies globally via `APIRouter(dependencies=...)` + `app.include_router(router)`
+- [x] Ensure backward-compatible: default is `None` (no auth)
+- [x] Add test: custom dependency is invoked on each endpoint
 
 ### 2.2 Auth module (layered, optional)
-- [ ] Create `canvastekk_workflow_sdk/auth.py` with layered auth strategy
-- [ ] **Layer 0 (default): No auth** — nodes work out of the box, zero config
-- [ ] **Layer 1 (simple): API key** — `NodeAuth.api_key(key_env_var="CANVASTEKK_API_KEY")` validates `X-API-Key` header. Shared secret between engine and node. Simplest for customers.
-- [ ] **Layer 2 (signed): JWT** — `NodeAuth.jwt(secret_env_var="CANVASTEKK_JWT_SECRET")` validates HMAC-signed tokens from engine. No Keycloak dependency needed.
-- [ ] **Layer 3 (enterprise): Keycloak OIDC** — `NodeAuth.keycloak(server_url=..., realm=..., audience=...)` validates RS256 JWT with JWKS caching (optional, for customers with existing Keycloak)
-- [ ] All layers expose `.as_dependency()` returning FastAPI `Depends()` callable
-- [ ] Dev-mode bypass: skip validation when `CANVASTEKK_DEV_MODE=true`
-- [ ] Add `PyJWT` as optional dependency in `pyproject.toml` (for Layer 2+)
-- [ ] Add tests: each layer works independently, dev-mode bypass, invalid credentials rejected
+- [x] Create `canvastekk_workflow_sdk/auth.py` with layered auth strategy
+- [x] **Layer 0 (default): No auth** — nodes work out of the box, zero config
+- [x] **Layer 1 (simple): API key** — `NodeAuth.api_key(key_env_var="CANVASTEKK_API_KEY")` validates `X-API-Key` header. Shared secret between engine and node. Simplest for customers.
+- [x] **Layer 2 (signed): JWT** — `NodeAuth.jwt(secret_env_var="CANVASTEKK_JWT_SECRET")` validates HMAC-signed tokens from engine. No Keycloak dependency needed.
+- [x] **Layer 3 (enterprise): Keycloak OIDC** — `NodeAuth.keycloak(server_url=..., realm=..., audience=...)` validates RS256 JWT with JWKS caching (optional, for customers with existing Keycloak)
+- [x] All layers expose `.as_dependency()` returning FastAPI `Depends()` callable
+- [x] Dev-mode bypass: skip validation when `CANVASTEKK_DEV_MODE=true`
+- [x] Add `PyJWT` as optional dependency in `pyproject.toml` (for Layer 2+)
+- [x] Add tests: each layer works independently, dev-mode bypass, invalid credentials rejected
 
 ### 2.3 Extra routes support
-- [ ] Add `extra_routes` parameter to `create_node_app()` accepting list of FastAPI `APIRouter` instances
-- [ ] Include each router on the app during creation
-- [ ] Add test: custom route is accessible on the created app
+- [x] Add `extra_routes` parameter to `create_node_app()` accepting list of FastAPI `APIRouter` instances
+- [x] Include each router on the app during creation
+- [x] Add test: custom route is accessible on the created app
 
 ### 2.4 Lifecycle hooks
-- [ ] Add `on_startup()` and `on_shutdown()` async methods to `BaseNode` in `base.py`
-- [ ] Register as FastAPI lifespan events in `create_node_app()`
-- [ ] Default implementations are no-ops (backward-compatible)
-- [ ] Add test: `on_startup` fires on app start, `on_shutdown` fires on app stop
+- [x] Add `on_startup()` and `on_shutdown()` async methods to `BaseNode` in `base.py`
+- [x] Register as FastAPI lifespan events in `create_node_app()`
+- [x] Default implementations are no-ops (backward-compatible)
+- [x] Add test: `on_startup` fires on app start, `on_shutdown` fires on app stop
 
 ---
 
