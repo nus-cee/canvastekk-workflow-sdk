@@ -29,33 +29,33 @@ All changes are **additive and backward-compatible**. Existing `BaseNode` subcla
 ## Phase 1: Core SDK Stability Fixes (P0 — ~2 days)
 
 ### 1.1 Fix async event loop blocking
-- [ ] Wrap `node.run()` in `asyncio.to_thread()` inside the `POST /execute` async endpoint in `app.py`
-- [ ] Verify `run()` is never called directly from an async context without thread offloading
-- [ ] Add test: confirm async endpoint does not block the event loop during long `execute()`
+- [x] Wrap `node.run()` in `asyncio.to_thread()` inside the `POST /execute` async endpoint in `app.py`
+- [x] Verify `run()` is never called directly from an async context without thread offloading
+- [x] Add test: confirm async endpoint does not block the event loop during long `execute()`
 
 ### 1.2 Thread-safe MetricsCollector
-- [ ] Add `threading.Lock` to `MetricsCollector.record()` in `observability.py`
-- [ ] Add `threading.Lock` to `MetricsCollector.get_summary()` and `clear()`
-- [ ] Add concurrent stress test: multiple threads calling `record()` simultaneously
-- [ ] Verify `get_summary()` returns consistent results under concurrent writes
+- [x] Add `threading.Lock` to `MetricsCollector.record()` in `observability.py`
+- [x] Add `threading.Lock` to `MetricsCollector.get_summary()` and `clear()`
+- [x] Add concurrent stress test: multiple threads calling `record()` simultaneously
+- [x] Verify `get_summary()` returns consistent results under concurrent writes
 
 ### 1.3 Output schema validation
-- [ ] Add `_validate_outputs()` method to `BaseNode` in `base.py`, mirroring existing `_validate_inputs()`
-- [ ] Validate return value of `execute()` against `output_schema` in `run()` method
-- [ ] Raise `OutputValidationError` on contract violations (add to `exceptions.py`)
-- [ ] Add tests: valid output passes, invalid output raises, missing required fields caught
+- [x] Add `_validate_outputs()` method to `BaseNode` in `base.py`, mirroring existing `_validate_inputs()`
+- [x] Validate return value of `execute()` against `output_schema` in `run()` method
+- [x] Raise `NodeOutputValidationError` on contract violations (add to `exceptions.py`)
+- [x] Add tests: valid output passes, invalid output raises, missing required fields caught
 
 ### 1.4 Extract S3 upload logic
-- [ ] Create `canvastekk_workflow_sdk/uploads.py` with `OutputUploader` protocol
-- [ ] Implement `S3PresignedUploader` class (extract from `_upload_to_presigned` and `_upload_outputs_to_s3` in `app.py`)
-- [ ] Handle edge case: S3 upload failure after successful `execute()` should not report entire execution as failed — log warning instead
-- [ ] Add tests for `S3PresignedUploader` with mocked urllib requests
-- [ ] Slim down `app.py` — replace inline S3 logic with uploader instance
+- [x] Create `canvastekk_workflow_sdk/uploads.py` with `OutputUploader` protocol
+- [x] Implement `S3PresignedUploader` class (extract from `_upload_to_presigned` and `_upload_outputs_to_s3` in `app.py`)
+- [x] Handle edge case: S3 upload failure after successful `execute()` should not report entire execution as failed — log warning instead
+- [x] Add tests for `S3PresignedUploader` with mocked urllib requests
+- [x] Slim down `app.py` — replace inline S3 logic with uploader instance
 
 ### 1.5 Configurable output directory
-- [ ] Add `CANVASTEKK_OUTPUT_DIR` env var support to `ExecutionContext` in `context.py`
-- [ ] Fall back to existing `/tmp/{run_id}/{node_id}` if env var not set
-- [ ] Add test for env var override
+- [x] Add `CANVASTEKK_OUTPUT_DIR` env var support to `ExecutionContext` in `context.py`
+- [x] Fall back to existing `/tmp/{run_id}/{node_id}` if env var not set
+- [x] Add test for env var override
 
 ---
 
@@ -67,17 +67,16 @@ All changes are **additive and backward-compatible**. Existing `BaseNode` subcla
 - [ ] Ensure backward-compatible: default is `None` (no auth)
 - [ ] Add test: custom dependency is invoked on each endpoint
 
-### 2.2 Auth module (Keycloak JWT)
-- [ ] Create `canvastekk_workflow_sdk/auth.py` with `NodeAuth` class
-- [ ] Implement JWT validation matching DA-869's `get_current_user()` pattern (Keycloak RS256, JWKS caching)
-- [ ] Add `NodeAuth.as_dependency()` returning a FastAPI `Depends()` callable
-- [ ] Support configurable Keycloak realm, server URL via env vars:
-  - `CANVASTEKK_KEYCLOAK_SERVER_URL`
-  - `CANVASTEKK_KEYCLOAK_REALM`
-  - `CANVASTEKK_KEYCLOAK_AUDIENCE`
-- [ ] Dev-mode bypass: skip JWT validation when Keycloak is unavailable (env var `CANVASTEKK_DEV_MODE=true`)
-- [ ] Add `PyJWT` (or `python-jose`) as optional dependency in `pyproject.toml`
-- [ ] Add tests: valid JWT accepted, expired JWT rejected, invalid signature rejected, dev-mode bypass works
+### 2.2 Auth module (layered, optional)
+- [ ] Create `canvastekk_workflow_sdk/auth.py` with layered auth strategy
+- [ ] **Layer 0 (default): No auth** — nodes work out of the box, zero config
+- [ ] **Layer 1 (simple): API key** — `NodeAuth.api_key(key_env_var="CANVASTEKK_API_KEY")` validates `X-API-Key` header. Shared secret between engine and node. Simplest for customers.
+- [ ] **Layer 2 (signed): JWT** — `NodeAuth.jwt(secret_env_var="CANVASTEKK_JWT_SECRET")` validates HMAC-signed tokens from engine. No Keycloak dependency needed.
+- [ ] **Layer 3 (enterprise): Keycloak OIDC** — `NodeAuth.keycloak(server_url=..., realm=..., audience=...)` validates RS256 JWT with JWKS caching (optional, for customers with existing Keycloak)
+- [ ] All layers expose `.as_dependency()` returning FastAPI `Depends()` callable
+- [ ] Dev-mode bypass: skip validation when `CANVASTEKK_DEV_MODE=true`
+- [ ] Add `PyJWT` as optional dependency in `pyproject.toml` (for Layer 2+)
+- [ ] Add tests: each layer works independently, dev-mode bypass, invalid credentials rejected
 
 ### 2.3 Extra routes support
 - [ ] Add `extra_routes` parameter to `create_node_app()` accepting list of FastAPI `APIRouter` instances
@@ -117,8 +116,8 @@ All changes are **additive and backward-compatible**. Existing `BaseNode` subcla
 - [ ] Add Dockerfile pattern to `python/README.md` (multi-stage build, uvicorn entrypoint)
 - [ ] Add Traefik/reverse-proxy config example
 - [ ] Add serverless deployment notes (AWS Lambda, GCP Cloud Run)
-- [ ] Document auth configuration (Keycloak env vars)
-- [ ] Document `CANVASTEKK_OUTPUT_DIR` and new env vars
+- [ ] Document auth configuration (layered: API key → JWT → Keycloak)
+- [ ] Document `CANVASTEKK_OUTPUT_DIR`, `CANVASTEKK_API_KEY`, and new env vars
 
 ### 3.5 Remove global MetricsCollector singleton
 - [ ] Remove `_default_collector` module-level singleton from `observability.py`
@@ -160,7 +159,7 @@ All changes are **additive and backward-compatible**. Existing `BaseNode` subcla
 
 | File | Purpose |
 | --- | --- |
-| `canvastekk_workflow_sdk/auth.py` | JWT auth as optional FastAPI dependency |
+| `canvastekk_workflow_sdk/auth.py` | Layered auth (optional): API key, JWT, Keycloak |
 | `canvastekk_workflow_sdk/uploads.py` | `OutputUploader` protocol + `S3PresignedUploader` |
 | `canvastekk_workflow_sdk/registry.py` | `register_node()` CI/CD convenience function |
 | `canvastekk_workflow_sdk/router.py` | Multi-node app factory |
