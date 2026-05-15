@@ -3,6 +3,8 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import httpx
+
 from canvastekk_workflow_sdk.response import NodeExecutionResponse
 from canvastekk_workflow_sdk.uploads import OutputUploader, S3PresignedUploader, get_default_uploader
 
@@ -45,14 +47,16 @@ class TestS3PresignedUploader:
         test_file = tmp_path / "test.txt"
         test_file.write_text("test content")
 
-        mock_urlopen = MagicMock()
-        with patch("urllib.request.urlopen", mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("canvastekk_workflow_sdk.uploads.httpx.put", return_value=mock_response) as mock_put:
             uploader.upload_file(str(test_file), "https://example.com/presigned")
-            mock_urlopen.assert_called_once()
-            call_args = mock_urlopen.call_args[0][0]
-            assert call_args.method == "PUT"
-            assert call_args.full_url == "https://example.com/presigned"
-            assert "Content-type" in call_args.headers or "Content-Type" in call_args.headers
+
+        mock_put.assert_called_once()
+        call_kwargs = mock_put.call_args[1]
+        assert call_kwargs["headers"]["Content-Type"] == "application/octet-stream"
+        assert call_kwargs["content"] == b"test content"
 
     def test_upload_file_sets_headers(self, tmp_path: Path) -> None:
         """Test that upload_file sets correct headers."""
@@ -60,14 +64,16 @@ class TestS3PresignedUploader:
         test_file = tmp_path / "test.bin"
         test_file.write_bytes(b"x" * 1000)
 
-        mock_urlopen = MagicMock()
-        with patch("urllib.request.urlopen", mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("canvastekk_workflow_sdk.uploads.httpx.put", return_value=mock_response) as mock_put:
             uploader.upload_file(str(test_file), "https://example.com/presigned")
-            call_args = mock_urlopen.call_args[0][0]
-            content_type = call_args.headers.get("Content-type") or call_args.headers.get("Content-Type")
-            assert content_type == "application/octet-stream"
-            content_length = call_args.headers.get("Content-length") or call_args.headers.get("Content-Length")
-            assert content_length == "1000"
+
+        mock_put.assert_called_once()
+        call_kwargs = mock_put.call_args[1]
+        assert call_kwargs["headers"]["Content-Type"] == "application/octet-stream"
+        assert call_kwargs["content"] == b"x" * 1000
 
     def test_upload_outputs_with_valid_file_and_url(self, tmp_path: Path) -> None:
         """Test upload_outputs with valid file and URL."""
@@ -83,10 +89,13 @@ class TestS3PresignedUploader:
         upload_urls = {"result_path": "https://s3.amazonaws.com/upload"}
         file_output_fields = ["result_path"]
 
-        mock_urlopen = MagicMock()
-        with patch("urllib.request.urlopen", mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("canvastekk_workflow_sdk.uploads.httpx.put", return_value=mock_response) as mock_put:
             uploader.upload_outputs(response, upload_urls, file_output_fields)
-            mock_urlopen.assert_called_once()
+
+        mock_put.assert_called_once()
 
     def test_upload_outputs_skips_non_file_values(self) -> None:
         """Test that upload_outputs skips non-string file values."""
@@ -99,10 +108,10 @@ class TestS3PresignedUploader:
         upload_urls = {"result": "https://s3.amazonaws.com/upload"}
         file_output_fields = ["result"]
 
-        mock_urlopen = MagicMock()
-        with patch("urllib.request.urlopen", mock_urlopen):
+        mock_put = MagicMock()
+        with patch("canvastekk_workflow_sdk.uploads.httpx.put", mock_put):
             uploader.upload_outputs(response, upload_urls, file_output_fields)
-            mock_urlopen.assert_not_called()
+            mock_put.assert_not_called()
 
     def test_upload_outputs_skips_missing_urls(self, tmp_path: Path) -> None:
         """Test that upload_outputs skips fields without upload URLs."""
@@ -118,10 +127,10 @@ class TestS3PresignedUploader:
         upload_urls: dict[str, str] = {}
         file_output_fields = ["result_path"]
 
-        mock_urlopen = MagicMock()
-        with patch("urllib.request.urlopen", mock_urlopen):
+        mock_put = MagicMock()
+        with patch("canvastekk_workflow_sdk.uploads.httpx.put", mock_put):
             uploader.upload_outputs(response, upload_urls, file_output_fields)
-            mock_urlopen.assert_not_called()
+            mock_put.assert_not_called()
 
     def test_upload_outputs_logs_warning_for_nonexistent_file(self, tmp_path: Path) -> None:
         """Test that upload_outputs logs warning for non-existent file."""
@@ -153,8 +162,12 @@ class TestS3PresignedUploader:
         upload_urls = {"result_path": "https://s3.amazonaws.com/upload"}
         file_output_fields = ["result_path"]
 
-        mock_urlopen = MagicMock(side_effect=Exception("Network error"))
-        with patch("urllib.request.urlopen", mock_urlopen), patch("canvastekk_workflow_sdk.uploads.logger") as mock_logger:
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Error"
+        error = httpx.HTTPStatusError("Upload failed", request=MagicMock(), response=mock_response)
+
+        with patch("canvastekk_workflow_sdk.uploads.httpx.put", side_effect=error), patch("canvastekk_workflow_sdk.uploads.logger") as mock_logger:
             uploader.upload_outputs(response, upload_urls, file_output_fields)
             mock_logger.error.assert_called_once()
             assert "Failed to upload output '%s' to S3" in str(mock_logger.error.call_args)
@@ -171,10 +184,10 @@ class TestS3PresignedUploader:
         upload_urls = {"result_path": "https://s3.amazonaws.com/upload"}
         file_output_fields = ["result_path"]
 
-        mock_urlopen = MagicMock()
-        with patch("urllib.request.urlopen", mock_urlopen):
+        mock_put = MagicMock()
+        with patch("canvastekk_workflow_sdk.uploads.httpx.put", mock_put):
             uploader.upload_outputs(response, upload_urls, file_output_fields)
-            mock_urlopen.assert_not_called()
+            mock_put.assert_not_called()
 
 
 class TestDefaultUploaderSingleton:

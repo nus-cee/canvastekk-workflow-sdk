@@ -11,7 +11,9 @@ import json
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from canvastekk_workflow_sdk.exceptions import NodeValidationError
 
 # fmt: off
 ColorPreset = Literal[
@@ -138,11 +140,10 @@ class NodeDefinition(BaseModel):
     def file_input_fields(self) -> list[str]:
         """Return list of input field names that accept file uploads.
 
-        A field is considered a file input if it has ``"format": "binary"``
-        in the input_schema properties.
+        A field is considered a file input if it has `format: "file"` in the input_schema properties.
         """
         properties = self.input_schema.get("properties", {})
-        return [name for name, schema in properties.items() if schema.get("format") == "binary"]
+        return [name for name, schema in properties.items() if schema.get("format") == "file"]
 
     @property
     def has_file_inputs(self) -> bool:
@@ -153,11 +154,70 @@ class NodeDefinition(BaseModel):
     def file_output_fields(self) -> list[str]:
         """Return list of output field names that produce files.
 
-        A field is considered a file output if it has ``"format": "binary"``
-        in the output_schema properties.
+        A field is considered a file output if it has `format: "file"` in the output_schema properties.
         """
         properties = self.output_schema.get("properties", {})
-        return [name for name, schema in properties.items() if schema.get("format") == "binary"]
+        return [name for name, schema in properties.items() if schema.get("format") == "file"]
+
+    def validate_file_input(self, field_name: str, file_path: Path) -> None:
+        """Validate a downloaded file against x-* extensions on the schema.
+
+        Call this after downloading a file input to validate constraints.
+
+        Args:
+            field_name: Name of the input field in input_schema.
+            file_path: Path to the downloaded file.
+
+        Raises:
+            NodeValidationError: If the file fails validation.
+        """
+        properties = self.input_schema.get("properties", {})
+        schema = properties.get(field_name, {})
+
+        x_accept = schema.get("x-accept")
+        if x_accept:
+            if file_path.suffix not in x_accept:
+                raise NodeValidationError(
+                    f"File extension '{file_path.suffix}' is not allowed for field '{field_name}'. "
+                    f"Allowed extensions: {x_accept}"
+                )
+
+        x_max_size = schema.get("x-maxSizeBytes")
+        if x_max_size:
+            file_size = file_path.stat().st_size
+            if file_size > x_max_size:
+                raise NodeValidationError(
+                    f"File size ({file_size} bytes) exceeds maximum size ({x_max_size} bytes) "
+                    f"for field '{field_name}'"
+                )
+
+    @model_validator(mode="after")
+    def _validate_file_field_formats(self) -> NodeDefinition:
+        """Validate that file fields use format: "file" and type: "string"."""
+        schemas_to_check = [
+            ("input_schema", self.input_schema),
+            ("output_schema", self.output_schema),
+        ]
+
+        for schema_name, schema in schemas_to_check:
+            properties = schema.get("properties", {})
+            for name, prop_schema in properties.items():
+                field_format = prop_schema.get("format")
+                field_type = prop_schema.get("type")
+
+                if field_format == "binary":
+                    raise ValueError(
+                        f"Field '{name}' uses format 'binary' which is no longer supported. "
+                        f"Use format 'file' instead. (See DA-894 migration guide.)"
+                    )
+
+                if field_format == "file" and field_type != "string":
+                    raise ValueError(
+                        f"Field '{name}' has format 'file' but type is '{field_type}'. "
+                        f"File fields must have type 'string'."
+                    )
+
+        return self
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
