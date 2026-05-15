@@ -97,11 +97,23 @@ FE uploads file to CDS
 
 ---
 
-## Phase 3: Update Docstrings and Contracts
+## Phase 3: Add File Field Validation Helper + Update Docstrings
 
-### 3.1 Update base.py docstrings
+### 3.1 Add `validate_file_input()` helper to definition.py
+- [ ] Add method to `NodeDefinition` that validates a downloaded file against `x-*` extensions on its schema
+- [ ] Support `x-accept` (allowed extensions), `x-maxSizeBytes` (max file size)
+- [ ] Node authors call this in `execute()` after downloading
+
+### 3.2 Update docstrings
 - [ ] `base.py` execute() docstring: change "File inputs may be local paths (downloaded by SDK) or URLs" to "File inputs are presigned GET URLs provided by the engine"
 - [ ] `request.py` inputs field description is already correct ("may include signed URLs for file access")
+
+### 3.3 File field schema conventions (document in README)
+- [ ] Document the `x-*` extension convention for file fields in JSON Schema
+- [ ] `x-accept`: list of allowed file extensions (e.g. `[".las", ".laz", ".ply"]`) — used by frontend for file picker + node for runtime validation
+- [ ] `x-maxSizeBytes`: maximum file size in bytes — validated by node at runtime after download
+- [ ] `x-description`: longer description for frontend tooltip (optional, separate from `description`)
+- [ ] These are custom extensions on top of JSON Schema Draft-07; the `Draft7Validator` ignores unknown keys
 
 ---
 
@@ -123,6 +135,9 @@ FE uploads file to CDS
 - [ ] Test: `file_output_fields` detects both `"file"` and `"binary"` format fields
 - [ ] Test: execute with presigned URL input for `format: "file"` field passes validation
 - [ ] Test: JSON-only /execute endpoint works with presigned URL passthrough
+- [ ] Test: `validate_file_input()` rejects file exceeding `x-maxSizeBytes`
+- [ ] Test: `validate_file_input()` rejects file with wrong extension per `x-accept`
+- [ ] Test: `validate_file_input()` passes valid file
 
 ---
 
@@ -135,6 +150,13 @@ FE uploads file to CDS
 - [ ] Update "S3 Output Upload" section: remove multipart-specific `output_upload_url` JSON string instructions
 - [ ] Update curl examples to use JSON POST only
 - [ ] Document that `format: "file"` means "this field receives a presigned GET URL from the engine" — all file inputs are CDS-sourced, the engine resolves references before the node sees them
+- [ ] Add section on `x-*` file field extensions with examples
+- [ ] Add full node definition example showing file fields with conditions
+
+### 5.2 Add download example
+- [ ] Show how to download from presigned URL using `urllib.request` (stdlib, consistent with SDK's existing upload code)
+- [ ] Note `httpx` as recommended alternative for node authors who need async/timeout/redirect control (already available as dev dep)
+- [ ] Show `validate_file_input()` usage after download
 
 ---
 
@@ -157,14 +179,16 @@ FE uploads file to CDS
 
 - [ ] SDK node schemas use `format: "file"` as primary convention
 - [ ] `file_input_fields` / `file_output_fields` detect both `"file"` and `"binary"` (backward compat)
+- [ ] `validate_file_input()` helper validates file constraints from `x-*` extensions
 - [ ] Multipart handling removed from app.py — JSON-only `/execute`
 - [ ] `python-multipart` dependency removed
 - [ ] Existing nodes with `format: "binary"` still work (dual detection)
 - [ ] Presigned URL inputs pass JSON Schema validation (Draft7Validator)
 - [ ] SDK version bumped to `0.6.0`
-- [ ] All tests pass (multipart tests removed, new presigned URL tests added)
+- [ ] All tests pass (multipart tests removed, new presigned URL + file validation tests added)
 - [ ] Ruff lint clean
 - [ ] README reflects JSON-only, presigned URL file handling
+- [ ] README documents `x-*` file field extensions and download patterns
 - [ ] `export_definition()` and `/manifest` correctly expose `format: "file"` schemas for engine consumption
 
 ---
@@ -184,11 +208,11 @@ FE uploads file to CDS
 
 | File | Changes |
 | --- | --- |
-| `python/canvastekk_workflow_sdk/definition.py` | Dual format detection (`"file"` + `"binary"`), updated docstrings |
+| `python/canvastekk_workflow_sdk/definition.py` | Dual format detection (`"file"` + `"binary"`), add `validate_file_input()` helper, updated docstrings |
 | `python/canvastekk_workflow_sdk/app.py` | Remove multipart handling, remove `_coerce_form_value`, remove dead imports |
 | `python/canvastekk_workflow_sdk/base.py` | Update execute() docstring for presigned URL flow |
 | `python/canvastekk_workflow_sdk/__init__.py` | Bump `__version__` to `"0.6.0"` |
 | `python/pyproject.toml` | Bump version, remove `python-multipart` dependency |
-| `python/tests/test_definition.py` | Update format values, add dual-detection tests |
+| `python/tests/test_definition.py` | Update format values, add dual-detection + file validation tests |
 | `python/tests/test_app.py` | Remove multipart tests, update format values, add presigned URL tests |
-| `python/README.md` | Rewrite File Handling Guide for presigned URL flow |
+| `python/README.md` | Rewrite File Handling Guide, add `x-*` extensions docs, download examples |
