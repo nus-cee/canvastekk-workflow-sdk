@@ -59,6 +59,7 @@ from canvastekk_workflow_sdk.exceptions import (
     NodeConfigurationError,
     NodeExecutionError,
     NodeIOError,
+    NodeOutputValidationError,
     NodeTimeoutError,
     NodeValidationError,
 )
@@ -66,6 +67,7 @@ from canvastekk_workflow_sdk.middleware import LoggingMiddleware, NodeMiddleware
 from canvastekk_workflow_sdk.observability import ExecutionMetric, MetricsCollector, get_default_collector
 from canvastekk_workflow_sdk.request import NodeExecutionRequest
 from canvastekk_workflow_sdk.response import HealthResponse, NodeExecutionResponse
+from canvastekk_workflow_sdk.uploads import OutputUploader, S3PresignedUploader, get_default_uploader
 
 __all__ = [
     "BaseContract",
@@ -89,16 +91,20 @@ __all__ = [
     "NodeStyles",
     "NodeExecutionRequest",
     "NodeExecutionResponse",
+    "NodeOutputValidationError",
     "NodeTimeoutError",
     "NodeValidationError",
+    "OutputUploader",
     "Plane",
     "PlaneSet",
     "Point3D",
     "RetryConfig",
+    "S3PresignedUploader",
     "TimingMiddleware",
     "create_node_app",
     "export_definition",
     "get_default_collector",
+    "get_default_uploader",
 ]
 
 __version__ = "0.2.0"

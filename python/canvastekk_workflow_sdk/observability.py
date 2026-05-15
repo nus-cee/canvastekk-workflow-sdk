@@ -9,6 +9,7 @@ any specific observability backend.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -56,14 +57,17 @@ class MetricsCollector:
     def __init__(self, max_records: int = 10000) -> None:
         self._metrics: list[ExecutionMetric] = []
         self._max_records = max_records
+        self._lock = threading.Lock()
 
     def record(self, metric: ExecutionMetric) -> None:
-        self._metrics.append(metric)
-        if len(self._metrics) > self._max_records:
-            self._metrics = self._metrics[-self._max_records :]
+        with self._lock:
+            self._metrics.append(metric)
+            if len(self._metrics) > self._max_records:
+                self._metrics = self._metrics[-self._max_records :]
 
     def get_summary(self, last_n: int | None = None) -> dict[str, Any]:
-        metrics = self._metrics[-last_n:] if last_n else self._metrics
+        with self._lock:
+            metrics = list(self._metrics[-last_n:]) if last_n else list(self._metrics)
         if not metrics:
             return {"total_executions": 0}
 
@@ -83,7 +87,8 @@ class MetricsCollector:
         }
 
     def clear(self) -> None:
-        self._metrics.clear()
+        with self._lock:
+            self._metrics.clear()
 
 
 _default_collector = MetricsCollector()

@@ -17,7 +17,12 @@ import jsonschema
 
 from canvastekk_workflow_sdk.context import ExecutionContext
 from canvastekk_workflow_sdk.definition import NodeDefinition
-from canvastekk_workflow_sdk.exceptions import NodeExecutionError, NodeTimeoutError, NodeValidationError
+from canvastekk_workflow_sdk.exceptions import (
+    NodeExecutionError,
+    NodeOutputValidationError,
+    NodeTimeoutError,
+    NodeValidationError,
+)
 from canvastekk_workflow_sdk.middleware import LoggingMiddleware, NodeMiddleware
 from canvastekk_workflow_sdk.observability import ExecutionMetric, MetricsCollector, get_default_collector
 from canvastekk_workflow_sdk.request import NodeExecutionRequest
@@ -139,6 +144,35 @@ class BaseNode(ABC):
                 errors=error_details,
             )
 
+    def _validate_outputs(self, outputs: dict[str, Any]) -> None:
+        """Validate outputs against the node's output_schema.
+
+        Args:
+            outputs: The outputs dict to validate.
+
+        Raises:
+            NodeOutputValidationError: If outputs do not match output_schema.
+        """
+        schema = self.definition.output_schema
+        if not schema or schema == {"type": "object"}:
+            return
+
+        validator = jsonschema.Draft7Validator(schema)
+        errors = sorted(validator.iter_errors(outputs), key=lambda e: list(e.path))
+        if errors:
+            error_details = [
+                {
+                    "path": list(e.path),
+                    "message": e.message,
+                    "validator": e.validator,
+                }
+                for e in errors
+            ]
+            raise NodeOutputValidationError(
+                f"Output validation failed: {errors[0].message}",
+                errors=error_details,
+            )
+
     def run(self, request: NodeExecutionRequest) -> NodeExecutionResponse:
         """
         Run the node with full error handling, validation, and timing.
@@ -182,6 +216,8 @@ class BaseNode(ABC):
                         raise NodeTimeoutError(timeout)
                 raise
 
+            self._validate_outputs(outputs)
+
             duration_ms = int((time.perf_counter() - start_time) * 1000)
 
             for mw in self._middleware:
@@ -219,6 +255,17 @@ class BaseNode(ABC):
             )
 
         except NodeValidationError as e:
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
+            self._record_error(request, e, duration_ms)
+            return NodeExecutionResponse.failure(
+                execution_id=execution_id,
+                error=e.message,
+                error_type=type(e).__name__,
+                duration_ms=duration_ms,
+                error_code=e.error_code,
+            )
+
+        except NodeOutputValidationError as e:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
             self._record_error(request, e, duration_ms)
             return NodeExecutionResponse.failure(

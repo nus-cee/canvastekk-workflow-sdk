@@ -11,11 +11,10 @@ Creates a FastAPI application with standard node endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
-import os
 import tempfile
-import urllib.request
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -26,6 +25,7 @@ from starlette.datastructures import UploadFile
 from canvastekk_workflow_sdk.exceptions import NodeExecutionError, get_http_status_for_error
 from canvastekk_workflow_sdk.request import NodeExecutionRequest
 from canvastekk_workflow_sdk.response import HealthResponse, NodeExecutionResponse
+from canvastekk_workflow_sdk.uploads import get_default_uploader
 
 if TYPE_CHECKING:
     from canvastekk_workflow_sdk.base import BaseNode
@@ -66,18 +66,7 @@ def _upload_to_presigned(file_path: str, presigned_url: str) -> None:
     Raises:
         urllib.error.URLError: If the upload fails.
     """
-    file_size = os.path.getsize(file_path)
-    with open(file_path, "rb") as f:
-        req = urllib.request.Request(
-            presigned_url,
-            data=f,
-            method="PUT",
-            headers={
-                "Content-Type": "application/octet-stream",
-                "Content-Length": str(file_size),
-            },
-        )
-        urllib.request.urlopen(req)
+    get_default_uploader().upload_file(file_path, presigned_url)
 
 
 def _upload_outputs_to_s3(
@@ -87,37 +76,14 @@ def _upload_outputs_to_s3(
 ) -> None:
     """Upload binary output files to S3 via pre-signed URLs.
 
-    For each output field marked as binary, if the output value is a path
-    to an existing local file and an upload URL was provided, upload the
-    file to S3.
+    Delegates to the default ``S3PresignedUploader`` instance.
 
     Args:
         response: The node execution response containing output values.
         upload_urls: Mapping of output field name to pre-signed PUT URL.
         file_output_fields: Output field names that produce files.
     """
-    if not response.outputs:
-        return
-
-    for field_name in file_output_fields:
-        if field_name not in upload_urls:
-            continue
-
-        value = response.outputs.get(field_name)
-        if not isinstance(value, str):
-            continue
-
-        if not os.path.isfile(value):
-            logger.warning(f"Output field '{field_name}' value is not a local file: {value}")
-            continue
-
-        presigned_url = upload_urls[field_name]
-        try:
-            _upload_to_presigned(value, presigned_url)
-            logger.info(f"Uploaded output '{field_name}' to S3 ({os.path.getsize(value)} bytes)")
-        except Exception as e:
-            logger.error(f"Failed to upload output '{field_name}' to S3: {e}")
-            raise
+    get_default_uploader().upload_outputs(response, upload_urls, file_output_fields)
 
 
 _NODE_OPENAPI_TAGS: list[dict[str, str]] = [
@@ -253,13 +219,13 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
             body = await request.json()
             exec_request = NodeExecutionRequest(**body)
 
-        response = node.run(exec_request)
+        response = await asyncio.to_thread(node.run, exec_request)
 
-        # Upload output files to S3 if upload URLs were provided
         if exec_request.output_upload_url and response.status == "pass":
             file_output_fields = node.definition.file_output_fields
             if file_output_fields:
-                _upload_outputs_to_s3(
+                await asyncio.to_thread(
+                    _upload_outputs_to_s3,
                     response,
                     exec_request.output_upload_url,
                     file_output_fields,
