@@ -7,11 +7,10 @@ registry via its REST API. Intended for use in CI/CD pipelines.
 
 from __future__ import annotations
 
-import json
 import logging
-import urllib.request
 from typing import TYPE_CHECKING, Any
-from urllib.error import URLError
+
+import httpx
 
 if TYPE_CHECKING:
     from canvastekk_workflow_sdk.base import BaseNode
@@ -76,8 +75,6 @@ def register_node(
     if invoke_url is not None:
         manifest["invoke_url"] = invoke_url
 
-    payload = json.dumps(manifest).encode("utf-8")
-
     headers: dict[str, str] = {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -85,22 +82,15 @@ def register_node(
     if api_key:
         headers["X-API-Key"] = api_key
 
-    req = urllib.request.Request(
-        registry_url,
-        data=payload,
-        method="POST",
-        headers=headers,
-    )
-
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            body = resp.read().decode("utf-8")
-            return json.loads(body)
-    except URLError as e:
-        status_code = getattr(e, "code", None)
-        body = getattr(e, "read", lambda: b"")().decode("utf-8") if hasattr(e, "read") else None
+        resp = httpx.post(registry_url, json=manifest, headers=headers, timeout=timeout)
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.HTTPStatusError as e:
         raise RegistrationError(
             f"Registration failed: {e}",
-            status_code=status_code,
-            body=body,
+            status_code=e.response.status_code,
+            body=e.response.text,
         ) from e
+    except httpx.HTTPError as e:
+        raise RegistrationError(f"Registration failed: {e}") from e

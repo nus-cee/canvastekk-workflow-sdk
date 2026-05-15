@@ -134,8 +134,8 @@ class TestNodeDefinition:
         assert definition.category == "control-flow"
         assert definition.token_cost == 0.0
 
-    def test_file_input_fields_with_binary(self) -> None:
-        """Test file_input_fields returns fields with format: binary."""
+    def test_file_input_fields_with_file(self) -> None:
+        """Test file_input_fields returns fields with format: file."""
         definition = NodeDefinition(
             id="upload-v1.0.0",
             name="upload",
@@ -145,17 +145,17 @@ class TestNodeDefinition:
             input_schema={
                 "type": "object",
                 "properties": {
-                    "point_cloud": {"type": "string", "format": "binary", "description": "Point cloud file"},
+                    "point_cloud": {"type": "string", "format": "file", "description": "Point cloud file"},
                     "threshold": {"type": "number", "default": 0.5},
-                    "mask": {"type": "string", "format": "binary"},
+                    "mask": {"type": "string", "format": "file"},
                 },
             },
             output_schema={"type": "object"},
         )
         assert sorted(definition.file_input_fields) == ["mask", "point_cloud"]
 
-    def test_file_input_fields_no_binary(self) -> None:
-        """Test file_input_fields returns empty list when no binary fields."""
+    def test_file_input_fields_no_file(self) -> None:
+        """Test file_input_fields returns empty list when no file fields."""
         definition = NodeDefinition(
             id="echo-v1.0.0",
             name="echo",
@@ -187,7 +187,7 @@ class TestNodeDefinition:
         assert definition.file_input_fields == []
 
     def test_has_file_inputs_true(self) -> None:
-        """Test has_file_inputs returns True when binary fields exist."""
+        """Test has_file_inputs returns True when file fields exist."""
         definition = NodeDefinition(
             id="upload-v1.0.0",
             name="upload",
@@ -197,7 +197,7 @@ class TestNodeDefinition:
             input_schema={
                 "type": "object",
                 "properties": {
-                    "file": {"type": "string", "format": "binary"},
+                    "file": {"type": "string", "format": "file"},
                 },
             },
             output_schema={"type": "object"},
@@ -205,7 +205,7 @@ class TestNodeDefinition:
         assert definition.has_file_inputs is True
 
     def test_has_file_inputs_false(self) -> None:
-        """Test has_file_inputs returns False when no binary fields."""
+        """Test has_file_inputs returns False when no file fields."""
         definition = NodeDefinition(
             id="echo-v1.0.0",
             name="echo",
@@ -220,34 +220,34 @@ class TestNodeDefinition:
         )
         assert definition.has_file_inputs is False
 
-    def test_file_output_fields_with_binary(self) -> None:
-        """Test file_output_fields returns fields with format: binary in output_schema."""
+    def test_file_output_fields_with_file(self) -> None:
+        """Test file_output_fields returns fields with format: file in output_schema."""
         definition = NodeDefinition(
             id="segmentation-v1.0.0",
             name="segmentation",
             version="1.0.0",
             title="Segmentation",
-            description="Produces binary output files",
+            description="Produces file output",
             input_schema={"type": "object"},
             output_schema={
                 "type": "object",
                 "properties": {
-                    "result_path": {"type": "string", "format": "binary"},
+                    "result_path": {"type": "string", "format": "file"},
                     "summary": {"type": "string"},
-                    "mask_path": {"type": "string", "format": "binary"},
+                    "mask_path": {"type": "string", "format": "file"},
                 },
             },
         )
         assert sorted(definition.file_output_fields) == ["mask_path", "result_path"]
 
-    def test_file_output_fields_no_binary(self) -> None:
-        """Test file_output_fields returns empty list when no binary output fields."""
+    def test_file_output_fields_no_file(self) -> None:
+        """Test file_output_fields returns empty list when no file output fields."""
         definition = NodeDefinition(
             id="echo-v1.0.0",
             name="echo",
             version="1.0.0",
             title="Echo",
-            description="No binary outputs",
+            description="No file outputs",
             input_schema={"type": "object"},
             output_schema={
                 "type": "object",
@@ -271,6 +271,85 @@ class TestNodeDefinition:
             output_schema={"type": "object"},
         )
         assert definition.file_output_fields == []
+
+    def test_file_input_fields_does_not_detect_binary(self) -> None:
+        """Test that file_input_fields does NOT detect format: binary (breaking change)."""
+        with pytest.raises(ValueError, match="format 'binary'"):
+            NodeDefinition(
+                id="old-v1.0.0",
+                name="old",
+                version="1.0.0",
+                title="Old",
+                description="Uses old binary format",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "file": {"type": "string", "format": "binary"},
+                    },
+                },
+                output_schema={"type": "object"},
+            )
+
+    def test_model_validator_rejects_binary_format(self) -> None:
+        """Test that NodeDefinition rejects format: binary at definition time."""
+        with pytest.raises(ValueError, match="no longer supported"):
+            NodeDefinition(
+                id="bad-v1.0.0",
+                name="bad",
+                version="1.0.0",
+                title="Bad",
+                description="Uses binary",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "x": {"type": "string", "format": "binary"},
+                    },
+                },
+                output_schema={"type": "object"},
+            )
+
+    def test_model_validator_rejects_file_with_wrong_type(self) -> None:
+        """Test that NodeDefinition rejects format: file with non-string type."""
+        with pytest.raises(ValueError, match="must have type 'string'"):
+            NodeDefinition(
+                id="bad-v1.0.0",
+                name="bad",
+                version="1.0.0",
+                title="Bad",
+                description="Wrong type",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "x": {"type": "object", "format": "file"},
+                    },
+                },
+                output_schema={"type": "object"},
+            )
+
+    def test_to_dict_contains_file_format(self) -> None:
+        """Test that to_dict() preserves format: file in schemas."""
+        definition = NodeDefinition(
+            id="echo-v1.0.0",
+            name="echo",
+            version="1.0.0",
+            title="Echo",
+            description="Test",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "file": {"type": "string", "format": "file"},
+                },
+            },
+            output_schema={
+                "type": "object",
+                "properties": {
+                    "result": {"type": "string", "format": "file"},
+                },
+            },
+        )
+        data = definition.to_dict()
+        assert data["input_schema"]["properties"]["file"]["format"] == "file"
+        assert data["output_schema"]["properties"]["result"]["format"] == "file"
 
 
 class TestExportDefinition:
@@ -583,3 +662,67 @@ class TestExportDefinition:
             content = output_path.read_text()
             assert content.endswith("\n")
             assert "\n" in content
+
+
+class TestValidateFileInput:
+    """Tests for NodeDefinition.validate_file_input()."""
+
+    def _make_definition(self, **schema_overrides):
+        props = {
+            "file": {
+                "type": "string",
+                "format": "file",
+                "x-accept": [".txt", ".csv"],
+                "x-maxSizeBytes": 1000,
+            },
+        }
+        props.update(schema_overrides)
+        return NodeDefinition(
+            id="test-v1.0.0",
+            name="test",
+            version="1.0.0",
+            title="Test",
+            description="Test",
+            input_schema={"type": "object", "properties": props},
+            output_schema={"type": "object"},
+        )
+
+    def test_valid_file_passes(self, tmp_path) -> None:
+        definition = self._make_definition()
+        f = tmp_path / "data.txt"
+        f.write_text("hello")
+        definition.validate_file_input("file", f)
+
+    def test_rejects_wrong_extension(self, tmp_path) -> None:
+        definition = self._make_definition()
+        f = tmp_path / "data.json"
+        f.write_text("{}")
+        with pytest.raises(Exception, match="not allowed"):
+            definition.validate_file_input("file", f)
+
+    def test_rejects_oversized_file(self, tmp_path) -> None:
+        definition = self._make_definition()
+        f = tmp_path / "data.txt"
+        f.write_bytes(b"x" * 2000)
+        with pytest.raises(Exception, match="exceeds maximum"):
+            definition.validate_file_input("file", f)
+
+    def test_passes_when_no_extensions_defined(self, tmp_path) -> None:
+        props = {
+            "file": {
+                "type": "string",
+                "format": "file",
+            },
+        }
+        definition = NodeDefinition(
+            id="test-v1.0.0",
+            name="test",
+            version="1.0.0",
+            title="Test",
+            description="Test",
+            input_schema={"type": "object", "properties": props},
+            output_schema={"type": "object"},
+        )
+        f = tmp_path / "data.xyz"
+        f.write_text("anything")
+        definition.validate_file_input("file", f)

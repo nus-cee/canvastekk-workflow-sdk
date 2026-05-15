@@ -1,10 +1,9 @@
 """Tests for registry helper."""
 
-import json
 from typing import Any
 from unittest.mock import MagicMock, patch
-from urllib.error import HTTPError, URLError
 
+import httpx
 import pytest
 
 from canvastekk_workflow_sdk import NodeDefinition
@@ -38,13 +37,14 @@ class TestRegisterNode:
         response_body = {"id": "node-123", "status": "registered"}
 
         mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps(response_body).encode("utf-8")
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
-        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_response.status_code = 200
+        mock_response.json.return_value = response_body
+        mock_response.raise_for_status = MagicMock()
 
-        with patch("canvastekk_workflow_sdk.registry.urllib.request.urlopen", return_value=mock_response):
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
             result = register_node(node, registry_url)
 
+        mock_post.assert_called_once()
         assert result == response_body
 
     def test_posts_correct_manifest_json(self) -> None:
@@ -54,30 +54,23 @@ class TestRegisterNode:
         invoke_url = "https://node.example.com"
         api_key = "secret-key"
 
-        captured_request: Any = None
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "123"}
+        mock_response.raise_for_status = MagicMock()
 
-        def capture_request(req: Any, **kwargs: Any) -> MagicMock:
-            nonlocal captured_request
-            captured_request = req
-            mock_response = MagicMock()
-            mock_response.read.return_value = b'{"id":"123"}'
-            mock_response.__enter__ = MagicMock(return_value=mock_response)
-            mock_response.__exit__ = MagicMock(return_value=False)
-            return mock_response
-
-        with patch("canvastekk_workflow_sdk.registry.urllib.request.urlopen", side_effect=capture_request):
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
             register_node(node, registry_url, invoke_url=invoke_url, api_key=api_key)
 
-        assert captured_request is not None
-        assert captured_request.method == "POST"
-        assert captured_request.full_url == registry_url
-
-        request_body = json.loads(captured_request.data)
-        assert request_body["name"] == "test"
-        assert request_body["version"] == "1.0.0"
-        assert request_body["title"] == "Test Node"
-        assert request_body["invoke_type"] == "http"
-        assert request_body["invoke_url"] == invoke_url
+        mock_post.assert_called_once()
+        call_kwargs = mock_post.call_args[1]
+        assert call_kwargs["json"]["name"] == "test"
+        assert call_kwargs["json"]["version"] == "1.0.0"
+        assert call_kwargs["json"]["title"] == "Test Node"
+        assert call_kwargs["json"]["invoke_type"] == "http"
+        assert call_kwargs["json"]["invoke_url"] == invoke_url
+        assert "X-API-Key" in call_kwargs["headers"]
+        assert call_kwargs["headers"]["X-API-Key"] == api_key
 
     def test_includes_api_key_header_when_provided(self) -> None:
         """Test that X-API-Key header is included when api_key is provided."""
@@ -85,57 +78,42 @@ class TestRegisterNode:
         registry_url = "https://registry.example.com/api/nodes"
         api_key = "secret-key"
 
-        captured_request: Any = None
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "123"}
+        mock_response.raise_for_status = MagicMock()
 
-        def capture_request(req: Any, **kwargs: Any) -> MagicMock:
-            nonlocal captured_request
-            captured_request = req
-            mock_response = MagicMock()
-            mock_response.read.return_value = b'{"id":"123"}'
-            mock_response.__enter__ = MagicMock(return_value=mock_response)
-            mock_response.__exit__ = MagicMock(return_value=False)
-            return mock_response
-
-        with patch("canvastekk_workflow_sdk.registry.urllib.request.urlopen", side_effect=capture_request):
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
             register_node(node, registry_url, api_key=api_key)
 
-        assert captured_request is not None
-        headers_lower = {k.lower(): v for k, v in captured_request.headers.items()}
-        assert "x-api-key" in headers_lower
-        assert headers_lower["x-api-key"] == api_key
+        mock_post.assert_called_once()
+        call_kwargs = mock_post.call_args[1]
+        assert "X-API-Key" in call_kwargs["headers"]
+        assert call_kwargs["headers"]["X-API-Key"] == api_key
 
     def test_omits_api_key_header_when_not_provided(self) -> None:
         """Test that X-API-Key header is omitted when api_key is not provided."""
         node = DummyNode()
         registry_url = "https://registry.example.com/api/nodes"
 
-        captured_request: Any = None
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "123"}
+        mock_response.raise_for_status = MagicMock()
 
-        def capture_request(req: Any, **kwargs: Any) -> MagicMock:
-            nonlocal captured_request
-            captured_request = req
-            mock_response = MagicMock()
-            mock_response.read.return_value = b'{"id":"123"}'
-            mock_response.__enter__ = MagicMock(return_value=mock_response)
-            mock_response.__exit__ = MagicMock(return_value=False)
-            return mock_response
-
-        with patch("canvastekk_workflow_sdk.registry.urllib.request.urlopen", side_effect=capture_request):
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
             register_node(node, registry_url)
 
-        assert captured_request is not None
-        headers_lower = {k.lower(): v for k, v in captured_request.headers.items()}
-        assert "x-api-key" not in headers_lower
+        mock_post.assert_called_once()
+        call_kwargs = mock_post.call_args[1]
+        assert "X-API-Key" not in call_kwargs["headers"]
 
     def test_raises_registration_error_on_network_failure(self) -> None:
         """Test that RegistrationError is raised on network failure."""
         node = DummyNode()
         registry_url = "https://registry.example.com/api/nodes"
 
-        with patch(
-            "canvastekk_workflow_sdk.registry.urllib.request.urlopen",
-            side_effect=URLError("Network error"),
-        ):
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", side_effect=httpx.ConnectError("Network error")):
             with pytest.raises(RegistrationError) as exc_info:
                 register_node(node, registry_url)
 
@@ -148,15 +126,12 @@ class TestRegisterNode:
         node = DummyNode()
         registry_url = "https://registry.example.com/api/nodes"
 
-        error = HTTPError(
-            url=registry_url,
-            code=401,
-            msg="Unauthorized",
-            hdrs={},
-            fp=None,
-        )
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_response.text = "Unauthorized"
+        error = httpx.HTTPStatusError("401", request=MagicMock(), response=mock_response)
 
-        with patch("canvastekk_workflow_sdk.registry.urllib.request.urlopen", side_effect=error):
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", side_effect=error):
             with pytest.raises(RegistrationError) as exc_info:
                 register_node(node, registry_url)
 
@@ -167,15 +142,12 @@ class TestRegisterNode:
         node = DummyNode()
         registry_url = "https://registry.example.com/api/nodes"
 
-        error = HTTPError(
-            url=registry_url,
-            code=500,
-            msg="Internal Server Error",
-            hdrs={},
-            fp=None,
-        )
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal Server Error"
+        error = httpx.HTTPStatusError("500", request=MagicMock(), response=mock_response)
 
-        with patch("canvastekk_workflow_sdk.registry.urllib.request.urlopen", side_effect=error):
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", side_effect=error):
             with pytest.raises(RegistrationError) as exc_info:
                 register_node(node, registry_url)
 
@@ -187,47 +159,35 @@ class TestRegisterNode:
         registry_url = "https://registry.example.com/api/nodes"
         invoke_url = "https://my-node.example.com"
 
-        captured_request: Any = None
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "123"}
+        mock_response.raise_for_status = MagicMock()
 
-        def capture_request(req: Any, **kwargs: Any) -> MagicMock:
-            nonlocal captured_request
-            captured_request = req
-            mock_response = MagicMock()
-            mock_response.read.return_value = b'{"id":"123"}'
-            mock_response.__enter__ = MagicMock(return_value=mock_response)
-            mock_response.__exit__ = MagicMock(return_value=False)
-            return mock_response
-
-        with patch("canvastekk_workflow_sdk.registry.urllib.request.urlopen", side_effect=capture_request):
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
             register_node(node, registry_url, invoke_url=invoke_url)
 
-        assert captured_request is not None
-        request_body = json.loads(captured_request.data)
-        assert "invoke_url" in request_body
-        assert request_body["invoke_url"] == invoke_url
+        mock_post.assert_called_once()
+        call_kwargs = mock_post.call_args[1]
+        assert "invoke_url" in call_kwargs["json"]
+        assert call_kwargs["json"]["invoke_url"] == invoke_url
 
     def test_invoke_url_omitted_from_manifest_when_none(self) -> None:
         """Test that invoke_url is omitted from manifest when None."""
         node = DummyNode()
         registry_url = "https://registry.example.com/api/nodes"
 
-        captured_request: Any = None
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "123"}
+        mock_response.raise_for_status = MagicMock()
 
-        def capture_request(req: Any, **kwargs: Any) -> MagicMock:
-            nonlocal captured_request
-            captured_request = req
-            mock_response = MagicMock()
-            mock_response.read.return_value = b'{"id":"123"}'
-            mock_response.__enter__ = MagicMock(return_value=mock_response)
-            mock_response.__exit__ = MagicMock(return_value=False)
-            return mock_response
-
-        with patch("canvastekk_workflow_sdk.registry.urllib.request.urlopen", side_effect=capture_request):
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
             register_node(node, registry_url)
 
-        assert captured_request is not None
-        request_body = json.loads(captured_request.data)
-        assert "invoke_url" not in request_body
+        mock_post.assert_called_once()
+        call_kwargs = mock_post.call_args[1]
+        assert "invoke_url" not in call_kwargs["json"]
 
     def test_custom_invoke_type_in_manifest(self) -> None:
         """Test that custom invoke_type is included in manifest."""
@@ -235,67 +195,52 @@ class TestRegisterNode:
         registry_url = "https://registry.example.com/api/nodes"
         invoke_type = "lambda"
 
-        captured_request: Any = None
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "123"}
+        mock_response.raise_for_status = MagicMock()
 
-        def capture_request(req: Any, **kwargs: Any) -> MagicMock:
-            nonlocal captured_request
-            captured_request = req
-            mock_response = MagicMock()
-            mock_response.read.return_value = b'{"id":"123"}'
-            mock_response.__enter__ = MagicMock(return_value=mock_response)
-            mock_response.__exit__ = MagicMock(return_value=False)
-            return mock_response
-
-        with patch("canvastekk_workflow_sdk.registry.urllib.request.urlopen", side_effect=capture_request):
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
             register_node(node, registry_url, invoke_type=invoke_type)
 
-        assert captured_request is not None
-        request_body = json.loads(captured_request.data)
-        assert request_body["invoke_type"] == invoke_type
+        mock_post.assert_called_once()
+        call_kwargs = mock_post.call_args[1]
+        assert call_kwargs["json"]["invoke_type"] == invoke_type
 
     def test_default_invoke_type_is_http(self) -> None:
         """Test that default invoke_type is 'http'."""
         node = DummyNode()
         registry_url = "https://registry.example.com/api/nodes"
 
-        captured_request: Any = None
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "123"}
+        mock_response.raise_for_status = MagicMock()
 
-        def capture_request(req: Any, **kwargs: Any) -> MagicMock:
-            nonlocal captured_request
-            captured_request = req
-            mock_response = MagicMock()
-            mock_response.read.return_value = b'{"id":"123"}'
-            mock_response.__enter__ = MagicMock(return_value=mock_response)
-            mock_response.__exit__ = MagicMock(return_value=False)
-            return mock_response
-
-        with patch("canvastekk_workflow_sdk.registry.urllib.request.urlopen", side_effect=capture_request):
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
             register_node(node, registry_url)
 
-        assert captured_request is not None
-        request_body = json.loads(captured_request.data)
-        assert request_body["invoke_type"] == "http"
+        mock_post.assert_called_once()
+        call_kwargs = mock_post.call_args[1]
+        assert call_kwargs["json"]["invoke_type"] == "http"
 
     def test_custom_timeout_passed_to_urlopen(self) -> None:
-        """Test that custom timeout is passed to urlopen."""
+        """Test that custom timeout is passed to httpx.post."""
         node = DummyNode()
         registry_url = "https://registry.example.com/api/nodes"
         timeout = 60
 
-        captured_timeout: list[int] = []
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "123"}
+        mock_response.raise_for_status = MagicMock()
 
-        def capture_timeout(url: Any, timeout: int | None = None, **kwargs: Any) -> MagicMock:
-            captured_timeout.append(timeout or 30)
-            mock_response = MagicMock()
-            mock_response.read.return_value = b'{"id":"123"}'
-            mock_response.__enter__ = MagicMock(return_value=mock_response)
-            mock_response.__exit__ = MagicMock(return_value=False)
-            return mock_response
-
-        with patch("canvastekk_workflow_sdk.registry.urllib.request.urlopen", side_effect=capture_timeout):
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
             register_node(node, registry_url, timeout=timeout)
 
-        assert captured_timeout == [timeout]
+        mock_post.assert_called_once()
+        call_kwargs = mock_post.call_args[1]
+        assert call_kwargs["timeout"] == timeout
 
 
 class TestRegistrationError:
@@ -325,7 +270,7 @@ class TestRegistrationError:
 
     def test_chaining_from_exception(self) -> None:
         """Test that error can be chained from another exception."""
-        original_error = URLError("Network error")
+        original_error = httpx.ConnectError("Network error")
         try:
             raise RegistrationError("Registration failed", status_code=None, body=None) from original_error
         except RegistrationError as e:

@@ -12,17 +12,13 @@ Creates a FastAPI application with standard node endpoints:
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import tempfile
 from collections.abc import Sequence
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
-from starlette.datastructures import UploadFile
 
 from canvastekk_workflow_sdk.exceptions import NodeExecutionError, NodeTimeoutError, get_http_status_for_error
 from canvastekk_workflow_sdk.request import NodeExecutionRequest
@@ -35,38 +31,17 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _coerce_form_value(key: str, value: str, schema: dict[str, Any]) -> Any:
-    """Coerce a string form value to the type declared in input_schema.
-
-    Args:
-        key: Field name (for error messages).
-        value: Raw string value from form data.
-        schema: The JSON Schema for this field from input_schema["properties"][key].
-
-    Returns:
-        The coerced value (int, float, bool, or original string).
-    """
-    field_type = schema.get("type", "string")
-    if field_type == "number":
-        return float(value)
-    if field_type == "integer":
-        return int(value)
-    if field_type == "boolean":
-        return value.lower() in ("true", "1", "yes")
-    return value
-
-
 def _upload_to_presigned(file_path: str, presigned_url: str) -> None:
     """Upload a local file to an S3 pre-signed PUT URL.
 
-    Uses urllib from stdlib — no boto3 or httpx dependency required.
+    Uses httpx for HTTP requests.
 
     Args:
         file_path: Path to the local file to upload.
         presigned_url: Pre-signed S3 PUT URL.
 
     Raises:
-        urllib.error.URLError: If the upload fails.
+        httpx.HTTPStatusError: If the upload fails.
     """
     get_default_uploader().upload_file(file_path, presigned_url)
 
@@ -76,7 +51,7 @@ def _upload_outputs_to_s3(
     upload_urls: dict[str, str],
     file_output_fields: list[str],
 ) -> None:
-    """Upload binary output files to S3 via pre-signed URLs.
+    """Upload file output files to S3 via pre-signed URLs.
 
     Delegates to the default ``S3PresignedUploader`` instance.
 
@@ -165,7 +140,7 @@ def create_node_app(
         "/execute",
         response_model=NodeExecutionResponse,
         summary="Execute node",
-        description="Execute the node with given inputs. Accepts JSON or multipart/form-data payloads.",
+        description="Execute the node with given inputs via JSON body.",
         tags=["Execution"],
         responses={
             200: {"description": "Node executed successfully"},
@@ -189,66 +164,13 @@ def create_node_app(
     )
     async def execute(request: Request) -> NodeExecutionResponse:
         """
-        Execute the node with given inputs.
+        Execute the node with given inputs via JSON body.
 
-        Accepts both application/json and multipart/form-data payloads.
-
-        For JSON: standard NodeExecutionRequest body.
-        For multipart: form fields for run_id, node_id, scalar inputs,
-        and file uploads for binary inputs.
+        The engine sends presigned GET URLs for file input fields.
+        Outputs are uploaded via presigned PUT URLs after successful execution.
         """
-        content_type = request.headers.get("content-type", "")
-
-        if "multipart/form-data" in content_type:
-            form = await request.form()
-            properties = node.definition.input_schema.get("properties", {})
-            file_fields = set(node.definition.file_input_fields)
-
-            run_id = str(form.get("run_id", ""))
-            node_id = str(form.get("node_id", ""))
-            callback_url = form.get("callback_url")
-            output_upload_url_raw = form.get("output_upload_url")
-
-            # Parse output_upload_url from JSON string (dict serialized for form data)
-            output_upload_url: dict[str, str] | None = None
-            if output_upload_url_raw:
-                try:
-                    output_upload_url = json.loads(str(output_upload_url_raw))
-                except (json.JSONDecodeError, TypeError):
-                    logger.warning("Failed to parse output_upload_url from form data")
-
-            inputs: dict[str, Any] = {}
-            for field_name, field_value in form.items():
-                if field_name in ("run_id", "node_id", "callback_url", "output_upload_url"):
-                    continue
-
-                if isinstance(field_value, UploadFile):
-                    # Save uploaded file to temp directory
-                    tmp_dir = Path(tempfile.mkdtemp())
-                    filename = field_value.filename or field_name
-                    file_path = tmp_dir / filename
-                    content = await field_value.read()
-                    file_path.write_bytes(content)
-                    inputs[field_name] = str(file_path)
-                elif field_name in file_fields:
-                    # Binary field sent as raw string path (edge case)
-                    inputs[field_name] = str(field_value)
-                else:
-                    # Scalar field: coerce type from schema
-                    field_schema = properties.get(field_name, {})
-                    inputs[field_name] = _coerce_form_value(field_name, str(field_value), field_schema)
-
-            exec_request = NodeExecutionRequest(
-                run_id=run_id,
-                node_id=node_id,
-                inputs=inputs,
-                callback_url=str(callback_url) if callback_url else None,
-                output_upload_url=output_upload_url,
-            )
-        else:
-            # JSON body (backward compatible)
-            body = await request.json()
-            exec_request = NodeExecutionRequest(**body)
+        body = await request.json()
+        exec_request = NodeExecutionRequest(**body)
 
         timeout = node.definition.timeout_seconds
         if timeout and timeout > 0:
