@@ -492,3 +492,279 @@ class TestBaseNodeOutputValidation:
         assert response.status == "fail"
         assert response.error_type == "NodeOutputValidationError"
         assert response.error is not None
+
+
+class TestLifecycleHooks:
+    """Tests for lifecycle hooks (Phase 2)."""
+
+    def test_on_startup_hook_fires_on_app_start(self) -> None:
+        """Test that on_startup is called when the app starts."""
+
+        class LifecycleNode(BaseNode):
+            definition = NodeDefinition(
+                id="lifecycle-v1.0.0",
+                name="lifecycle",
+                version="1.0.0",
+                title="Lifecycle",
+                description="Tests lifecycle hooks",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+            )
+
+            startup_called = False
+            shutdown_called = False
+
+            def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+                return {"startup": self.startup_called, "shutdown": self.shutdown_called}
+
+            async def on_startup(self) -> None:
+                self.startup_called = True
+
+            async def on_shutdown(self) -> None:
+                self.shutdown_called = True
+
+        from fastapi.testclient import TestClient
+
+        node = LifecycleNode()
+        app = node.create_app()
+
+        assert node.startup_called is False
+        assert node.shutdown_called is False
+
+        with TestClient(app) as client:
+            assert node.startup_called is True
+            assert node.shutdown_called is False
+
+            response = client.get("/health")
+            assert response.status_code == 200
+
+        assert node.shutdown_called is True
+
+    def test_on_shutdown_hook_fires_on_app_stop(self) -> None:
+        """Test that on_shutdown is called when the app stops."""
+
+        class ShutdownNode(BaseNode):
+            definition = NodeDefinition(
+                id="shutdown-v1.0.0",
+                name="shutdown",
+                version="1.0.0",
+                title="Shutdown",
+                description="Tests shutdown hook",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+            )
+
+            shutdown_called = False
+
+            def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+                return {}
+
+            async def on_shutdown(self) -> None:
+                self.shutdown_called = True
+
+        from fastapi.testclient import TestClient
+
+        node = ShutdownNode()
+        app = node.create_app()
+
+        assert node.shutdown_called is False
+
+        with TestClient(app):
+            pass
+
+        assert node.shutdown_called is True
+
+    def test_default_hooks_are_no_ops(self) -> None:
+        """Test that default on_startup and on_shutdown are no-ops."""
+        node = EchoNode()
+
+        from fastapi.testclient import TestClient
+
+        app = node.create_app()
+
+        with TestClient(app) as client:
+            response = client.get("/health")
+            assert response.status_code == 200
+
+    def test_lifespan_context_manager_calls_both_hooks(self) -> None:
+        """Test that _lifespan context manager calls on_startup and on_shutdown."""
+        hook_order: list[str] = []
+
+        class OrderedLifecycleNode(BaseNode):
+            definition = NodeDefinition(
+                id="ordered-v1.0.0",
+                name="ordered",
+                version="1.0.0",
+                title="Ordered",
+                description="Tests hook order",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+            )
+
+            def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+                return {}
+
+            async def on_startup(self) -> None:
+                hook_order.append("startup")
+
+            async def on_shutdown(self) -> None:
+                hook_order.append("shutdown")
+
+        node = OrderedLifecycleNode()
+
+        async def test_lifespan() -> None:
+            async with node._lifespan():
+                pass
+
+        import asyncio
+        asyncio.run(test_lifespan())
+
+        assert hook_order == ["startup", "shutdown"]
+
+    def test_on_startup_exception_propagates(self) -> None:
+        """Test that exceptions in on_startup propagate correctly."""
+
+        class FailingStartupNode(BaseNode):
+            definition = NodeDefinition(
+                id="failing-startup-v1.0.0",
+                name="failing-startup",
+                version="1.0.0",
+                title="Failing Startup",
+                description="Tests startup exception",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+            )
+
+            def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+                return {}
+
+            async def on_startup(self) -> None:
+                raise RuntimeError("Startup failed")
+
+        node = FailingStartupNode()
+
+        async def test_startup_failure() -> None:
+            with pytest.raises(RuntimeError, match="Startup failed"):
+                async with node._lifespan():
+                    pass
+
+        import asyncio
+        asyncio.run(test_startup_failure())
+
+    def test_on_shutdown_exception_propagates(self) -> None:
+        """Test that exceptions in on_shutdown propagate correctly."""
+
+        class FailingShutdownNode(BaseNode):
+            definition = NodeDefinition(
+                id="failing-shutdown-v1.0.0",
+                name="failing-shutdown",
+                version="1.0.0",
+                title="Failing Shutdown",
+                description="Tests shutdown exception",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+            )
+
+            def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+                return {}
+
+            async def on_shutdown(self) -> None:
+                raise RuntimeError("Shutdown failed")
+
+        node = FailingShutdownNode()
+
+        async def test_shutdown_failure() -> None:
+            with pytest.raises(RuntimeError, match="Shutdown failed"):
+                async with node._lifespan():
+                    pass
+
+        import asyncio
+        asyncio.run(test_shutdown_failure())
+
+    def test_lifespan_works_with_create_node_app(self) -> None:
+        """Test that lifespan hooks work with create_node_app function."""
+
+        class LifecycleTestNode(BaseNode):
+            definition = NodeDefinition(
+                id="lifespan-test-v1.0.0",
+                name="lifespan-test",
+                version="1.0.0",
+                title="Lifespan Test",
+                description="Tests lifespan with create_node_app",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+            )
+
+            startup_called = False
+            shutdown_called = False
+
+            def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+                return {}
+
+            async def on_startup(self) -> None:
+                self.startup_called = True
+
+            async def on_shutdown(self) -> None:
+                self.shutdown_called = True
+
+        from fastapi.testclient import TestClient
+
+        from canvastekk_workflow_sdk.app import create_node_app
+
+        node = LifecycleTestNode()
+        app = create_node_app(node)
+
+        assert node.startup_called is False
+        assert node.shutdown_called is False
+
+        with TestClient(app):
+            assert node.startup_called is True
+            assert node.shutdown_called is False
+
+        assert node.shutdown_called is True
+
+    def test_multiple_contexts_invoke_hooks_multiple_times(self) -> None:
+        """Test that multiple TestClient contexts invoke hooks multiple times."""
+
+        class MultiLifecycleNode(BaseNode):
+            definition = NodeDefinition(
+                id="multi-lifecycle-v1.0.0",
+                name="multi-lifecycle",
+                version="1.0.0",
+                title="Multi Lifecycle",
+                description="Tests multiple contexts",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+            )
+
+            startup_count = 0
+            shutdown_count = 0
+
+            def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+                return {}
+
+            async def on_startup(self) -> None:
+                self.startup_count += 1
+
+            async def on_shutdown(self) -> None:
+                self.shutdown_count += 1
+
+        from fastapi.testclient import TestClient
+
+        node = MultiLifecycleNode()
+        app = node.create_app()
+
+        assert node.startup_count == 0
+        assert node.shutdown_count == 0
+
+        with TestClient(app):
+            assert node.startup_count == 1
+            assert node.shutdown_count == 0
+
+        assert node.shutdown_count == 1
+
+        with TestClient(app):
+            assert node.startup_count == 2
+            assert node.shutdown_count == 1
+
+        assert node.shutdown_count == 2
