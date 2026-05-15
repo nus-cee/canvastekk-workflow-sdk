@@ -11,15 +11,22 @@ import logging
 import time
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 import jsonschema
 
 from canvastekk_workflow_sdk.context import ExecutionContext
 from canvastekk_workflow_sdk.definition import NodeDefinition
-from canvastekk_workflow_sdk.exceptions import NodeExecutionError, NodeTimeoutError, NodeValidationError
+from canvastekk_workflow_sdk.exceptions import (
+    NodeExecutionError,
+    NodeOutputValidationError,
+    NodeTimeoutError,
+    NodeValidationError,
+)
 from canvastekk_workflow_sdk.middleware import LoggingMiddleware, NodeMiddleware
-from canvastekk_workflow_sdk.observability import ExecutionMetric, MetricsCollector, get_default_collector
+from canvastekk_workflow_sdk.observability import ExecutionMetric, MetricsCollector
 from canvastekk_workflow_sdk.request import NodeExecutionRequest
 from canvastekk_workflow_sdk.response import NodeExecutionResponse
 
@@ -54,7 +61,7 @@ class BaseNode(ABC):
 
     def __init__(self) -> None:
         self._middleware: list[NodeMiddleware] = [LoggingMiddleware()]
-        self._metrics_collector: MetricsCollector = get_default_collector()
+        self._metrics_collector: MetricsCollector = MetricsCollector()
 
     def add_middleware(self, middleware: NodeMiddleware) -> BaseNode:
         """Register a middleware instance. Returns self for chaining.
@@ -139,6 +146,35 @@ class BaseNode(ABC):
                 errors=error_details,
             )
 
+    def _validate_outputs(self, outputs: dict[str, Any]) -> None:
+        """Validate outputs against the node's output_schema.
+
+        Args:
+            outputs: The outputs dict to validate.
+
+        Raises:
+            NodeOutputValidationError: If outputs do not match output_schema.
+        """
+        schema = self.definition.output_schema
+        if not schema or schema == {"type": "object"}:
+            return
+
+        validator = jsonschema.Draft7Validator(schema)
+        errors = sorted(validator.iter_errors(outputs), key=lambda e: list(e.path))
+        if errors:
+            error_details = [
+                {
+                    "path": list(e.path),
+                    "message": e.message,
+                    "validator": e.validator,
+                }
+                for e in errors
+            ]
+            raise NodeOutputValidationError(
+                f"Output validation failed: {errors[0].message}",
+                errors=error_details,
+            )
+
     def run(self, request: NodeExecutionRequest) -> NodeExecutionResponse:
         """
         Run the node with full error handling, validation, and timing.
@@ -165,22 +201,14 @@ class BaseNode(ABC):
             self._validate_inputs(request.inputs)
 
             context = ExecutionContext(request)
-            timeout = self.definition.timeout_seconds
 
             inputs = request.inputs
             for mw in self._middleware:
                 inputs = mw.on_before_execute(inputs, context)
 
-            try:
-                outputs = self.execute(inputs, context)
-            except RecursionError:
-                raise
-            except Exception:
-                if timeout > 0:
-                    elapsed = time.perf_counter() - start_time
-                    if elapsed >= timeout:
-                        raise NodeTimeoutError(timeout)
-                raise
+            outputs = self.execute(inputs, context)
+
+            self._validate_outputs(outputs)
 
             duration_ms = int((time.perf_counter() - start_time) * 1000)
 
@@ -219,6 +247,17 @@ class BaseNode(ABC):
             )
 
         except NodeValidationError as e:
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
+            self._record_error(request, e, duration_ms)
+            return NodeExecutionResponse.failure(
+                execution_id=execution_id,
+                error=e.message,
+                error_type=type(e).__name__,
+                duration_ms=duration_ms,
+                error_code=e.error_code,
+            )
+
+        except NodeOutputValidationError as e:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
             self._record_error(request, e, duration_ms)
             return NodeExecutionResponse.failure(
@@ -301,16 +340,49 @@ class BaseNode(ABC):
         """
         return None
 
-    def create_app(self) -> Any:
+    async def on_startup(self) -> None:
+        """
+        Hook called when the FastAPI app starts up.
+
+        Override to perform initialization (e.g., load models, warm caches,
+        establish connections). Runs once at server startup.
+
+        Default is a no-op.
+        """
+
+    async def on_shutdown(self) -> None:
+        """
+        Hook called when the FastAPI app shuts down.
+
+        Override to perform cleanup (e.g., close connections, flush buffers,
+        release resources). Runs once at server shutdown.
+
+        Default is a no-op.
+        """
+
+    @asynccontextmanager
+    async def _lifespan(self) -> AsyncIterator[None]:
+        """FastAPI lifespan context manager wired to on_startup/on_shutdown."""
+        await self.on_startup()
+        try:
+            yield
+        finally:
+            await self.on_shutdown()
+
+    def create_app(self, **kwargs: Any) -> Any:
         """
         Create a FastAPI app with all required endpoints.
 
         This is a convenience method that wraps the node in an HTTP server.
         For more control, use the `create_node_app` function from app.py.
 
+        Args:
+            **kwargs: Keyword arguments passed to ``create_node_app()``
+                (e.g., ``dependencies``, ``extra_routes``, FastAPI kwargs).
+
         Returns:
             FastAPI application instance
         """
         from canvastekk_workflow_sdk.app import create_node_app
 
-        return create_node_app(self)
+        return create_node_app(self, **kwargs)
