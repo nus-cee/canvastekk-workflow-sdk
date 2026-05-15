@@ -4,31 +4,21 @@
 **Jira:** [DA-894](https://betekk.atlassian.net/browse/DA-894)
 **Repo:** https://github.com/nus-cee/canvastekk-workflow-sdk
 **Priority:** High
-**Target Version:** `0.6.0` (minor bump from `0.5.0`)
+**Target Version:** `0.6.0` (minor bump from `0.5.0`, breaking change)
 **Effort:** ~1.5 days
+**Breaking Change:** `format: "binary"` is fully removed. All nodes must migrate to `format: "file"`.
 
 ---
 
 ## Context
 
-DA-889 redesigned the file input pipeline to use symmetric presigned URLs. The new convention is `format: "file"` to signal "this field carries a file reference (presigned GET URL or CDS ref)" without triggering multipart handling in the engine.
+DA-889 redesigned the file input pipeline to use symmetric presigned URLs. The new convention is `format: "file"` to signal "this field carries a file reference (presigned GET URL)" without triggering multipart handling in the engine.
 
-All changes are **backward-compatible**. The `file_input_fields` and `file_output_fields` properties detect both `"binary"` (legacy) and `"file"` formats during the transition period. Multipart handling is removed since the engine now sends JSON-only payloads with presigned URLs.
-
-### Architecture Shift
-
-```
-BEFORE (format: "binary" — target-workflow-reference.md Step 3):
-  Engine → downloads file from S3 → multipart POST → SDK saves UploadFile to /tmp → node.execute()
-  
-AFTER (format: "file" — DA-889 presigned URL pipeline):
-  Engine → resolves CDS/S3 refs → generates presigned GET URL → JSON POST → SDK passes through → node.execute()
-  Node downloads from presigned URL itself. SDK does NOT auto-download.
-```
+This is a **breaking change**. Since the SDK is not yet deployed in production, we are taking a clean break — no backward compatibility with `format: "binary"`. All nodes must update their schemas when adopting this SDK version.
 
 ### Release Coordination
 
-This is a **coordinated cross-repo release** (per DA-889 design decisions). Engine, SDK, and nodes all ship together — no phased migration. The engine (DA-889) already handles both `format: "file"` and `format: "binary"` in its validation and activities. The SDK's dual detection ensures nodes that haven't migrated their schemas yet still work correctly.
+This is a **coordinated cross-repo release** (per DA-889 design decisions). Engine, SDK, and nodes all ship together. Since nothing is in production yet, there is no need for a phased migration or dual detection. The engine (DA-889) will also stop accepting `format: "binary"` in the same release.
 
 ### End-to-End File Flow
 
@@ -63,21 +53,21 @@ FE uploads file to CDS
 
 | Dependency | Ticket | Status | Impact on SDK |
 | --- | --- | --- | --- |
-| Engine file input pipeline redesign | DA-889 | PR #111 open | Engine handles both `format: "file"` and `format: "binary"` |
-| Node: floor-flatness-app update | DA-895 | Backlog | Blocked by this ticket |
-| Publisher node (project-file-publisher) | DA-893 | Backlog | Uses SDK, needs format migration |
+| Engine file input pipeline redesign | DA-889 | PR #111 open | Engine stops accepting `format: "binary"` in same release |
+| Node: floor-flatness-app update | DA-895 | Backlog | Blocked by this ticket — must migrate to `format: "file"` |
+| Publisher node (project-file-publisher) | DA-893 | Backlog | Must migrate to `format: "file"` |
 
 ---
 
-## Phase 1: Backward-Compatible Format Detection — definition.py
+## Phase 1: Format Migration — definition.py
 
 ### 1.1 Update `file_input_fields` property
-- [ ] Update filter to detect BOTH `"file"` and `"binary"` in `definition.py:145`
-- [ ] Update docstring: mention both formats, note `"binary"` as legacy
+- [ ] Change filter from `== "binary"` to `== "file"` in `definition.py:145`
+- [ ] Update docstring: `format: "file"` only
 
 ### 1.2 Update `file_output_fields` property
-- [ ] Update filter to detect BOTH `"file"` and `"binary"` in `definition.py:160`
-- [ ] Update docstring: mention both formats, note `"binary"` as legacy
+- [ ] Change filter from `== "binary"` to `== "file"` in `definition.py:160`
+- [ ] Update docstring: `format: "file"` only
 
 ---
 
@@ -104,7 +94,13 @@ FE uploads file to CDS
 - [ ] Support `x-accept` (allowed extensions), `x-maxSizeBytes` (max file size)
 - [ ] Node authors call this in `execute()` after downloading
 
-### 3.2 Update docstrings
+### 3.2 Promote `httpx` to runtime dependency
+- [ ] Move `httpx` from `[tool.poetry.group.dev.dependencies]` to `[tool.poetry.dependencies]` in `pyproject.toml`
+- [ ] `httpx` is already used by FastAPI's `TestClient` and is a de facto standard HTTP client for FastAPI projects
+- [ ] Replace `urllib.request` usage in `uploads.py` and `registry.py` with `httpx` for consistency
+- [ ] Document `httpx` as the recommended download client in README examples
+
+### 3.3 Update docstrings
 - [ ] `base.py` execute() docstring: change "File inputs may be local paths (downloaded by SDK) or URLs" to "File inputs are presigned GET URLs provided by the engine"
 - [ ] `request.py` inputs field description is already correct ("may include signed URLs for file access")
 
@@ -131,8 +127,9 @@ FE uploads file to CDS
 - [ ] Update `"format": "binary"` → `"format": "file"` in test_app.py remaining tests
 
 ### 4.3 Add new tests
-- [ ] Test: `file_input_fields` detects both `"file"` and `"binary"` format fields
-- [ ] Test: `file_output_fields` detects both `"file"` and `"binary"` format fields
+- [ ] Test: `file_input_fields` detects `"file"` format fields only
+- [ ] Test: `file_output_fields` detects `"file"` format fields only
+- [ ] Test: `file_input_fields` does NOT detect `"binary"` format fields (confirms breaking change)
 - [ ] Test: execute with presigned URL input for `format: "file"` field passes validation
 - [ ] Test: JSON-only /execute endpoint works with presigned URL passthrough
 - [ ] Test: `validate_file_input()` rejects file exceeding `x-maxSizeBytes`
@@ -154,8 +151,7 @@ FE uploads file to CDS
 - [ ] Add full node definition example showing file fields with conditions
 
 ### 5.2 Add download example
-- [ ] Show how to download from presigned URL using `urllib.request` (stdlib, consistent with SDK's existing upload code)
-- [ ] Note `httpx` as recommended alternative for node authors who need async/timeout/redirect control (already available as dev dep)
+- [ ] Show how to download from presigned URL using `httpx` (promoted to runtime dep — async, timeout, redirect support)
 - [ ] Show `validate_file_input()` usage after download
 
 ---
@@ -169,7 +165,7 @@ FE uploads file to CDS
 ### 6.2 Run validation
 - [ ] All existing tests pass: `cd python && python -m pytest`
 - [ ] Ruff lint passes: `ruff check python/`
-- [ ] Verify backward compatibility: nodes with `"binary"` format still detected correctly
+- [ ] Verify `format: "file"` fields are detected correctly (no `"binary"` fallback)
 - [ ] Verify `export_definition()` passes through `format: "file"` in schemas unchanged (no transformation needed — it serializes input_schema/output_schema as-is)
 - [ ] Verify `/manifest` endpoint returns schemas with `format: "file"` — engine reads these to determine file fields for presigned URL generation
 
@@ -177,12 +173,12 @@ FE uploads file to CDS
 
 ## Acceptance Criteria
 
-- [ ] SDK node schemas use `format: "file"` as primary convention
-- [ ] `file_input_fields` / `file_output_fields` detect both `"file"` and `"binary"` (backward compat)
+- [ ] SDK uses `format: "file"` only — `format: "binary"` is fully removed
+- [ ] `file_input_fields` / `file_output_fields` detect `"file"` format only (breaking change)
 - [ ] `validate_file_input()` helper validates file constraints from `x-*` extensions
 - [ ] Multipart handling removed from app.py — JSON-only `/execute`
 - [ ] `python-multipart` dependency removed
-- [ ] Existing nodes with `format: "binary"` still work (dual detection)
+- [ ] `httpx` promoted to runtime dependency, replaces `urllib.request` in uploads/registry
 - [ ] Presigned URL inputs pass JSON Schema validation (Draft7Validator)
 - [ ] SDK version bumped to `0.6.0`
 - [ ] All tests pass (multipart tests removed, new presigned URL + file validation tests added)
@@ -208,11 +204,13 @@ FE uploads file to CDS
 
 | File | Changes |
 | --- | --- |
-| `python/canvastekk_workflow_sdk/definition.py` | Dual format detection (`"file"` + `"binary"`), add `validate_file_input()` helper, updated docstrings |
+| `python/canvastekk_workflow_sdk/definition.py` | Hard switch to `format: "file"`, add `validate_file_input()` helper, updated docstrings |
 | `python/canvastekk_workflow_sdk/app.py` | Remove multipart handling, remove `_coerce_form_value`, remove dead imports |
 | `python/canvastekk_workflow_sdk/base.py` | Update execute() docstring for presigned URL flow |
+| `python/canvastekk_workflow_sdk/uploads.py` | Replace `urllib.request` with `httpx` |
+| `python/canvastekk_workflow_sdk/registry.py` | Replace `urllib.request` with `httpx` |
 | `python/canvastekk_workflow_sdk/__init__.py` | Bump `__version__` to `"0.6.0"` |
-| `python/pyproject.toml` | Bump version, remove `python-multipart` dependency |
-| `python/tests/test_definition.py` | Update format values, add dual-detection + file validation tests |
+| `python/pyproject.toml` | Bump version, remove `python-multipart`, promote `httpx` to runtime dep |
+| `python/tests/test_definition.py` | Update format values, add file validation tests |
 | `python/tests/test_app.py` | Remove multipart tests, update format values, add presigned URL tests |
-| `python/README.md` | Rewrite File Handling Guide, add `x-*` extensions docs, download examples |
+| `python/README.md` | Rewrite File Handling Guide, add `x-*` extensions docs, `httpx` download examples |
