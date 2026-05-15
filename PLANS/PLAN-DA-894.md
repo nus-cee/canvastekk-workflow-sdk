@@ -104,7 +104,14 @@ FE uploads file to CDS
 - [ ] `base.py` execute() docstring: change "File inputs may be local paths (downloaded by SDK) or URLs" to "File inputs are presigned GET URLs provided by the engine"
 - [ ] `request.py` inputs field description is already correct ("may include signed URLs for file access")
 
-### 3.3 File field schema conventions (document in README)
+### 3.4 Add manifest validation — `NodeDefinition.model_validator`
+- [ ] Add Pydantic `@model_validator(mode="after")` to `NodeDefinition` that checks `input_schema` and `output_schema` for file field format correctness
+- [ ] Reject `format: "binary"` at node definition time — raise `ValueError` if any property uses it, with message pointing to `format: "file"` migration
+- [ ] Validate that file fields have `type: "string"` (not `"object"` or `"array"`)
+- [ ] This means `NodeDefinition(input_schema={"properties": {"x": {"format": "binary"}}})` will **fail at import time**, not at runtime — node authors discover the error immediately when starting their app
+- [ ] The SDK version itself is the contract: `pip install canvastekk-workflow-sdk==0.6.0` guarantees `format: "file"` enforcement
+
+### 3.5 File field schema conventions (document in README)
 - [ ] Document the `x-*` extension convention for file fields in JSON Schema
 - [ ] `x-accept`: list of allowed file extensions (e.g. `[".las", ".laz", ".ply"]`) — used by frontend for file picker + node for runtime validation
 - [ ] `x-maxSizeBytes`: maximum file size in bytes — validated by node at runtime after download
@@ -130,6 +137,10 @@ FE uploads file to CDS
 - [ ] Test: `file_input_fields` detects `"file"` format fields only
 - [ ] Test: `file_output_fields` detects `"file"` format fields only
 - [ ] Test: `file_input_fields` does NOT detect `"binary"` format fields (confirms breaking change)
+- [ ] Test: `NodeDefinition` raises `ValueError` when `format: "binary"` is used in schema
+- [ ] Test: `NodeDefinition` raises `ValueError` when file field has wrong type (not `"string"`)
+- [ ] Test: `to_dict()` manifest output contains `format: "file"` for file fields
+- [ ] Test: `/manifest` endpoint returns correct format
 - [ ] Test: execute with presigned URL input for `format: "file"` field passes validation
 - [ ] Test: JSON-only /execute endpoint works with presigned URL passthrough
 - [ ] Test: `validate_file_input()` rejects file exceeding `x-maxSizeBytes`
@@ -175,6 +186,8 @@ FE uploads file to CDS
 
 - [ ] SDK uses `format: "file"` only — `format: "binary"` is fully removed
 - [ ] `file_input_fields` / `file_output_fields` detect `"file"` format only (breaking change)
+- [ ] `NodeDefinition` rejects `format: "binary"` at definition time via Pydantic validator — node authors see the error on app startup
+- [ ] SDK version (`0.6.0`) is the manifest format contract — `pip install canvastekk-workflow-sdk==0.6.0` enforces `format: "file"`
 - [ ] `validate_file_input()` helper validates file constraints from `x-*` extensions
 - [ ] Multipart handling removed from app.py — JSON-only `/execute`
 - [ ] `python-multipart` dependency removed
