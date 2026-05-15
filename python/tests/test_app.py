@@ -9,6 +9,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from fastapi import APIRouter, Depends, Request
 from fastapi.testclient import TestClient
 
 from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, create_node_app
@@ -444,8 +445,8 @@ class TestOutputUploadToS3:
     """Tests for S3 output upload via pre-signed URLs."""
 
     def test_output_upload_url_triggers_s3_upload(self, file_output_client: TestClient) -> None:
-        """When output_upload_url is provided and status=pass, _upload_to_presigned is called."""
-        with patch("canvastekk_workflow_sdk.app._upload_to_presigned") as mock_upload:
+        """When output_upload_url is provided and status=pass, upload_file is called."""
+        with patch("canvastekk_workflow_sdk.uploads.S3PresignedUploader.upload_file") as mock_upload:
             response = file_output_client.post(
                 "/execute",
                 json={
@@ -462,17 +463,15 @@ class TestOutputUploadToS3:
             data = response.json()
             assert data["status"] == "pass"
 
-            # Verify _upload_to_presigned was called with the file path and presigned URL
             mock_upload.assert_called_once()
             call_args = mock_upload.call_args
             assert call_args[0][1] == "https://s3.amazonaws.com/presigned-put"
-            # First arg is the file path — verify it exists
             uploaded_file = call_args[0][0]
             assert uploaded_file == data["outputs"]["result_path"]
 
     def test_output_upload_url_skipped_on_failure(self, failing_output_client: TestClient) -> None:
-        """When node returns status=fail, _upload_to_presigned should NOT be called."""
-        with patch("canvastekk_workflow_sdk.app._upload_to_presigned") as mock_upload:
+        """When node returns status=fail, upload_file should NOT be called."""
+        with patch("canvastekk_workflow_sdk.uploads.S3PresignedUploader.upload_file") as mock_upload:
             response = failing_output_client.post(
                 "/execute",
                 json={
@@ -494,7 +493,7 @@ class TestOutputUploadToS3:
 
     def test_output_upload_url_skipped_when_not_provided(self, file_output_client: TestClient) -> None:
         """When output_upload_url is None, no upload is attempted."""
-        with patch("canvastekk_workflow_sdk.app._upload_to_presigned") as mock_upload:
+        with patch("canvastekk_workflow_sdk.uploads.S3PresignedUploader.upload_file") as mock_upload:
             response = file_output_client.post(
                 "/execute",
                 json={
@@ -518,7 +517,7 @@ class TestOutputUploadToS3:
         upload_urls = {"result_path": "https://s3.amazonaws.com/presigned-put"}
 
         file_content = b"point cloud data"
-        with patch("canvastekk_workflow_sdk.app._upload_to_presigned") as mock_upload:
+        with patch("canvastekk_workflow_sdk.uploads.S3PresignedUploader.upload_file") as mock_upload:
             response = client.post(
                 "/execute",
                 data={
@@ -539,3 +538,430 @@ class TestOutputUploadToS3:
             mock_upload.assert_called_once()
             call_args = mock_upload.call_args
             assert call_args[0][1] == "https://s3.amazonaws.com/presigned-put"
+
+
+class TestAsyncExecution:
+    """Tests for async execution with asyncio.to_thread (Phase 1)."""
+
+    def test_execute_endpoint_works_with_async_wrapper(self, echo_client: TestClient) -> None:
+        """Test that POST /execute works correctly with asyncio.to_thread wrapping."""
+        response = echo_client.post(
+            "/execute",
+            json={
+                "run_id": "test-run",
+                "node_id": "test-node",
+                "inputs": {"message": "Async test"},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "pass"
+        assert data["outputs"] == {"message": "Async test"}
+        assert data["error"] is None
+        assert data["execution_id"] is not None
+
+    def test_execute_with_failure_still_works_with_async_wrapper(self, failing_client: TestClient) -> None:
+        """Test that execution failures are correctly handled with async wrapper."""
+        response = failing_client.post(
+            "/execute",
+            json={
+                "run_id": "test-run",
+                "node_id": "test-node",
+                "inputs": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "fail"
+        assert data["outputs"] is None
+        assert data["error"] == "Intentional failure"
+        assert data["error_type"] == "ValueError"
+
+    def test_multipart_with_async_wrapper_and_s3_upload(self, file_proc_client: TestClient) -> None:
+        """Test that multipart requests work with async wrapper and S3 upload."""
+        file_content = b"point cloud async test"
+        with patch("canvastekk_workflow_sdk.uploads.S3PresignedUploader.upload_file"):
+            response = file_proc_client.post(
+                "/execute",
+                data={
+                    "run_id": "run-1",
+                    "node_id": "node-1",
+                    "output_upload_url": '{"result_path": "https://s3.amazonaws.com/upload"}',
+                },
+                files={
+                    "point_cloud": ("cloud.ply", io.BytesIO(file_content), "application/octet-stream"),
+                },
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "pass"
+
+
+class TestDependencyInjection:
+    """Tests for FastAPI dependency injection (Phase 2)."""
+
+    def test_dependency_applied_to_all_endpoints(self) -> None:
+        """Test that a custom dependency is invoked on all endpoints."""
+        dependency_invocations: list[str] = []
+
+        def custom_dependency(request: Request) -> None:
+            dependency_invocations.append(request.url.path)
+
+        node = EchoNode()
+        app = create_node_app(node, dependencies=[Depends(custom_dependency)])
+        client = TestClient(app)
+
+        client.get("/health")
+        client.get("/manifest")
+        client.get("/metrics")
+        client.post("/execute", json={"run_id": "r1", "node_id": "n1", "inputs": {"message": "test"}})
+        client.post("/hook", json={"event": "test"})
+
+        assert "/health" in dependency_invocations
+        assert "/manifest" in dependency_invocations
+        assert "/metrics" in dependency_invocations
+        assert "/execute" in dependency_invocations
+        assert "/hook" in dependency_invocations
+
+    def test_dependency_rejects_invalid_request(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that a dependency can reject requests."""
+        monkeypatch.setenv("CANVASTEKK_API_KEY", "correct-key")
+
+        from canvastekk_workflow_sdk.auth import NodeAuth
+
+        auth = NodeAuth.api_key()
+        node = EchoNode()
+        app = create_node_app(node, dependencies=[Depends(auth)])
+        client = TestClient(app)
+
+        response = client.get("/health", headers={})
+        assert response.status_code == 401
+
+        response = client.get("/health", headers={"X-API-Key": "correct-key"})
+        assert response.status_code == 200
+
+    def test_multiple_dependencies_all_invoked(self) -> None:
+        """Test that multiple dependencies are all invoked."""
+        dependency_order: list[str] = []
+
+        def dep1(request: Request) -> None:
+            dependency_order.append("dep1")
+
+        def dep2(request: Request) -> None:
+            dependency_order.append("dep2")
+
+        node = EchoNode()
+        app = create_node_app(node, dependencies=[Depends(dep1), Depends(dep2)])
+        client = TestClient(app)
+
+        client.get("/health")
+        assert dependency_order == ["dep1", "dep2"]
+
+    def test_empty_dependencies_list(self) -> None:
+        """Test that empty dependencies list works."""
+        node = EchoNode()
+        app = create_node_app(node, dependencies=[])
+        client = TestClient(app)
+
+        response = client.get("/health")
+        assert response.status_code == 200
+
+
+class TestExtraRoutes:
+    """Tests for extra routes feature (Phase 2)."""
+
+    def test_extra_route_accessible(self) -> None:
+        """Test that a custom route is accessible on the created app."""
+        extra_router = APIRouter(prefix="/custom", tags=["Custom"])
+
+        @extra_router.get("/info")
+        def custom_info() -> dict[str, str]:
+            return {"message": "Custom endpoint"}
+
+        node = EchoNode()
+        app = create_node_app(node, extra_routes=[extra_router])
+        client = TestClient(app)
+
+        response = client.get("/custom/info")
+        assert response.status_code == 200
+        assert response.json() == {"message": "Custom endpoint"}
+
+    def test_multiple_extra_routes_accessible(self) -> None:
+        """Test that multiple extra routers are all accessible."""
+        router1 = APIRouter(prefix="/api/v1", tags=["V1"])
+
+        @router1.get("/data")
+        def get_v1_data() -> dict[str, str]:
+            return {"version": "v1"}
+
+        router2 = APIRouter(prefix="/api/v2", tags=["V2"])
+
+        @router2.get("/data")
+        def get_v2_data() -> dict[str, str]:
+            return {"version": "v2"}
+
+        node = EchoNode()
+        app = create_node_app(node, extra_routes=[router1, router2])
+        client = TestClient(app)
+
+        response1 = client.get("/api/v1/data")
+        assert response1.status_code == 200
+        assert response1.json() == {"version": "v1"}
+
+        response2 = client.get("/api/v2/data")
+        assert response2.status_code == 200
+        assert response2.json() == {"version": "v2"}
+
+    def test_standard_routes_still_work_with_extra_routes(self) -> None:
+        """Test that standard routes still work when extra routes are added."""
+        extra_router = APIRouter(prefix="/extra")
+
+        @extra_router.get("/test")
+        def extra_test() -> dict[str, str]:
+            return {"extra": "route"}
+
+        node = EchoNode()
+        app = create_node_app(node, extra_routes=[extra_router])
+        client = TestClient(app)
+
+        response = client.get("/health")
+        assert response.status_code == 200
+
+        response = client.get("/manifest")
+        assert response.status_code == 200
+
+        response = client.get("/metrics")
+        assert response.status_code == 200
+
+    def test_extra_routes_with_dependencies(self) -> None:
+        """Test that extra routes work alongside app dependencies."""
+        dependency_invoked: list[bool] = []
+
+        def custom_dependency(request: Request) -> None:
+            dependency_invoked.append(True)
+
+        extra_router = APIRouter(prefix="/custom")
+
+        @extra_router.get("/test")
+        def custom_test() -> dict[str, str]:
+            return {"test": "data"}
+
+        node = EchoNode()
+        app = create_node_app(
+            node,
+            dependencies=[Depends(custom_dependency)],
+            extra_routes=[extra_router]
+        )
+        client = TestClient(app)
+
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert len(dependency_invoked) == 1
+
+        response = client.get("/custom/test")
+        assert response.status_code == 200
+        assert len(dependency_invoked) == 1
+
+    def test_empty_extra_routes_list(self) -> None:
+        """Test that empty extra routes list works."""
+        node = EchoNode()
+        app = create_node_app(node, extra_routes=[])
+        client = TestClient(app)
+
+        response = client.get("/health")
+        assert response.status_code == 200
+
+
+class TestApiKeyAuthIntegration:
+    """Tests for API Key authentication integration with FastAPI endpoints (Phase 2)."""
+
+    def test_api_key_auth_allows_valid_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that valid API key allows access to all endpoints."""
+        from canvastekk_workflow_sdk.auth import NodeAuth
+
+        monkeypatch.setenv("CANVASTEKK_API_KEY", "test-secret-key")
+
+        auth = NodeAuth.api_key()
+        node = EchoNode()
+        app = create_node_app(node, dependencies=[Depends(auth)])
+        client = TestClient(app)
+
+        headers = {"X-API-Key": "test-secret-key"}
+
+        response = client.get("/health", headers=headers)
+        assert response.status_code == 200
+
+        response = client.get("/manifest", headers=headers)
+        assert response.status_code == 200
+
+        response = client.get("/definition", headers=headers, follow_redirects=True)
+        assert response.status_code == 200
+
+        response = client.get("/metrics", headers=headers)
+        assert response.status_code == 200
+
+        response = client.post("/execute", json={"run_id": "r1", "node_id": "n1", "inputs": {"message": "test"}}, headers=headers)
+        assert response.status_code == 200
+
+        response = client.post("/hook", json={"event": "test"}, headers=headers)
+        assert response.status_code == 501
+
+    def test_api_key_auth_rejects_invalid_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that invalid API key is rejected."""
+        from canvastekk_workflow_sdk.auth import NodeAuth
+
+        monkeypatch.setenv("CANVASTEKK_API_KEY", "correct-key")
+
+        auth = NodeAuth.api_key()
+        node = EchoNode()
+        app = create_node_app(node, dependencies=[Depends(auth)])
+        client = TestClient(app)
+
+        headers = {"X-API-Key": "wrong-key"}
+
+        response = client.get("/health", headers=headers)
+        assert response.status_code == 401
+
+        response = client.post("/execute", json={"run_id": "r1", "node_id": "n1", "inputs": {"message": "test"}}, headers=headers)
+        assert response.status_code == 401
+
+    def test_api_key_auth_rejects_missing_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that missing API key is rejected."""
+        from canvastekk_workflow_sdk.auth import NodeAuth
+
+        monkeypatch.setenv("CANVASTEKK_API_KEY", "test-key")
+
+        auth = NodeAuth.api_key()
+        node = EchoNode()
+        app = create_node_app(node, dependencies=[Depends(auth)])
+        client = TestClient(app)
+
+        response = client.get("/health")
+        assert response.status_code == 401
+
+    def test_api_key_auth_rejects_when_env_not_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that auth is rejected when env var is not set."""
+        from canvastekk_workflow_sdk.auth import NodeAuth
+
+        monkeypatch.delenv("CANVASTEKK_API_KEY", raising=False)
+
+        auth = NodeAuth.api_key()
+        node = EchoNode()
+        app = create_node_app(node, dependencies=[Depends(auth)])
+        client = TestClient(app)
+
+        headers = {"X-API-Key": "any-key"}
+
+        response = client.get("/health", headers=headers)
+        assert response.status_code == 401
+
+    def test_api_key_auth_bypass_in_dev_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that dev mode bypasses API key authentication."""
+        from canvastekk_workflow_sdk.auth import NodeAuth
+
+        monkeypatch.setenv("CANVASTEKK_DEV_MODE", "true")
+        monkeypatch.delenv("CANVASTEKK_API_KEY", raising=False)
+
+        auth = NodeAuth.api_key()
+        node = EchoNode()
+        app = create_node_app(node, dependencies=[Depends(auth)])
+        client = TestClient(app)
+
+        response = client.get("/health")
+        assert response.status_code == 200
+
+    def test_api_key_auth_custom_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test API key auth with custom env var name."""
+        from canvastekk_workflow_sdk.auth import NodeAuth
+
+        monkeypatch.setenv("MY_CUSTOM_API_KEY", "custom-secret")
+
+        auth = NodeAuth.api_key(key_env_var="MY_CUSTOM_API_KEY")
+        node = EchoNode()
+        app = create_node_app(node, dependencies=[Depends(auth)])
+        client = TestClient(app)
+
+        headers = {"X-API-Key": "custom-secret"}
+
+        response = client.get("/health", headers=headers)
+        assert response.status_code == 200
+
+
+class TestIntegrationLifecycle:
+    """Full integration test: auth + execute + S3 upload + lifecycle hooks."""
+
+    def test_full_lifecycle_with_api_key_auth_and_s3_upload(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from canvastekk_workflow_sdk.auth import NodeAuth
+
+        monkeypatch.setenv("CANVASTEKK_API_KEY", "test-integration-key")
+
+        auth = NodeAuth.api_key()
+        node = FileOutputNode()
+        startup_called: list[bool] = []
+        shutdown_called: list[bool] = []
+
+        original_startup = node.on_startup
+        original_shutdown = node.on_shutdown
+
+        async def custom_startup() -> None:
+            startup_called.append(True)
+            await original_startup()
+
+        async def custom_shutdown() -> None:
+            shutdown_called.append(True)
+            await original_shutdown()
+
+        node.on_startup = custom_startup
+        node.on_shutdown = custom_shutdown
+
+        app = create_node_app(node, dependencies=[Depends(auth)])
+        headers = {"X-API-Key": "test-integration-key"}
+
+        with TestClient(app) as client:
+            assert startup_called
+
+            response = client.get("/health", headers=headers)
+            assert response.status_code == 200
+            assert response.json()["status"] == "healthy"
+
+            response = client.get("/manifest", headers=headers)
+            assert response.status_code == 200
+            assert response.json()["name"] == "file-output"
+
+            with patch("canvastekk_workflow_sdk.uploads.S3PresignedUploader.upload_file") as mock_upload:
+                response = client.post(
+                    "/execute",
+                    json={
+                        "run_id": "integration-run",
+                        "node_id": "integration-node",
+                        "inputs": {"input_data": "integration test"},
+                        "output_upload_url": {
+                            "result_path": "https://s3.amazonaws.com/presigned-put",
+                        },
+                    },
+                    headers=headers,
+                )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "pass"
+            assert data["outputs"]["summary"] == "done"
+            mock_upload.assert_called_once()
+
+            response = client.get(
+                "/execute",
+                headers=headers,
+            )
+            assert response.status_code == 405
+
+            no_auth_response = client.post(
+                "/execute",
+                json={
+                    "run_id": "integration-run",
+                    "node_id": "integration-node",
+                    "inputs": {"input_data": "should fail"},
+                },
+            )
+            assert no_auth_response.status_code == 401
+
+        assert shutdown_called

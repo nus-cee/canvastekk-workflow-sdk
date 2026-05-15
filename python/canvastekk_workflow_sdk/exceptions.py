@@ -110,10 +110,34 @@ class NodeConfigurationError(NodeExecutionError):
         )
 
 
+class NodeOutputValidationError(NodeExecutionError):
+    """Raised when output validation against JSON Schema fails."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        errors: list[dict[str, Any]] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code="OUTPUT_VALIDATION_ERROR",
+            details=details or {},
+        )
+        self.errors = errors or []
+
+    def to_dict(self) -> dict[str, Any]:
+        result = super().to_dict()
+        result["errors"] = self.errors
+        return result
+
+
 ERROR_CODE_TO_HTTP_STATUS: dict[str, int] = {
     "EXECUTION_ERROR": 500,
     "TIMEOUT": 408,
     "VALIDATION_ERROR": 422,
+    "OUTPUT_VALIDATION_ERROR": 422,
     "IO_ERROR": 500,
     "CONFIGURATION_ERROR": 500,
 }
