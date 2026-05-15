@@ -22,6 +22,10 @@ uvicorn = "^0.43"
 python-multipart = ">=0.0.22"
 jsonschema = "^4.26.0"
 
+[tool.poetry.extras]
+jwt = ["PyJWT>=2.8"]
+keycloak = ["PyJWT>=2.8", "cryptography>=42.0"]
+
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0"
 pytest-asyncio = "^1.3"

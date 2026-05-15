@@ -15,10 +15,12 @@ import asyncio
 import json
 import logging
 import tempfile
+from collections.abc import Sequence
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.datastructures import UploadFile
 
@@ -95,7 +97,13 @@ _NODE_OPENAPI_TAGS: list[dict[str, str]] = [
 ]
 
 
-def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
+def create_node_app(
+    node: BaseNode,
+    *,
+    dependencies: Sequence[Any] | None = None,
+    extra_routes: list[APIRouter] | None = None,
+    **fastapi_kwargs: object,
+) -> FastAPI:
     """
     Create a FastAPI application with standard node endpoints.
 
@@ -108,6 +116,10 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
 
     Args:
         node: The BaseNode instance to wrap
+        dependencies: Optional FastAPI dependencies applied to all endpoints
+            (e.g., ``[Depends(auth)]`` for request authentication).
+        extra_routes: Optional list of FastAPI APIRouter instances to mount
+            on the application.
         **fastapi_kwargs: Additional arguments passed to FastAPI constructor
             (e.g., title, version, docs_url)
 
@@ -115,8 +127,11 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
         FastAPI application instance
 
     Example:
+        from canvastekk_workflow_sdk.auth import NodeAuth
+
         node = EchoNode()
-        app = create_node_app(node)
+        auth = NodeAuth.api_key()
+        app = create_node_app(node, dependencies=[Depends(auth)])
 
         # Run with: uvicorn handler:app --port 8001
     """
@@ -128,9 +143,25 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
     }
     default_kwargs.update(fastapi_kwargs)
 
-    app = FastAPI(**default_kwargs)
+    # Merge node lifespan hooks with any user-provided lifespan
+    base_lifespan = default_kwargs.pop("lifespan", None)
 
-    @app.post(
+    @asynccontextmanager
+    async def _node_lifespan(app: Any) -> Any:
+        async with node._lifespan():
+            if base_lifespan:
+                async with base_lifespan(app):
+                    yield
+            else:
+                yield
+
+    app = FastAPI(lifespan=_node_lifespan, **default_kwargs)
+
+    router_dependencies = list(dependencies) if dependencies else []
+
+    router = APIRouter(dependencies=router_dependencies)
+
+    @router.post(
         "/execute",
         response_model=NodeExecutionResponse,
         summary="Execute node",
@@ -233,7 +264,7 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
 
         return response
 
-    @app.get(
+    @router.get(
         "/health",
         response_model=HealthResponse,
         summary="Health check",
@@ -266,7 +297,7 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
             checks=checks,
         )
 
-    @app.get(
+    @router.get(
         "/manifest",
         summary="Node manifest",
         description="Returns the full NodeDefinition including identity, schemas, cost, retry policy, and metadata. "
@@ -288,7 +319,7 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
         """
         return JSONResponse(content=node.definition.to_dict())
 
-    @app.get(
+    @router.get(
         "/definition",
         deprecated=True,
         summary="Node definition (deprecated)",
@@ -303,7 +334,7 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
         """
         return RedirectResponse(url="/manifest", status_code=301)
 
-    @app.post(
+    @router.post(
         "/hook",
         summary="Webhook callback",
         description="Receives external triggers, progress updates, or async completion notifications. "
@@ -329,7 +360,7 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
             )
         return JSONResponse(content=result)
 
-    @app.get(
+    @router.get(
         "/metrics",
         summary="Execution metrics",
         description="Aggregated execution statistics including success rate, average duration, and token usage.",
@@ -343,6 +374,12 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
         average duration, and token usage.
         """
         return JSONResponse(content=node._metrics_collector.get_summary())
+
+    app.include_router(router)
+
+    if extra_routes:
+        for extra_router in extra_routes:
+            app.include_router(extra_router)
 
     @app.exception_handler(NodeExecutionError)
     async def node_error_handler(request: object, exc: NodeExecutionError) -> JSONResponse:

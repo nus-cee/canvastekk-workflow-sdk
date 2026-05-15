@@ -41,6 +41,7 @@ Philosophy:
 """
 
 from canvastekk_workflow_sdk.app import create_node_app
+from canvastekk_workflow_sdk.auth import NodeAuth
 from canvastekk_workflow_sdk.base import BaseNode
 from canvastekk_workflow_sdk.context import ExecutionContext
 from canvastekk_workflow_sdk.contracts import (
@@ -88,12 +89,13 @@ __all__ = [
     "NodeExecutionError",
     "NodeIOError",
     "NodeMiddleware",
+    "NodeOutputValidationError",
     "NodeStyles",
     "NodeExecutionRequest",
     "NodeExecutionResponse",
-    "NodeOutputValidationError",
     "NodeTimeoutError",
     "NodeValidationError",
+    "NodeAuth",
     "OutputUploader",
     "Plane",
     "PlaneSet",

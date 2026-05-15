@@ -11,6 +11,8 @@ import logging
 import time
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 import jsonschema
@@ -348,16 +350,49 @@ class BaseNode(ABC):
         """
         return None
 
-    def create_app(self) -> Any:
+    async def on_startup(self) -> None:
+        """
+        Hook called when the FastAPI app starts up.
+
+        Override to perform initialization (e.g., load models, warm caches,
+        establish connections). Runs once at server startup.
+
+        Default is a no-op.
+        """
+
+    async def on_shutdown(self) -> None:
+        """
+        Hook called when the FastAPI app shuts down.
+
+        Override to perform cleanup (e.g., close connections, flush buffers,
+        release resources). Runs once at server shutdown.
+
+        Default is a no-op.
+        """
+
+    @asynccontextmanager
+    async def _lifespan(self) -> AsyncIterator[None]:
+        """FastAPI lifespan context manager wired to on_startup/on_shutdown."""
+        await self.on_startup()
+        try:
+            yield
+        finally:
+            await self.on_shutdown()
+
+    def create_app(self, **kwargs: Any) -> Any:
         """
         Create a FastAPI app with all required endpoints.
 
         This is a convenience method that wraps the node in an HTTP server.
         For more control, use the `create_node_app` function from app.py.
 
+        Args:
+            **kwargs: Keyword arguments passed to ``create_node_app()``
+                (e.g., ``dependencies``, ``extra_routes``, FastAPI kwargs).
+
         Returns:
             FastAPI application instance
         """
         from canvastekk_workflow_sdk.app import create_node_app
 
-        return create_node_app(self)
+        return create_node_app(self, **kwargs)
