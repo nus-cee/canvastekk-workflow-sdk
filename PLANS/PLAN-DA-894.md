@@ -18,12 +18,44 @@ All changes are **backward-compatible**. The `file_input_fields` and `file_outpu
 ### Architecture Shift
 
 ```
-BEFORE (format: "binary"):
-  Engine → downloads file from S3 → multipart POST → SDK saves to /tmp → node.execute()
+BEFORE (format: "binary" — target-workflow-reference.md Step 3):
+  Engine → downloads file from S3 → multipart POST → SDK saves UploadFile to /tmp → node.execute()
   
-AFTER (format: "file"):
-  Engine → resolves CDS/S3 refs → presigned GET URL in JSON → SDK passes through → node.execute()
+AFTER (format: "file" — DA-889 presigned URL pipeline):
+  Engine → resolves CDS/S3 refs → generates presigned GET URL → JSON POST → SDK passes through → node.execute()
   Node downloads from presigned URL itself. SDK does NOT auto-download.
+```
+
+### Release Coordination
+
+This is a **coordinated cross-repo release** (per DA-889 design decisions). Engine, SDK, and nodes all ship together — no phased migration. The engine (DA-889) already handles both `format: "file"` and `format: "binary"` in its validation and activities. The SDK's dual detection ensures nodes that haven't migrated their schemas yet still work correctly.
+
+### End-to-End File Flow (from target-workflow-reference.md)
+
+```
+MODE A (Browser Upload):              MODE B (CDS Reference):
+
+FE uploads to S3                       FE picks file from CDS
+  → "s3://bucket/key"                   → { source: "cds", file_id: "789" }
+        │                                     │
+        └──────── POST /api/runs ─────────────┘
+                         │
+                         ▼
+              Engine (DA-889):
+              1. run_service: relax validation for format:"file" fields
+              2. Temporal activity: resolve refs → presigned GET URL
+              3. JSON POST to node /execute with URL in inputs[field]
+                         │
+                         ▼
+              SDK (DA-894 — THIS TICKET):
+              4. JSON-only /execute (no multipart)
+              5. Pass presigned URL through to node.execute()
+                         │
+                         ▼
+              Node (DA-895):
+              6. Node downloads from presigned URL
+              7. Processes and writes outputs
+              8. SDK uploads outputs via presigned PUT URL
 ```
 
 ### Dependencies
@@ -32,6 +64,7 @@ AFTER (format: "file"):
 | --- | --- | --- | --- |
 | Engine file input pipeline redesign | DA-889 | PR #111 open | Engine handles both `format: "file"` and `format: "binary"` |
 | Node: floor-flatness-app update | DA-895 | Backlog | Blocked by this ticket |
+| Publisher node (project-file-publisher) | DA-893 | Backlog | Uses SDK, needs format migration |
 
 ---
 
@@ -114,6 +147,8 @@ AFTER (format: "file"):
 - [ ] All existing tests pass: `cd python && python -m pytest`
 - [ ] Ruff lint passes: `ruff check python/`
 - [ ] Verify backward compatibility: nodes with `"binary"` format still detected correctly
+- [ ] Verify `export_definition()` passes through `format: "file"` in schemas unchanged (no transformation needed — it serializes input_schema/output_schema as-is)
+- [ ] Verify `/manifest` endpoint returns schemas with `format: "file"` — engine reads these to determine file fields for presigned URL generation
 
 ---
 
@@ -129,6 +164,18 @@ AFTER (format: "file"):
 - [ ] All tests pass (multipart tests removed, new presigned URL tests added)
 - [ ] Ruff lint clean
 - [ ] README reflects JSON-only, presigned URL file handling
+- [ ] `export_definition()` and `/manifest` correctly expose `format: "file"` schemas for engine consumption
+
+---
+
+## Reference Documents
+
+| Document | Relevance |
+| --- | --- |
+| `target-workflow-reference.md` | Target end-to-end workflow design — Steps 2-4 define the file pipeline contract |
+| `README-CWE.md` | Engine implementation reference — describes presigned URL file transfer pattern |
+| DA-889 Jira description | Cross-repo scope and design decisions for the file pipeline redesign |
+| DA-889 Engine PR #111 | Engine implementation of CDS resolution + presigned URL delivery |
 
 ---
 
