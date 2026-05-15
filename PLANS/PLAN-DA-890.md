@@ -94,23 +94,23 @@ All changes are **additive and backward-compatible**. Existing `BaseNode` subcla
 ## Phase 3: Deployment & Developer Experience (P2 — ~1.5 days)
 
 ### 3.1 Registry helper
-- [ ] Create `canvastekk_workflow_sdk/registry.py` with `register_node()` function
-- [ ] Accept node instance, registry URL, and auth credentials
-- [ ] POST node manifest (from `export_definition()`) to registry endpoint
-- [ ] Verify `invoke_url` field mapping matches engine registry contract
-- [ ] Add tests with mocked HTTP calls
+- [x] Create `canvastekk_workflow_sdk/registry.py` with `register_node()` function
+- [x] Accept node instance, registry URL, and auth credentials
+- [x] POST node manifest (from `export_definition()`) to registry endpoint
+- [x] Verify `invoke_url` field mapping matches engine registry contract
+- [x] Add tests with mocked HTTP calls
 
 ### 3.2 Multi-node router
-- [ ] Create `canvastekk_workflow_sdk/router.py` with `create_multi_node_app()` function
-- [ ] Accept dict of `{prefix: BaseNode}` and create a single FastAPI app mounting each node under its prefix
-- [ ] Each node gets its own set of 6 endpoints under `/prefix/execute`, `/prefix/health`, etc.
-- [ ] Add test: two nodes on same app, both respond independently
+- [x] Create `canvastekk_workflow_sdk/router.py` with `create_multi_node_app()` function
+- [x] Accept dict of `{prefix: BaseNode}` and create a single FastAPI app mounting each node under its prefix
+- [x] Each node gets its own set of 6 endpoints under `/prefix/execute`, `/prefix/health`, etc.
+- [x] Add test: two nodes on same app, both respond independently
 
 ### 3.3 Verify export_definition() contract
-- [ ] Compare `NodeDefinition.to_dict()` output with engine's `node-manifest.json` schema
-- [ ] Verify `invoke_url` field is present and correctly populated
-- [ ] Add any missing fields required by engine registry
-- [ ] Add test for registry-compatible manifest output
+- [x] Compare `NodeDefinition.to_dict()` output with engine's `node-manifest.json` schema
+- [x] Verify `invoke_url` field is present and correctly populated
+- [x] Add any missing fields required by engine registry
+- [x] Add test for registry-compatible manifest output
 
 ### 3.4 Deployment documentation
 - [ ] Add Dockerfile pattern to `python/README.md` (multi-stage build, uvicorn entrypoint)
@@ -120,36 +120,36 @@ All changes are **additive and backward-compatible**. Existing `BaseNode` subcla
 - [ ] Document `CANVASTEKK_OUTPUT_DIR`, `CANVASTEKK_API_KEY`, and new env vars
 
 ### 3.5 Remove global MetricsCollector singleton
-- [ ] Remove `_default_collector` module-level singleton from `observability.py`
-- [ ] Remove `get_default_collector()` function
-- [ ] Each `BaseNode` instance creates its own `MetricsCollector()` in `__init__()`
-- [ ] Ensure existing tests that rely on shared collector still pass (update as needed)
+- [x] Remove `_default_collector` module-level singleton from `observability.py`
+- [x] Remove `get_default_collector()` function
+- [x] Each `BaseNode` instance creates its own `MetricsCollector()` in `__init__()`
+- [x] Ensure existing tests that rely on shared collector still pass (update as needed)
 
 ---
 
 ## Phase 4: Testing & Validation
 
-- [ ] All existing tests pass without modification (backward compatibility)
-- [ ] New modules (`auth.py`, `uploads.py`, `registry.py`, `router.py`) have test coverage >= 80%
-- [ ] Ruff lint passes clean: `ruff check python/`
+- [x] All existing tests pass without modification (backward compatibility)
+- [x] New modules (`auth.py`, `uploads.py`, `registry.py`, `router.py`) have test coverage >= 80%
+- [x] Ruff lint passes clean: `ruff check python/`
 - [ ] Type checking passes: `mypy python/` (if configured) or verify type hints
 - [ ] Integration test: full lifecycle — create node with auth, execute, verify JWT, upload output
-- [ ] Verify `node.run()` does not block async event loop
-- [ ] Verify thread safety of `MetricsCollector` under concurrent load
+- [x] Verify `node.run()` does not block async event loop
+- [x] Verify thread safety of `MetricsCollector` under concurrent load
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] `node.run()` does not block the async event loop (verified via `asyncio.to_thread`)
-- [ ] `MetricsCollector.record()` is thread-safe
-- [ ] Output validation against `output_schema` catches contract violations
-- [ ] S3 upload logic extracted to testable `OutputUploader` protocol
-- [ ] `create_node_app()` accepts `dependencies=[Depends(auth)]` for JWT validation
-- [ ] Nodes can validate Keycloak JWTs matching DA-869's auth pattern
-- [ ] `on_startup()` / `on_shutdown()` lifecycle hooks work on FastAPI app events
-- [ ] Output directory configurable via `CANVASTEKK_OUTPUT_DIR` env var
-- [ ] All existing tests pass without modification (backward compatibility)
+- [x] `node.run()` does not block the async event loop (verified via `asyncio.to_thread`)
+- [x] `MetricsCollector.record()` is thread-safe
+- [x] Output validation against `output_schema` catches contract violations
+- [x] S3 upload logic extracted to testable `OutputUploader` protocol
+- [x] `create_node_app()` accepts `dependencies=[Depends(auth)]` for JWT validation
+- [x] Nodes can validate Keycloak JWTs matching DA-869's auth pattern
+- [x] `on_startup()` / `on_shutdown()` lifecycle hooks work on FastAPI app events
+- [x] Output directory configurable via `CANVASTEKK_OUTPUT_DIR` env var
+- [x] All existing tests pass without modification (backward compatibility)
 - [ ] New modules have test coverage >= 80%
 - [ ] Ruff lint + mypy pass clean
 
