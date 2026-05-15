@@ -5,7 +5,7 @@ import threading
 from typing import Any
 
 from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, NodeExecutionRequest
-from canvastekk_workflow_sdk.observability import ExecutionMetric, MetricsCollector, get_default_collector
+from canvastekk_workflow_sdk.observability import ExecutionMetric, MetricsCollector
 
 
 class EchoNode(BaseNode):
@@ -211,10 +211,103 @@ class TestNodeMetricsIntegration:
         data = response.json()
         assert data["total_executions"] == 1
 
-    def test_get_default_collector_is_singleton(self) -> None:
-        a = get_default_collector()
-        b = get_default_collector()
-        assert a is b
+    def test_each_base_node_has_own_collector(self) -> None:
+        a = MetricsCollector()
+        b = MetricsCollector()
+        assert a is not b
+
+    def test_each_base_node_instance_has_independent_metrics(self) -> None:
+        """Test that each BaseNode instance has independent metrics (Phase 3 singleton removal)."""
+        node1 = EchoNode()
+        node2 = EchoNode()
+
+        request1 = NodeExecutionRequest(
+            run_id="r1",
+            node_id="n1",
+            inputs={"message": "hello"},
+        )
+        request2 = NodeExecutionRequest(
+            run_id="r2",
+            node_id="n2",
+            inputs={"message": "world"},
+        )
+
+        node1.run(request1)
+        node2.run(request2)
+
+        summary1 = node1._metrics_collector.get_summary()
+        summary2 = node2._metrics_collector.get_summary()
+
+        assert summary1["total_executions"] == 1
+        assert summary2["total_executions"] == 1
+        assert node1._metrics_collector is not node2._metrics_collector
+
+    def test_base_node_metrics_collector_initialized_on_creation(self) -> None:
+        """Test that BaseNode creates its own MetricsCollector on initialization (Phase 3)."""
+        node = EchoNode()
+
+        assert hasattr(node, "_metrics_collector")
+        assert isinstance(node._metrics_collector, MetricsCollector)
+        assert node._metrics_collector.get_summary()["total_executions"] == 0
+
+    def test_two_nodes_dont_share_metrics_after_failures(self) -> None:
+        """Test that two nodes don't share metrics after failures."""
+        node1 = EchoNode()
+        node2 = FailingNode()
+
+        request1 = NodeExecutionRequest(
+            run_id="r1",
+            node_id="n1",
+            inputs={"message": "success"},
+        )
+        request2 = NodeExecutionRequest(
+            run_id="r2",
+            node_id="n2",
+            inputs={},
+        )
+
+        node1.run(request1)
+        node2.run(request2)
+
+        summary1 = node1._metrics_collector.get_summary()
+        summary2 = node2._metrics_collector.get_summary()
+
+        assert summary1["total_executions"] == 1
+        assert summary1["pass_count"] == 1
+        assert summary1["fail_count"] == 0
+
+        assert summary2["total_executions"] == 1
+        assert summary2["pass_count"] == 0
+        assert summary2["fail_count"] == 1
+
+    def test_set_metrics_collector_replaces_default_collector(self) -> None:
+        """Test that set_metrics_collector replaces the default collector."""
+        custom_collector = MetricsCollector()
+        node = EchoNode()
+
+        original_collector = node._metrics_collector
+        node.set_metrics_collector(custom_collector)
+
+        assert node._metrics_collector is custom_collector
+        assert node._metrics_collector is not original_collector
+
+    def test_metrics_recorded_correctly_on_custom_collector(self) -> None:
+        """Test that metrics are recorded correctly on custom collector."""
+        custom_collector = MetricsCollector()
+        node = EchoNode()
+        node.set_metrics_collector(custom_collector)
+
+        request = NodeExecutionRequest(
+            run_id="r1",
+            node_id="n1",
+            inputs={"message": "test"},
+        )
+
+        node.run(request)
+
+        summary = custom_collector.get_summary()
+        assert summary["total_executions"] == 1
+        assert summary["pass_count"] == 1
 
 
 class TestMetricsCollectorThreadSafety:
