@@ -126,7 +126,11 @@ This is a **coordinated cross-repo release** (per DA-889 design decisions). Engi
       │  │                                      │  │
       │  │  execute(inputs, context):           │  │
       │  │  ├─ url = inputs["pcd_path"]         │  │
-      │  │  ├─ httpx.get(url) → download LAS   │  │
+      │  │  ├─ httpx.get(url) → download LAS   │  │  ← SDK ships httpx as
+      │  │  │                                    │  │    runtime dep; node
+      │  │  │                                    │  │    authors MAY use any
+      │  │  │                                    │  │    HTTP client (httpx,
+      │  │  │                                    │  │    urllib, requests)
       │  │  ├─ validate_file_input("pcd_path",  │  │
       │  │  │     local_path)  # x-accept,     │  │
       │  │  │                   x-maxSizeBytes  │  │
@@ -164,7 +168,8 @@ This is a **coordinated cross-repo release** (per DA-889 design decisions). Engi
       │  │                                      │  │
       │  │  execute(inputs, context):           │  │
       │  │  ├─ url = inputs["report_zip"]       │  │
-      │  │  ├─ httpx.get(url) → download ZIP   │  │
+      │  │  ├─ <any HTTP client>.get(url)       │  │  ← node author's choice
+      │  │  │   → download ZIP                  │  │    (not SDK's concern)
       │  │  ├─ Mint own service-account JWT     │  │
       │  │  ├─ POST ZIP to CDS                  │  │
       │  │  │  /api/projects/123/files          │  │
@@ -321,6 +326,15 @@ This is a **coordinated cross-repo release** (per DA-889 design decisions). Engi
 - [ ] `x-description`: longer description for frontend tooltip (optional, separate from `description`)
 - [ ] These are custom extensions on top of JSON Schema Draft-07; the `Draft7Validator` ignores unknown keys
 
+### 3.6 Add CLI manifest validation utility (`__main__.py`)
+- [ ] Create `python/canvastekk_workflow_sdk/__main__.py` with `validate` subcommand
+- [ ] `python -m canvastekk_workflow_sdk validate <module_path>` — imports the node module, instantiates `NodeDefinition`, triggers the `@model_validator`
+- [ ] Reports: pass/fail for each file field (format, type), lists detected `x-*` extensions, warns on missing extensions (e.g. file field without `x-accept`)
+- [ ] Exit code 0 = valid manifest, 1 = validation errors
+- [ ] Node authors run this locally during development without starting the server — fast feedback loop
+- [ ] Add `--json` flag for structured output (CI integration)
+- [ ] Usage example: `python -m canvastekk_workflow_sdk validate my_node.module:definition`
+
 ---
 
 ## Phase 4: Test Updates
@@ -349,6 +363,9 @@ This is a **coordinated cross-repo release** (per DA-889 design decisions). Engi
 - [ ] Test: `validate_file_input()` rejects file exceeding `x-maxSizeBytes`
 - [ ] Test: `validate_file_input()` rejects file with wrong extension per `x-accept`
 - [ ] Test: `validate_file_input()` passes valid file
+- [ ] Test: `python -m canvastekk_workflow_sdk validate` exits 0 on valid manifest
+- [ ] Test: `python -m canvastekk_workflow_sdk validate` exits 1 on invalid manifest (format:"binary")
+- [ ] Test: `python -m canvastekk_workflow_sdk validate --json` produces structured output
 
 ---
 
@@ -392,6 +409,7 @@ This is a **coordinated cross-repo release** (per DA-889 design decisions). Engi
 - [ ] `NodeDefinition` rejects `format: "binary"` at definition time via Pydantic validator — node authors see the error on app startup
 - [ ] SDK version (`0.6.0`) is the manifest format contract — `pip install canvastekk-workflow-sdk==0.6.0` enforces `format: "file"`
 - [ ] `validate_file_input()` helper validates file constraints from `x-*` extensions
+- [ ] CLI `python -m canvastekk_workflow_sdk validate` works for offline manifest validation
 - [ ] Multipart handling removed from app.py — JSON-only `/execute`
 - [ ] `python-multipart` dependency removed
 - [ ] `httpx` promoted to runtime dependency, replaces `urllib.request` in uploads/registry
@@ -423,6 +441,7 @@ This is a **coordinated cross-repo release** (per DA-889 design decisions). Engi
 | `python/canvastekk_workflow_sdk/definition.py` | Hard switch to `format: "file"`, add `validate_file_input()` helper, updated docstrings |
 | `python/canvastekk_workflow_sdk/app.py` | Remove multipart handling, remove `_coerce_form_value`, remove dead imports |
 | `python/canvastekk_workflow_sdk/base.py` | Update execute() docstring for presigned URL flow |
+| `python/canvastekk_workflow_sdk/__main__.py` | CLI `validate` subcommand for offline manifest validation |
 | `python/canvastekk_workflow_sdk/uploads.py` | Replace `urllib.request` with `httpx` |
 | `python/canvastekk_workflow_sdk/registry.py` | Replace `urllib.request` with `httpx` |
 | `python/canvastekk_workflow_sdk/__init__.py` | Bump `__version__` to `"0.6.0"` |
