@@ -2,12 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.0.0] - 2026-05-16
+## [0.5.0] - 2026-05-16
 
 ### Features
 
 - **sdk**: V0.5.0 — public-endpoint hardening with auth, timeout enforcement, and DX improvements (#14)
-- Migrate format:binary to format:file, add SDK enhancements (DA-894) (**BREAKING**)
+- Migrate format:binary to format:file, add SDK enhancements (DA-894)
 
 
 ## [0.4.9] - 2026-05-14
