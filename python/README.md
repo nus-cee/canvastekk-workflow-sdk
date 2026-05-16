@@ -127,7 +127,7 @@ curl http://localhost:8001/health
 
 # Node manifest
 curl http://localhost:8001/manifest
-# {"id":"uppercase-v1.0.0","name":"uppercase","version":"1.0.0",...}
+# {"id":"uppercase-v1.0.0","name":"uppercase","version":"1.0.0","sdk_version":"0.6.0","mode":"dev",...}
 
 # Execute the node
 curl -X POST http://localhost:8001/execute \
@@ -952,6 +952,121 @@ It demonstrates:
 
 ---
 
+## Structured Logging
+
+The SDK provides production-ready structured logging out of the box. It is configured automatically at app startup — no setup required.
+
+### How It Works
+
+`create_node_app()` calls `configure_logging()` during startup. This reads two environment variables:
+
+| Variable | Default | Values | Description |
+|----------|---------|--------|-------------|
+| `CANVASTEKK_LOG_FORMAT` | `json` | `json`, `text` | `json` = one JSON object per line (CloudWatch/Datadog/ELK). `text` = human-readable for local dev. |
+| `CANVASTEKK_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` | SDK-wide log level. |
+
+### JSON Format (default)
+
+```json
+{"timestamp":"2026-05-16T12:34:56.789000+00:00","level":"INFO","logger":"node.ff-1","message":"Processing started","run_id":"run-abc123","node_id":"ff-1"}
+```
+
+Every log line includes:
+- `timestamp` — ISO 8601 UTC
+- `level` — `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
+- `logger` — logger name (e.g. `node.ff-1`, `canvastekk_workflow_sdk.app`)
+- `message` — the log message
+- `run_id` / `node_id` — correlation IDs (when set by middleware)
+- Any extra fields passed via `extra={}`
+
+### Text Format (local dev)
+
+```
+2026-05-16 12:34:56 [   INFO] node.ff-1: Processing started
+[run-abc1] 2026-05-16 12:34:57 [   INFO] node.ff-1: Downloaded 1.2 MB
+```
+
+Set `CANVASTEKK_LOG_FORMAT=text` for human-readable output during development.
+
+### Using the Logger in `execute()`
+
+The `ExecutionContext` provides a pre-configured logger:
+
+```python
+def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+    context.logger.info("Processing started")
+
+    # With extra structured fields
+    context.logger.info("File downloaded", extra={
+        "file_size_bytes": len(data),
+        "file_name": "scan.ply",
+    })
+
+    # → JSON: {"message":"File downloaded","file_size_bytes":1200000,"file_name":"scan.ply",...}
+
+    return {"result": "done"}
+```
+
+### Getting a Logger Outside `execute()`
+
+Use `get_node_logger()` for background tasks or setup code:
+
+```python
+from canvastekk_workflow_sdk import get_node_logger
+
+logger = get_node_logger("my-node")
+
+logger.info("Background task started")
+logger.error("Upload failed", extra={"url": presigned_url})
+```
+
+### Manual Configuration (tests, scripts)
+
+Call `configure_logging()` explicitly when running outside the HTTP server:
+
+```python
+from canvastekk_workflow_sdk import configure_logging
+import logging
+
+# Use defaults (reads env vars)
+configure_logging()
+
+# Or override explicitly
+configure_logging(level=logging.DEBUG, fmt="text")
+```
+
+### Deployment Examples
+
+**Docker (production):**
+```dockerfile
+ENV CANVASTEKK_LOG_FORMAT=json
+ENV CANVASTEKK_LOG_LEVEL=INFO
+```
+
+**Docker (local dev):**
+```dockerfile
+ENV CANVASTEKK_LOG_FORMAT=text
+ENV CANVASTEKK_LOG_LEVEL=DEBUG
+```
+
+**Kubernetes:**
+```yaml
+env:
+  - name: CANVASTEKK_LOG_FORMAT
+    value: json
+  - name: CANVASTEKK_LOG_LEVEL
+    value: info
+```
+
+**CloudWatch Logs Insights query example:**
+```
+filter @message like /"level":"ERROR"/
+| parse @message '{"message":"*","level":"*","run_id":"*"}' as msg, lvl, rid
+| stats count() by msg
+```
+
+---
+
 ## Advanced: Middleware, Health Checks, and Hooks
 
 ### Custom Middleware
@@ -1099,10 +1214,14 @@ Every node exposes these endpoints automatically:
 |----------|--------|---------|
 | `/execute` | POST | Run the node (JSON body) |
 | `/health` | GET | Health check |
-| `/manifest` | GET | Node self-description (NodeDefinition) |
+| `/manifest` | GET | Node self-description (NodeDefinition) + `sdk_version` + `mode` |
 | `/definition` | GET | Deprecated, redirects to `/manifest` |
 | `/hook` | POST | Webhook/callback handler (override `hook()`) |
 | `/metrics` | GET | Execution metrics summary |
+| `/live` | GET | Liveness probe — returns 200 if the process is alive (Kubernetes) |
+| `/ready` | GET | Readiness probe — returns 200 if ready to accept traffic (Kubernetes) |
+
+All SDK responses include the `X-SDK-Version` header (e.g. `X-SDK-Version: 0.6.0`).
 
 ---
 

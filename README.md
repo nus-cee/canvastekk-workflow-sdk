@@ -9,6 +9,98 @@ Multi-language SDK for building CanvasTEKK Workflow Engine nodes. Each language 
 | Python | Available | `canvastekk-workflow-sdk` | [`python/`](./python/) |
 | TypeScript | Planned | — | `typescript/` |
 
+## Features
+
+### SDK Version in Manifest
+
+The `/manifest` endpoint auto-injects `sdk_version` (read from the installed package version). The engine uses this to verify SDK compatibility:
+
+```json
+{
+  "id": "segment-v1.0.0",
+  "name": "segment",
+  "version": "1.0.0",
+  "sdk_version": "0.6.0",
+  "mode": "dev",
+  "input_schema": { ... }
+}
+```
+
+`sdk_version` and `mode` are never set by node authors — they are injected at the endpoint level.
+
+### X-SDK-Version Response Header
+
+All SDK HTTP responses include `X-SDK-Version: <version>` (e.g. `0.6.0`). This enables engine-side version-aware routing and debugging without parsing response bodies. Follows the same convention as Stripe, AWS SDKs, and Twilio.
+
+### Kubernetes Health Probes
+
+Standard liveness and readiness endpoints for container orchestration:
+
+| Endpoint | Purpose | Behavior |
+|----------|---------|----------|
+| `GET /live` | Liveness — "don't restart me" | Returns 200 if the process is alive. Kubernetes restarts the pod if this fails. |
+| `GET /ready` | Readiness — "send me traffic" | Returns 200 when ready to accept traffic. Calls `node.health_check()` if defined. Kubernetes removes the pod from service if this fails. |
+
+Kubernetes manifest example:
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /live
+    port: 8001
+  initialDelaySeconds: 5
+  periodSeconds: 10
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8001
+  initialDelaySeconds: 5
+  periodSeconds: 10
+```
+
+### Environment Mode
+
+`CANVASTEKK_NODE_ENV` controls the `mode` field in `/manifest`:
+
+| Env Value | Manifest `mode` | Use Case |
+|-----------|----------------|----------|
+| `dev`, `development`, `test` | `"dev"` | Local development (default) |
+| `uat`, `staging` | `"uat"` | User acceptance testing |
+| `production` | `"production"` | Production deployment |
+
+The engine reads `mode` to adjust routing, test behavior, and logging verbosity.
+
+### Structured Logging
+
+Production-ready structured logging configured automatically at app startup:
+
+- **JSON format** (default): one JSON object per line — compatible with CloudWatch Logs Insights, Datadog, ELK
+- **Text format**: human-readable for local development
+- **Correlation IDs**: `run_id` and `node_id` automatically included in structured logs
+- **Zero config**: works out of the box with `CANVASTEKK_LOG_FORMAT` and `CANVASTEKK_LOG_LEVEL` env vars
+
+See [`python/README.md`](./python/) for the full logging guide.
+
+### File Input Validation
+
+The `validate_file_input()` method validates downloaded files against schema constraints:
+
+- `x-accept`: allowed file extensions (e.g. `[".las", ".ply"]`)
+- `x-maxSizeBytes`: maximum file size in bytes
+- Case-insensitive extension matching
+
+```python
+definition.validate_file_input(field_name="point_cloud", data=response.content)
+```
+
+### CLI Manifest Validation
+
+Offline validation without starting the server:
+
+```bash
+python -m canvastekk_workflow_sdk validate my_node.handler:definition --json
+```
+
 ## Quick Start
 
 ### Python
@@ -155,6 +247,12 @@ Key decisions recorded as the SDK evolves. See [`PLANS/PLAN-DA-894.md`](./PLANS/
 | CLI `python -m canvastekk_workflow_sdk validate` | Offline manifest validation for node authors during development. Fast feedback without server startup |
 | Echo node example (`examples/echo_node/`) | Reference implementation showing file I/O, validation, CLI usage, Docker build |
 | SDK version = manifest format contract | `pip install canvastekk-workflow-sdk==0.6.0` enforces `format: "file"`. Engine reads `/manifest` to determine presigned URL treatment |
+| `sdk_version` auto-injected in `/manifest` | Engine can verify SDK compatibility. Node authors never set it — injected at endpoint level |
+| `X-SDK-Version` response header | Industry standard (Stripe, AWS, Twilio). Enables debugging and version-aware routing without parsing body |
+| `GET /live` and `GET /ready` | Kubernetes-standard health probes. `/live` = process alive, `/ready` = ready for traffic |
+| `CANVASTEKK_NODE_ENV` → `mode` field | Maps env (`dev`/`uat`/`production`) to manifest `mode`. Engine adjusts behavior per environment |
+| Structured JSON logging (default) | One JSON object per line with `timestamp`, `level`, `run_id`, `node_id`. CloudWatch/Datadog/ELK compatible |
+| `CANVASTEKK_LOG_FORMAT` / `CANVASTEKK_LOG_LEVEL` env vars | Zero-config logging. `json` for production, `text` for local dev. `INFO` default level |
 
 ## Repository
 
