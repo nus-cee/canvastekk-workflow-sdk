@@ -96,10 +96,12 @@ class Point3D(BaseModel):
     z: float = Field(description="Z coordinate in mm")
 
     def to_list(self) -> list[float]:
+        """Convert to ``[x, y, z]`` list."""
         return [self.x, self.y, self.z]
 
     @classmethod
     def from_list(cls, coords: list[float]) -> Point3D:
+        """Create a Point3D from a ``[x, y, z]`` list."""
         return cls(x=coords[0], y=coords[1], z=coords[2])
 
 
@@ -111,6 +113,7 @@ class BoundingBox3D(BaseModel):
 
     @property
     def center(self) -> Point3D:
+        """Center point of the bounding box."""
         return Point3D(
             x=(self.min_point.x + self.max_point.x) / 2,
             y=(self.min_point.y + self.max_point.y) / 2,
@@ -119,6 +122,7 @@ class BoundingBox3D(BaseModel):
 
     @property
     def size(self) -> Point3D:
+        """Size of the bounding box along each axis."""
         return Point3D(
             x=self.max_point.x - self.min_point.x,
             y=self.max_point.y - self.min_point.y,
@@ -176,6 +180,7 @@ class Instance(BaseModel):
 
     @property
     def num_points(self) -> int:
+        """Number of points belonging to this instance."""
         return len(self.point_indices)
 
 
@@ -210,11 +215,11 @@ class InstanceSet(BaseContract):
     )
 
     def get_instances_by_class(self, class_name: str) -> list[Instance]:
-        """Get all instances of a specific class."""
+        """Return all instances whose ``class_name`` matches."""
         return [i for i in self.instances if i.class_name == class_name]
 
     def get_instances_by_class_id(self, class_id: int) -> list[Instance]:
-        """Get all instances of a specific class ID."""
+        """Return all instances whose ``class_id`` matches."""
         return [i for i in self.instances if i.class_id == class_id]
 
 
@@ -266,14 +271,14 @@ class MeasurementSet(BaseContract):
     )
 
     def get_measurement(self, name: str) -> Measurement | None:
-        """Get a measurement by name."""
+        """Return the first measurement with the given *name*, or ``None``."""
         for m in self.measurements:
             if m.name == name:
                 return m
         return None
 
     def get_value(self, name: str, default: float | None = None) -> float | None:
-        """Get a measurement value by name."""
+        """Return the value of the first measurement with *name*, or *default*."""
         m = self.get_measurement(name)
         return m.value if m else default
 
@@ -296,7 +301,7 @@ class PlaneSet(BaseContract):
     )
 
     def get_plane_by_label(self, label: str) -> Plane | None:
-        """Get a plane by its label."""
+        """Return the first plane with the given *label*, or ``None``."""
         for p in self.planes:
             if p.label == label:
                 return p

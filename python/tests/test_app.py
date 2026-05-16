@@ -801,3 +801,135 @@ class TestIntegrationLifecycle:
             assert no_auth_response.status_code == 401
 
         assert shutdown_called
+
+
+class TestManifestEndpoint:
+    def test_manifest_includes_sdk_version(self, echo_client: TestClient) -> None:
+        response = echo_client.get("/manifest")
+        assert response.status_code == 200
+        data = response.json()
+        assert "sdk_version" in data
+        assert data["sdk_version"] == "0.6.0"
+
+    def test_manifest_includes_node_fields(self, echo_client: TestClient) -> None:
+        response = echo_client.get("/manifest")
+        data = response.json()
+        assert data["name"] == "echo"
+        assert data["version"] == "1.0.0"
+        assert data["id"] == "echo-v1.0.0"
+        assert "input_schema" in data
+        assert "output_schema" in data
+
+    def test_manifest_defaults_to_dev_mode(self, echo_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("CANVASTEKK_NODE_ENV", raising=False)
+        response = echo_client.get("/manifest")
+        assert response.json()["mode"] == "dev"
+
+    def test_manifest_dev_mode(self, echo_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CANVASTEKK_NODE_ENV", "dev")
+        response = echo_client.get("/manifest")
+        assert response.json()["mode"] == "dev"
+
+    def test_manifest_development_mode(self, echo_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CANVASTEKK_NODE_ENV", "development")
+        response = echo_client.get("/manifest")
+        assert response.json()["mode"] == "dev"
+
+    def test_manifest_staging_mode(self, echo_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CANVASTEKK_NODE_ENV", "staging")
+        response = echo_client.get("/manifest")
+        assert response.json()["mode"] == "uat"
+
+    def test_manifest_uat_mode(self, echo_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CANVASTEKK_NODE_ENV", "uat")
+        response = echo_client.get("/manifest")
+        assert response.json()["mode"] == "uat"
+
+    def test_manifest_production_mode(self, echo_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CANVASTEKK_NODE_ENV", "production")
+        response = echo_client.get("/manifest")
+        assert response.json()["mode"] == "production"
+
+    def test_manifest_unknown_env_maps_to_production(self, echo_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CANVASTEKK_NODE_ENV", "qa")
+        response = echo_client.get("/manifest")
+        assert response.json()["mode"] == "production"
+
+
+class TestSDKVersionHeader:
+    def test_sdk_version_header_on_execute(self, echo_client: TestClient) -> None:
+        response = echo_client.post(
+            "/execute",
+            json={"run_id": "r1", "node_id": "n1", "inputs": {"message": "hi"}},
+        )
+        assert response.headers.get("x-sdk-version") == "0.6.0"
+
+    def test_sdk_version_header_on_manifest(self, echo_client: TestClient) -> None:
+        response = echo_client.get("/manifest")
+        assert response.headers.get("x-sdk-version") == "0.6.0"
+
+    def test_sdk_version_header_on_health(self, echo_client: TestClient) -> None:
+        response = echo_client.get("/health")
+        assert response.headers.get("x-sdk-version") == "0.6.0"
+
+
+class TestLivenessProbe:
+    def test_liveness_returns_200(self, echo_client: TestClient) -> None:
+        response = echo_client.get("/live")
+        assert response.status_code == 200
+        assert response.json() == {"status": "alive"}
+
+
+class TestReadinessProbe:
+    def test_readiness_returns_200_when_no_checks(self, echo_client: TestClient) -> None:
+        response = echo_client.get("/ready")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ready"
+        assert data["checks"] == {}
+
+    def test_readiness_returns_200_when_all_checks_pass(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class HealthyNode(BaseNode):
+            definition = NodeDefinition(
+                id="healthy-v1",
+                name="healthy",
+                version="1.0.0",
+                title="Healthy",
+                description="Always healthy",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+            )
+
+            def health_check(self) -> dict[str, Any]:
+                return {"db": True, "cache": True}
+
+            def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+                return {}
+
+        client = TestClient(create_node_app(HealthyNode()))
+        response = client.get("/ready")
+        assert response.status_code == 200
+        assert response.json()["status"] == "ready"
+
+    def test_readiness_returns_503_when_check_fails(self) -> None:
+        class UnhealthyNode(BaseNode):
+            definition = NodeDefinition(
+                id="unhealthy-v1",
+                name="unhealthy",
+                version="1.0.0",
+                title="Unhealthy",
+                description="Always unhealthy",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+            )
+
+            def health_check(self) -> dict[str, Any]:
+                return {"db": True, "model": False}
+
+            def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+                return {}
+
+        client = TestClient(create_node_app(UnhealthyNode()))
+        response = client.get("/ready")
+        assert response.status_code == 503
+        assert response.json()["status"] == "not_ready"

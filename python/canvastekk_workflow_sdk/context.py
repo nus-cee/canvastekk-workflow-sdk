@@ -12,6 +12,8 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from canvastekk_workflow_sdk.logging import get_node_logger
+
 if TYPE_CHECKING:
     from canvastekk_workflow_sdk.request import NodeExecutionRequest
 
@@ -43,8 +45,7 @@ class ExecutionContext:
                 self._output_dir = Path("/tmp") / request.run_id / request.node_id
         self._output_dir.mkdir(parents=True, exist_ok=True)
 
-        self._logger = logging.getLogger(f"node.{request.node_id}")
-        self._logger.setLevel(logging.INFO)
+        self._logger = get_node_logger(request.node_id)
 
         self._token_usage: dict[str, int] = {}
 

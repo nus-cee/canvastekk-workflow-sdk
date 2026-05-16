@@ -29,7 +29,19 @@ def _load_definition(module_path: str):
 
 
 def _validate_definition(definition) -> dict:
-    """Validate a NodeDefinition and return a report."""
+    """Inspect a validated NodeDefinition and return a diagnostic report.
+
+    The Pydantic ``model_validator`` has already checked format/type
+    constraints.  This function inspects file fields for recommended
+    ``x-*`` extensions and builds a human-readable report.
+
+    Args:
+        definition: A fully-validated :class:`NodeDefinition` instance.
+
+    Returns:
+        A dict with keys ``valid``, ``errors``, ``warnings``,
+        ``file_input_fields``, and ``file_output_fields``.
+    """
     report = {
         "valid": True,
         "errors": [],
@@ -68,6 +80,13 @@ def _validate_definition(definition) -> dict:
 
 
 def main() -> None:
+    """CLI entry point for ``python -m canvastekk_workflow_sdk``.
+
+    Supports:
+      ``validate <module:attribute> [--json]`` — validate a node manifest.
+      ``--version`` — print SDK version.
+      ``--help`` — print usage information.
+    """
     args = sys.argv[1:]
 
     if not args or args[0] == "--help":

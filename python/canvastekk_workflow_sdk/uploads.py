@@ -102,4 +102,5 @@ _default_uploader = S3PresignedUploader()
 
 
 def get_default_uploader() -> S3PresignedUploader:
+    """Return the process-wide default :class:`S3PresignedUploader` instance."""
     return _default_uploader
