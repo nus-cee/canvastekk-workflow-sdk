@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.2] - 2026-05-16
+
+### Documentation
+
+- **DA-898**: Separate deployment concerns from SDK documentation (#21)
+
+
 ## [0.5.1] - 2026-05-16
 
 ### Bug Fixes
 
 - Resolve ruff N812 and I001 lint errors in test files
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.5.1
 
 
 ## [0.5.0] - 2026-05-16
