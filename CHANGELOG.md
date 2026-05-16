@@ -2,11 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-05-16
+
+### Features
+
+- **DA-910**: Add opencode skill scaffolding CLI for AI agent node creation
+- **DA-910**: Add opencode skill scaffolding CLI for AI agent node creation (#DA-910)
+
+
 ## [0.5.2] - 2026-05-16
 
 ### Documentation
 
 - **DA-898**: Separate deployment concerns from SDK documentation (#21)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.5.2
 
 
 ## [0.5.1] - 2026-05-16
