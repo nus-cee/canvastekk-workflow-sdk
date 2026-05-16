@@ -2,13 +2,8 @@
 
 from typing import Any
 
-from canvastekk_workflow_sdk import (
-    BaseNode,
-    ExecutionContext,
-    NodeDefinition,
-    NodeExecutionRequest,
-    __version__,
-)
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, NodeExecutionRequest
+from canvastekk_workflow_sdk import __version__ as SDK_VERSION
 from canvastekk_workflow_sdk.middleware import LoggingMiddleware, TimingMiddleware
 
 
@@ -213,4 +208,4 @@ class TestSDKVersionMiddleware:
 
         client = TestClient(create_node_app(EchoNode()))
         response = client.get("/health")
-        assert response.headers["x-sdk-version"] == __version__
+        assert response.headers["x-sdk-version"] == SDK_VERSION
