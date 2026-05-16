@@ -8,11 +8,15 @@ from unittest.mock import patch
 
 import pytest
 from fastapi import APIRouter, Depends, Request
-
-from canvastekk_workflow_sdk import __version__ as SDK_VERSION
 from fastapi.testclient import TestClient
 
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, create_node_app
+from canvastekk_workflow_sdk import (
+    BaseNode,
+    ExecutionContext,
+    NodeDefinition,
+    __version__,
+    create_node_app,
+)
 
 
 class EchoNode(BaseNode):
@@ -811,7 +815,7 @@ class TestManifestEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert "sdk_version" in data
-        assert data["sdk_version"] == SDK_VERSION
+        assert data["sdk_version"] == __version__
 
     def test_manifest_includes_node_fields(self, echo_client: TestClient) -> None:
         response = echo_client.get("/manifest")
@@ -864,15 +868,15 @@ class TestSDKVersionHeader:
             "/execute",
             json={"run_id": "r1", "node_id": "n1", "inputs": {"message": "hi"}},
         )
-        assert response.headers.get("x-sdk-version") == SDK_VERSION
+        assert response.headers.get("x-sdk-version") == __version__
 
     def test_sdk_version_header_on_manifest(self, echo_client: TestClient) -> None:
         response = echo_client.get("/manifest")
-        assert response.headers.get("x-sdk-version") == SDK_VERSION
+        assert response.headers.get("x-sdk-version") == __version__
 
     def test_sdk_version_header_on_health(self, echo_client: TestClient) -> None:
         response = echo_client.get("/health")
-        assert response.headers.get("x-sdk-version") == SDK_VERSION
+        assert response.headers.get("x-sdk-version") == __version__
 
 
 class TestLivenessProbe:
