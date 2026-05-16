@@ -6,6 +6,7 @@ on:
       - main
     paths-ignore:
       - 'CHANGELOG.md'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -49,6 +50,7 @@ jobs:
 
           version_files = {
               "python": "python/pyproject.toml",
+              "python_init": "python/canvastekk_workflow_sdk/__init__.py",
               "typescript": "typescript/package.json",
               "dotnet": "dotnet/Directory.Build.props",
           }
@@ -63,7 +65,19 @@ jobs:
               with open(path, "r") as f:
                   content = f.read()
 
-              if path.endswith(".toml"):
+              if path.endswith(".py"):
+                  new_content, count = re.subn(
+                      r'__version__\s*=\s*"[^"]*"',
+                      f'__version__ = "{version}"',
+                      content,
+                      count=1,
+                  )
+                  with open(path, "w") as f:
+                      f.write(new_content)
+                  bumped.append(lang)
+                  print(f"BUMPED: {path} -> {version}")
+
+              elif path.endswith(".toml"):
                   new_content, count = re.subn(
                       r'(\[tool\.poetry\][^\[]*?)version\s*=\s*"[^"]*"',
                       rf'\1version = "{version}"',
@@ -130,6 +144,7 @@ jobs:
 
           git add CHANGELOG.md
           for f in python/pyproject.toml python/poetry.lock \
+                   python/canvastekk_workflow_sdk/__init__.py \
                    typescript/package.json typescript/package-lock.json \
                    dotnet/Directory.Build.props; do
             [ -f "$f" ] && git add "$f"
