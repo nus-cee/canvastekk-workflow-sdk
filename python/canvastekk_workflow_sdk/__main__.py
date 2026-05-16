@@ -2,13 +2,18 @@
 
 Usage:
     python -m canvastekk_workflow_sdk validate <module_path> [--json]
+    python -m canvastekk_workflow_sdk init [--agents-md] [--force]
 """
 
 from __future__ import annotations
 
 import importlib
 import json
+import shutil
 import sys
+from importlib.resources import as_file
+from importlib.resources import files as pkg_files
+from pathlib import Path
 
 
 def _load_definition(module_path: str):
@@ -79,32 +84,159 @@ def _validate_definition(definition) -> dict:
     return report
 
 
+_CONTENT_MARKER = "CanvasTEKK Node Development"
+
+
+def _read_data_file(relative_path: str) -> str:
+    """Read a bundled data file from the installed package.
+
+    Uses ``importlib.resources.as_file()`` to handle both directory-installed
+    and zipped wheels correctly.
+
+    Args:
+        relative_path: Path relative to ``canvastekk_workflow_sdk/data/``.
+    """
+    try:
+        ref = pkg_files("canvastekk_workflow_sdk.data").joinpath(relative_path)
+    except ModuleNotFoundError:
+        print("Error: SDK data package not found — reinstall canvastekk-workflow-sdk", file=sys.stderr)
+        sys.exit(1)
+    with as_file(ref) as real_path:
+        return real_path.read_text(encoding="utf-8")
+
+
+def _get_bundled_skills_dir():
+    """Return a Traversable for the bundled skills directory."""
+    try:
+        return pkg_files("canvastekk_workflow_sdk.data").joinpath("skills")
+    except ModuleNotFoundError:
+        print("Error: SDK data package not found — reinstall canvastekk-workflow-sdk", file=sys.stderr)
+        sys.exit(1)
+
+
+def _init_skills(target_dir: Path, *, include_agents_md: bool = False, force: bool = False) -> None:
+    """Copy bundled skill files into *target_dir*/.opencode/skills/.
+
+    Args:
+        target_dir: Project root where .opencode/ will be created.
+        include_agents_md: Also write AGENTS.md in *target_dir*.
+        force: Overwrite existing files without prompting.
+    """
+    with as_file(_get_bundled_skills_dir()) as skills_src:
+        if not skills_src.is_dir():
+            print("Error: bundled skills not found in package", file=sys.stderr)
+            sys.exit(1)
+
+        skills_dest = target_dir / ".opencode" / "skills"
+        created: list[str] = []
+        skipped: list[str] = []
+
+        for skill_dir in sorted(skills_src.iterdir()):
+            if not skill_dir.is_dir():
+                continue
+            src_file = skill_dir / "SKILL.md"
+            if not src_file.exists():
+                continue
+
+            skill_name = skill_dir.name
+            if ".." in skill_name or "/" in skill_name or "\\" in skill_name:
+                continue
+
+            dest_file = skills_dest / skill_name / "SKILL.md"
+            resolved = dest_file.resolve()
+            if not str(resolved).startswith(str(skills_dest.resolve())):
+                continue
+
+            if dest_file.exists() and not force:
+                skipped.append(str(dest_file.relative_to(target_dir)))
+                continue
+
+            dest_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_file, dest_file)
+            created.append(str(dest_file.relative_to(target_dir)))
+
+        if not created and not skipped:
+            print("Warning: No bundled skills found to install.", file=sys.stderr)
+
+        if created:
+            print(f"Created {len(created)} skill(s):")
+            for path in created:
+                print(f"  {path}")
+
+        if skipped:
+            print(f"Skipped {len(skipped)} existing file(s) (use --force to overwrite):")
+            for path in skipped:
+                print(f"  {path}")
+
+    if include_agents_md:
+        _write_agents_md(target_dir, force=force)
+
+    print()
+    print("Skills are loaded on-demand by coding agents.")
+    print("Your agent will discover them automatically when you ask it to create a node.")
+
+
+def _write_agents_md(target_dir: Path, *, force: bool = False) -> None:
+    """Write or update AGENTS.md with CanvasTEKK skill routing rules."""
+    agents_md_path = target_dir / "AGENTS.md"
+    template = _read_data_file("templates/AGENTS.md")
+
+    if force and agents_md_path.exists():
+        agents_md_path.write_text(template)
+        print(f"Overwrote {agents_md_path.relative_to(target_dir)}")
+        return
+
+    if not agents_md_path.exists():
+        agents_md_path.write_text(template)
+        print(f"Created {agents_md_path.relative_to(target_dir)}")
+        return
+
+    existing = agents_md_path.read_text()
+    if _CONTENT_MARKER in existing:
+        print("AGENTS.md already contains CanvasTEKK routing rules")
+        return
+
+    separator = "\n\n" if not existing.endswith("\n") else "\n"
+    agents_md_path.write_text(existing + separator + template)
+    print(f"Updated {agents_md_path.relative_to(target_dir)}")
+
+
 def main() -> None:
     """CLI entry point for ``python -m canvastekk_workflow_sdk``.
 
     Supports:
       ``validate <module:attribute> [--json]`` — validate a node manifest.
+      ``init [--agents-md] [--force]`` — scaffold opencode skills into your project.
       ``--version`` — print SDK version.
       ``--help`` — print usage information.
     """
     args = sys.argv[1:]
 
     if not args or args[0] == "--help":
-        print("Usage: python -m canvastekk_workflow_sdk validate <module:attribute> [--json]")
+        print("Usage: python -m canvastekk_workflow_sdk <command> [options]")
         print()
         print("Commands:")
-        print("  validate    Validate a node manifest definition")
+        print("  validate <module:attribute> [--json]  Validate a node manifest definition")
+        print("  init [--agents-md] [--force]          Scaffold AI agent skills into your project")
         print()
         print("Options:")
-        print("  --json      Output validation results as JSON")
-        print("  --version   Show SDK version")
-        print("  --help      Show this help message")
+        print("  --json         Output validation results as JSON")
+        print("  --agents-md    Also create AGENTS.md with skill routing rules")
+        print("  --force        Overwrite existing files")
+        print("  --version      Show SDK version")
+        print("  --help         Show this help message")
         sys.exit(0)
 
     if args[0] == "--version":
         from canvastekk_workflow_sdk import __version__
 
         print(f"canvastekk-workflow-sdk {__version__}")
+        sys.exit(0)
+
+    if args[0] == "init":
+        include_agents_md = "--agents-md" in args
+        force = "--force" in args
+        _init_skills(Path.cwd(), include_agents_md=include_agents_md, force=force)
         sys.exit(0)
 
     if args[0] != "validate":

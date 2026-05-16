@@ -6,6 +6,9 @@ authors = ["BETEKK"]
 license = "Apache-2.0"
 readme = "README.md"
 packages = [{ include = "canvastekk_workflow_sdk" }]
+include = [
+    { path = "canvastekk_workflow_sdk/data/**/*", format = ["sdist", "wheel"] },
+]
 repository = "https://github.com/nus-cee/canvastekk-workflow-sdk"
 homepage = "https://github.com/nus-cee/canvastekk-workflow-sdk"
 

@@ -158,6 +158,52 @@ The validator checks:
 - File fields use `type: "string"` (not `"object"` or `"array"`)
 - Warns on file fields missing `x-accept` or `x-maxSizeBytes` extensions
 
+### AI Agent Setup
+
+The SDK bundles OpenCode-compatible skills that teach coding agents (opencode, Claude Code, Cursor, etc.) how to create CanvasTEKK workflow nodes correctly — without reading docs.
+
+**One-command setup** in your node project:
+
+```bash
+# Copy skills + create AGENTS.md with routing rules
+python -m canvastekk_workflow_sdk init --agents-md
+
+# Copy skills only (skip AGENTS.md)
+python -m canvastekk_workflow_sdk init
+
+# Overwrite existing files
+python -m canvastekk_workflow_sdk init --agents-md --force
+```
+
+This creates:
+
+```
+my-node-project/
+├── .opencode/skills/
+│   ├── canvastekk-node-builder/SKILL.md    # Primary creation skill
+│   └── canvastekk-node-patterns/SKILL.md   # Domain pattern library
+└── AGENTS.md                               # Skill routing + conventions
+```
+
+**Two bundled skills:**
+
+| Skill | Purpose |
+|-------|---------|
+| `canvastekk-node-builder` | Full SDK API reference, 7-step creation workflow, templates, validation checklist |
+| `canvastekk-node-patterns` | 10 complete code examples — segmentation, measurement, plane detection, inference, auth, middleware, webhooks, testing |
+
+**How it works:** After setup, your coding agent automatically discovers the skills. When you say *"create a workflow node that segments point clouds"*, the agent loads the relevant skill and follows the correct SDK patterns — proper schemas, file I/O, Dockerfile, tests — all generated correctly.
+
+**Global setup** (works across all projects):
+
+```bash
+# Run init in any directory, then copy skills to global config
+python -m canvastekk_workflow_sdk init
+cp -r .opencode/skills/canvastekk-node-builder ~/.config/opencode/skills/
+cp -r .opencode/skills/canvastekk-node-patterns ~/.config/opencode/skills/
+rm -rf .opencode
+```
+
 ## Examples
 
 | Example | Directory | Description |
