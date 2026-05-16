@@ -8,8 +8,11 @@ run information, output directory, and logging.
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from canvastekk_workflow_sdk.logging import get_node_logger
 
 if TYPE_CHECKING:
     from canvastekk_workflow_sdk.request import NodeExecutionRequest
@@ -32,11 +35,17 @@ class ExecutionContext:
         output_dir: Path | None = None,
     ) -> None:
         self._request = request
-        self._output_dir = output_dir or Path("/tmp") / request.run_id / request.node_id
+        if output_dir is not None:
+            self._output_dir = output_dir
+        else:
+            base_dir = os.environ.get("CANVASTEKK_OUTPUT_DIR")
+            if base_dir:
+                self._output_dir = Path(base_dir) / request.run_id / request.node_id
+            else:
+                self._output_dir = Path("/tmp") / request.run_id / request.node_id
         self._output_dir.mkdir(parents=True, exist_ok=True)
 
-        self._logger = logging.getLogger(f"node.{request.node_id}")
-        self._logger.setLevel(logging.INFO)
+        self._logger = get_node_logger(request.node_id)
 
         self._token_usage: dict[str, int] = {}
 

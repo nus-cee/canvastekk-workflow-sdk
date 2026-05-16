@@ -11,21 +11,21 @@ Creates a FastAPI application with standard node endpoints:
 
 from __future__ import annotations
 
-import json
+import asyncio
 import logging
-import os
-import tempfile
-import urllib.request
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from collections.abc import Sequence
+from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING, Any, Literal
 
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
-from starlette.datastructures import UploadFile
 
-from canvastekk_workflow_sdk.exceptions import NodeExecutionError, get_http_status_for_error
+from canvastekk_workflow_sdk.exceptions import NodeExecutionError, NodeTimeoutError, get_http_status_for_error
+from canvastekk_workflow_sdk.logging import configure_logging
+from canvastekk_workflow_sdk.middleware import SDKVersionMiddleware
 from canvastekk_workflow_sdk.request import NodeExecutionRequest
 from canvastekk_workflow_sdk.response import HealthResponse, NodeExecutionResponse
+from canvastekk_workflow_sdk.uploads import get_default_uploader
 
 if TYPE_CHECKING:
     from canvastekk_workflow_sdk.base import BaseNode
@@ -33,51 +33,19 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _coerce_form_value(key: str, value: str, schema: dict[str, Any]) -> Any:
-    """Coerce a string form value to the type declared in input_schema.
-
-    Args:
-        key: Field name (for error messages).
-        value: Raw string value from form data.
-        schema: The JSON Schema for this field from input_schema["properties"][key].
-
-    Returns:
-        The coerced value (int, float, bool, or original string).
-    """
-    field_type = schema.get("type", "string")
-    if field_type == "number":
-        return float(value)
-    if field_type == "integer":
-        return int(value)
-    if field_type == "boolean":
-        return value.lower() in ("true", "1", "yes")
-    return value
-
-
 def _upload_to_presigned(file_path: str, presigned_url: str) -> None:
     """Upload a local file to an S3 pre-signed PUT URL.
 
-    Uses urllib from stdlib — no boto3 or httpx dependency required.
+    Uses httpx for HTTP requests.
 
     Args:
         file_path: Path to the local file to upload.
         presigned_url: Pre-signed S3 PUT URL.
 
     Raises:
-        urllib.error.URLError: If the upload fails.
+        httpx.HTTPStatusError: If the upload fails.
     """
-    file_size = os.path.getsize(file_path)
-    with open(file_path, "rb") as f:
-        req = urllib.request.Request(
-            presigned_url,
-            data=f,
-            method="PUT",
-            headers={
-                "Content-Type": "application/octet-stream",
-                "Content-Length": str(file_size),
-            },
-        )
-        urllib.request.urlopen(req)
+    get_default_uploader().upload_file(file_path, presigned_url)
 
 
 def _upload_outputs_to_s3(
@@ -85,39 +53,16 @@ def _upload_outputs_to_s3(
     upload_urls: dict[str, str],
     file_output_fields: list[str],
 ) -> None:
-    """Upload binary output files to S3 via pre-signed URLs.
+    """Upload file output files to S3 via pre-signed URLs.
 
-    For each output field marked as binary, if the output value is a path
-    to an existing local file and an upload URL was provided, upload the
-    file to S3.
+    Delegates to the default ``S3PresignedUploader`` instance.
 
     Args:
         response: The node execution response containing output values.
         upload_urls: Mapping of output field name to pre-signed PUT URL.
         file_output_fields: Output field names that produce files.
     """
-    if not response.outputs:
-        return
-
-    for field_name in file_output_fields:
-        if field_name not in upload_urls:
-            continue
-
-        value = response.outputs.get(field_name)
-        if not isinstance(value, str):
-            continue
-
-        if not os.path.isfile(value):
-            logger.warning(f"Output field '{field_name}' value is not a local file: {value}")
-            continue
-
-        presigned_url = upload_urls[field_name]
-        try:
-            _upload_to_presigned(value, presigned_url)
-            logger.info(f"Uploaded output '{field_name}' to S3 ({os.path.getsize(value)} bytes)")
-        except Exception as e:
-            logger.error(f"Failed to upload output '{field_name}' to S3: {e}")
-            raise
+    get_default_uploader().upload_outputs(response, upload_urls, file_output_fields)
 
 
 _NODE_OPENAPI_TAGS: list[dict[str, str]] = [
@@ -129,7 +74,13 @@ _NODE_OPENAPI_TAGS: list[dict[str, str]] = [
 ]
 
 
-def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
+def create_node_app(
+    node: BaseNode,
+    *,
+    dependencies: Sequence[Any] | None = None,
+    extra_routes: list[APIRouter] | None = None,
+    **fastapi_kwargs: Any,
+) -> FastAPI:
     """
     Create a FastAPI application with standard node endpoints.
 
@@ -142,6 +93,10 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
 
     Args:
         node: The BaseNode instance to wrap
+        dependencies: Optional FastAPI dependencies applied to all endpoints
+            (e.g., ``[Depends(auth)]`` for request authentication).
+        extra_routes: Optional list of FastAPI APIRouter instances to mount
+            on the application.
         **fastapi_kwargs: Additional arguments passed to FastAPI constructor
             (e.g., title, version, docs_url)
 
@@ -149,8 +104,11 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
         FastAPI application instance
 
     Example:
+        from canvastekk_workflow_sdk.auth import NodeAuth
+
         node = EchoNode()
-        app = create_node_app(node)
+        auth = NodeAuth.api_key()
+        app = create_node_app(node, dependencies=[Depends(auth)])
 
         # Run with: uvicorn handler:app --port 8001
     """
@@ -162,13 +120,31 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
     }
     default_kwargs.update(fastapi_kwargs)
 
-    app = FastAPI(**default_kwargs)
+    # Merge node lifespan hooks with any user-provided lifespan
+    base_lifespan = default_kwargs.pop("lifespan", None)
 
-    @app.post(
+    @asynccontextmanager
+    async def _node_lifespan(app: Any) -> Any:
+        configure_logging()
+        async with node._lifespan():
+            if base_lifespan:
+                async with base_lifespan(app):
+                    yield
+            else:
+                yield
+
+    app = FastAPI(lifespan=_node_lifespan, **default_kwargs)
+    app.add_middleware(SDKVersionMiddleware)
+
+    router_dependencies = list(dependencies) if dependencies else []
+
+    router = APIRouter(dependencies=router_dependencies)
+
+    @router.post(
         "/execute",
         response_model=NodeExecutionResponse,
         summary="Execute node",
-        description="Execute the node with given inputs. Accepts JSON or multipart/form-data payloads.",
+        description="Execute the node with given inputs via JSON body.",
         tags=["Execution"],
         responses={
             200: {"description": "Node executed successfully"},
@@ -192,74 +168,37 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
     )
     async def execute(request: Request) -> NodeExecutionResponse:
         """
-        Execute the node with given inputs.
+        Execute the node with given inputs via JSON body.
 
-        Accepts both application/json and multipart/form-data payloads.
-
-        For JSON: standard NodeExecutionRequest body.
-        For multipart: form fields for run_id, node_id, scalar inputs,
-        and file uploads for binary inputs.
+        The engine sends presigned GET URLs for file input fields.
+        Outputs are uploaded via presigned PUT URLs after successful execution.
         """
-        content_type = request.headers.get("content-type", "")
-
-        if "multipart/form-data" in content_type:
-            form = await request.form()
-            properties = node.definition.input_schema.get("properties", {})
-            file_fields = set(node.definition.file_input_fields)
-
-            run_id = str(form.get("run_id", ""))
-            node_id = str(form.get("node_id", ""))
-            callback_url = form.get("callback_url")
-            output_upload_url_raw = form.get("output_upload_url")
-
-            # Parse output_upload_url from JSON string (dict serialized for form data)
-            output_upload_url: dict[str, str] | None = None
-            if output_upload_url_raw:
-                try:
-                    output_upload_url = json.loads(str(output_upload_url_raw))
-                except (json.JSONDecodeError, TypeError):
-                    logger.warning("Failed to parse output_upload_url from form data")
-
-            inputs: dict[str, Any] = {}
-            for field_name, field_value in form.items():
-                if field_name in ("run_id", "node_id", "callback_url", "output_upload_url"):
-                    continue
-
-                if isinstance(field_value, UploadFile):
-                    # Save uploaded file to temp directory
-                    tmp_dir = Path(tempfile.mkdtemp())
-                    filename = field_value.filename or field_name
-                    file_path = tmp_dir / filename
-                    content = await field_value.read()
-                    file_path.write_bytes(content)
-                    inputs[field_name] = str(file_path)
-                elif field_name in file_fields:
-                    # Binary field sent as raw string path (edge case)
-                    inputs[field_name] = str(field_value)
-                else:
-                    # Scalar field: coerce type from schema
-                    field_schema = properties.get(field_name, {})
-                    inputs[field_name] = _coerce_form_value(field_name, str(field_value), field_schema)
-
-            exec_request = NodeExecutionRequest(
-                run_id=run_id,
-                node_id=node_id,
-                inputs=inputs,
-                callback_url=str(callback_url) if callback_url else None,
-                output_upload_url=output_upload_url,
-            )
-        else:
-            # JSON body (backward compatible)
+        try:
             body = await request.json()
-            exec_request = NodeExecutionRequest(**body)
+        except Exception:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Invalid JSON body"},
+            )
+        exec_request = NodeExecutionRequest(**body)
 
-        response = node.run(exec_request)
+        timeout = node.definition.timeout_seconds
+        if timeout and timeout > 0:
+            try:
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(node.run, exec_request),
+                    timeout=timeout,
+                )
+            except TimeoutError:
+                raise NodeTimeoutError(timeout)
+        else:
+            response = await asyncio.to_thread(node.run, exec_request)
 
-        # Upload output files to S3 if upload URLs were provided
         if exec_request.output_upload_url and response.status == "pass":
             file_output_fields = node.definition.file_output_fields
             if file_output_fields:
-                _upload_outputs_to_s3(
+                await asyncio.to_thread(
+                    _upload_outputs_to_s3,
                     response,
                     exec_request.output_upload_url,
                     file_output_fields,
@@ -267,7 +206,7 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
 
         return response
 
-    @app.get(
+    @router.get(
         "/health",
         response_model=HealthResponse,
         summary="Health check",
@@ -285,7 +224,7 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
 
         # Determine overall status from checks
         if not checks:
-            status = "healthy"
+            status: Literal["healthy", "unhealthy", "degraded"] = "healthy"
         elif all(checks.values()):
             status = "healthy"
         elif any(checks.values()):
@@ -300,7 +239,7 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
             checks=checks,
         )
 
-    @app.get(
+    @router.get(
         "/manifest",
         summary="Node manifest",
         description="Returns the full NodeDefinition including identity, schemas, cost, retry policy, and metadata. "
@@ -317,12 +256,29 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
         - Cost (token_cost)
         - Retry defaults
         - Metadata (category, timeout, is_control_flow)
+        - SDK version (sdk_version — auto-injected)
+        - Node environment (mode — "dev" or "production", from CANVASTEKK_NODE_ENV)
 
         Used by registry for auto-discovery and manifest cross-checking.
+        The engine reads ``mode`` to decide routing and test behaviour.
         """
-        return JSONResponse(content=node.definition.to_dict())
+        import os
 
-    @app.get(
+        import canvastekk_workflow_sdk
+
+        content = node.definition.to_dict()
+        content["sdk_version"] = canvastekk_workflow_sdk.__version__
+        raw_env = os.environ.get("CANVASTEKK_NODE_ENV", "dev").lower()
+        if raw_env in ("dev", "development", "test"):
+            mode = "dev"
+        elif raw_env in ("uat", "staging"):
+            mode = "uat"
+        else:
+            mode = "production"
+        content["mode"] = mode
+        return JSONResponse(content=content)
+
+    @router.get(
         "/definition",
         deprecated=True,
         summary="Node definition (deprecated)",
@@ -337,7 +293,7 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
         """
         return RedirectResponse(url="/manifest", status_code=301)
 
-    @app.post(
+    @router.post(
         "/hook",
         summary="Webhook callback",
         description="Receives external triggers, progress updates, or async completion notifications. "
@@ -363,7 +319,7 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
             )
         return JSONResponse(content=result)
 
-    @app.get(
+    @router.get(
         "/metrics",
         summary="Execution metrics",
         description="Aggregated execution statistics including success rate, average duration, and token usage.",
@@ -377,6 +333,41 @@ def create_node_app(node: BaseNode, **fastapi_kwargs: object) -> FastAPI:
         average duration, and token usage.
         """
         return JSONResponse(content=node._metrics_collector.get_summary())
+
+    @router.get(
+        "/live",
+        summary="Liveness probe",
+        description="Returns 200 if the process is alive. Used by Kubernetes to decide whether to restart the pod.",
+        tags=["Health"],
+    )
+    async def liveness() -> JSONResponse:
+        """Liveness probe — always returns 200 if the process is running."""
+        return JSONResponse(content={"status": "alive"})
+
+    @router.get(
+        "/ready",
+        summary="Readiness probe",
+        description="Returns 200 when the node is ready to accept traffic. "
+        "Calls node.health_check(); returns 503 if any check fails.",
+        tags=["Health"],
+    )
+    async def readiness() -> JSONResponse:
+        """Readiness probe — returns 200 when the node can accept traffic."""
+        checks = node.health_check()
+        if not checks or all(checks.values()):
+            return JSONResponse(
+                content={"status": "ready", "node_id": node.definition.id, "checks": checks}
+            )
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "node_id": node.definition.id, "checks": checks},
+        )
+
+    app.include_router(router)
+
+    if extra_routes:
+        for extra_router in extra_routes:
+            app.include_router(extra_router)
 
     @app.exception_handler(NodeExecutionError)
     async def node_error_handler(request: object, exc: NodeExecutionError) -> JSONResponse:

@@ -26,6 +26,11 @@ class NodeExecutionError(Exception):
         self.details = details or {}
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize the error to a JSON-friendly dict.
+
+        Returns:
+            Dict with ``error_code``, ``message``, and ``details`` keys.
+        """
         return {
             "error_code": self.error_code,
             "message": self.message,
@@ -68,6 +73,11 @@ class NodeValidationError(NodeExecutionError):
         self.errors = errors or []
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize with an additional ``errors`` list.
+
+        Returns:
+            Dict with ``error_code``, ``message``, ``details``, and ``errors``.
+        """
         result = super().to_dict()
         result["errors"] = self.errors
         return result
@@ -110,14 +120,51 @@ class NodeConfigurationError(NodeExecutionError):
         )
 
 
+class NodeOutputValidationError(NodeExecutionError):
+    """Raised when output validation against JSON Schema fails."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        errors: list[dict[str, Any]] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code="OUTPUT_VALIDATION_ERROR",
+            details=details or {},
+        )
+        self.errors = errors or []
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize with an additional ``errors`` list.
+
+        Returns:
+            Dict with ``error_code``, ``message``, ``details``, and ``errors``.
+        """
+        result = super().to_dict()
+        result["errors"] = self.errors
+        return result
+
+
 ERROR_CODE_TO_HTTP_STATUS: dict[str, int] = {
     "EXECUTION_ERROR": 500,
     "TIMEOUT": 408,
     "VALIDATION_ERROR": 422,
+    "OUTPUT_VALIDATION_ERROR": 422,
     "IO_ERROR": 500,
     "CONFIGURATION_ERROR": 500,
 }
 
 
 def get_http_status_for_error(exc: NodeExecutionError) -> int:
+    """Map a :class:`NodeExecutionError` to the appropriate HTTP status code.
+
+    Args:
+        exc: A structured node execution error.
+
+    Returns:
+        Integer HTTP status code (defaults to 500 for unknown error codes).
+    """
     return ERROR_CODE_TO_HTTP_STATUS.get(exc.error_code, 500)

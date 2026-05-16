@@ -1,8 +1,13 @@
 """Tests for NodeDefinition and RetryConfig models."""
 
+import json
+import tempfile
+from pathlib import Path
+
 import pytest
 
 from canvastekk_workflow_sdk import NodeDefinition, RetryConfig
+from canvastekk_workflow_sdk.definition import export_definition
 
 
 class TestRetryConfig:
@@ -129,8 +134,8 @@ class TestNodeDefinition:
         assert definition.category == "control-flow"
         assert definition.token_cost == 0.0
 
-    def test_file_input_fields_with_binary(self) -> None:
-        """Test file_input_fields returns fields with format: binary."""
+    def test_file_input_fields_with_file(self) -> None:
+        """Test file_input_fields returns fields with format: file."""
         definition = NodeDefinition(
             id="upload-v1.0.0",
             name="upload",
@@ -140,17 +145,17 @@ class TestNodeDefinition:
             input_schema={
                 "type": "object",
                 "properties": {
-                    "point_cloud": {"type": "string", "format": "binary", "description": "Point cloud file"},
+                    "point_cloud": {"type": "string", "format": "file", "description": "Point cloud file"},
                     "threshold": {"type": "number", "default": 0.5},
-                    "mask": {"type": "string", "format": "binary"},
+                    "mask": {"type": "string", "format": "file"},
                 },
             },
             output_schema={"type": "object"},
         )
         assert sorted(definition.file_input_fields) == ["mask", "point_cloud"]
 
-    def test_file_input_fields_no_binary(self) -> None:
-        """Test file_input_fields returns empty list when no binary fields."""
+    def test_file_input_fields_no_file(self) -> None:
+        """Test file_input_fields returns empty list when no file fields."""
         definition = NodeDefinition(
             id="echo-v1.0.0",
             name="echo",
@@ -182,7 +187,7 @@ class TestNodeDefinition:
         assert definition.file_input_fields == []
 
     def test_has_file_inputs_true(self) -> None:
-        """Test has_file_inputs returns True when binary fields exist."""
+        """Test has_file_inputs returns True when file fields exist."""
         definition = NodeDefinition(
             id="upload-v1.0.0",
             name="upload",
@@ -192,7 +197,7 @@ class TestNodeDefinition:
             input_schema={
                 "type": "object",
                 "properties": {
-                    "file": {"type": "string", "format": "binary"},
+                    "file": {"type": "string", "format": "file"},
                 },
             },
             output_schema={"type": "object"},
@@ -200,7 +205,7 @@ class TestNodeDefinition:
         assert definition.has_file_inputs is True
 
     def test_has_file_inputs_false(self) -> None:
-        """Test has_file_inputs returns False when no binary fields."""
+        """Test has_file_inputs returns False when no file fields."""
         definition = NodeDefinition(
             id="echo-v1.0.0",
             name="echo",
@@ -215,34 +220,34 @@ class TestNodeDefinition:
         )
         assert definition.has_file_inputs is False
 
-    def test_file_output_fields_with_binary(self) -> None:
-        """Test file_output_fields returns fields with format: binary in output_schema."""
+    def test_file_output_fields_with_file(self) -> None:
+        """Test file_output_fields returns fields with format: file in output_schema."""
         definition = NodeDefinition(
             id="segmentation-v1.0.0",
             name="segmentation",
             version="1.0.0",
             title="Segmentation",
-            description="Produces binary output files",
+            description="Produces file output",
             input_schema={"type": "object"},
             output_schema={
                 "type": "object",
                 "properties": {
-                    "result_path": {"type": "string", "format": "binary"},
+                    "result_path": {"type": "string", "format": "file"},
                     "summary": {"type": "string"},
-                    "mask_path": {"type": "string", "format": "binary"},
+                    "mask_path": {"type": "string", "format": "file"},
                 },
             },
         )
         assert sorted(definition.file_output_fields) == ["mask_path", "result_path"]
 
-    def test_file_output_fields_no_binary(self) -> None:
-        """Test file_output_fields returns empty list when no binary output fields."""
+    def test_file_output_fields_no_file(self) -> None:
+        """Test file_output_fields returns empty list when no file output fields."""
         definition = NodeDefinition(
             id="echo-v1.0.0",
             name="echo",
             version="1.0.0",
             title="Echo",
-            description="No binary outputs",
+            description="No file outputs",
             input_schema={"type": "object"},
             output_schema={
                 "type": "object",
@@ -266,3 +271,458 @@ class TestNodeDefinition:
             output_schema={"type": "object"},
         )
         assert definition.file_output_fields == []
+
+    def test_file_input_fields_does_not_detect_binary(self) -> None:
+        """Test that file_input_fields does NOT detect format: binary (breaking change)."""
+        with pytest.raises(ValueError, match="format 'binary'"):
+            NodeDefinition(
+                id="old-v1.0.0",
+                name="old",
+                version="1.0.0",
+                title="Old",
+                description="Uses old binary format",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "file": {"type": "string", "format": "binary"},
+                    },
+                },
+                output_schema={"type": "object"},
+            )
+
+    def test_model_validator_rejects_binary_format(self) -> None:
+        """Test that NodeDefinition rejects format: binary at definition time."""
+        with pytest.raises(ValueError, match="no longer supported"):
+            NodeDefinition(
+                id="bad-v1.0.0",
+                name="bad",
+                version="1.0.0",
+                title="Bad",
+                description="Uses binary",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "x": {"type": "string", "format": "binary"},
+                    },
+                },
+                output_schema={"type": "object"},
+            )
+
+    def test_model_validator_rejects_file_with_wrong_type(self) -> None:
+        """Test that NodeDefinition rejects format: file with non-string type."""
+        with pytest.raises(ValueError, match="must have type 'string'"):
+            NodeDefinition(
+                id="bad-v1.0.0",
+                name="bad",
+                version="1.0.0",
+                title="Bad",
+                description="Wrong type",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "x": {"type": "object", "format": "file"},
+                    },
+                },
+                output_schema={"type": "object"},
+            )
+
+    def test_to_dict_contains_file_format(self) -> None:
+        """Test that to_dict() preserves format: file in schemas."""
+        definition = NodeDefinition(
+            id="echo-v1.0.0",
+            name="echo",
+            version="1.0.0",
+            title="Echo",
+            description="Test",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "file": {"type": "string", "format": "file"},
+                },
+            },
+            output_schema={
+                "type": "object",
+                "properties": {
+                    "result": {"type": "string", "format": "file"},
+                },
+            },
+        )
+        data = definition.to_dict()
+        assert data["input_schema"]["properties"]["file"]["format"] == "file"
+        assert data["output_schema"]["properties"]["result"]["format"] == "file"
+
+
+class TestExportDefinition:
+    """Tests for export_definition function (Phase 3)."""
+
+    def test_export_definition_creates_registry_compatible_json(self) -> None:
+        """Test that export_definition creates registry-compatible JSON."""
+        definition = NodeDefinition(
+            id="test-v1.0.0",
+            name="test",
+            version="1.0.0",
+            title="Test Node",
+            description="A test node",
+            input_schema={
+                "type": "object",
+                "properties": {"input": {"type": "string"}},
+            },
+            output_schema={
+                "type": "object",
+                "properties": {"output": {"type": "string"}},
+            },
+            category="utility",
+            timeout_seconds=60,
+            token_cost=5.0,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test.json"
+            result_path = export_definition(definition, output_path)
+
+            assert result_path == output_path
+            assert output_path.exists()
+
+            data = json.loads(output_path.read_text())
+            assert data["name"] == "test"
+            assert data["version"] == "1.0.0"
+            assert data["label"] == "Test Node"
+            assert data["description"] == "A test node"
+            assert data["category"] == "utility"
+            assert data["input_schema"] == definition.input_schema
+            assert data["output_schema"] == definition.output_schema
+            assert data["invoke_type"] == "http"
+            assert data["invoke_url"] is None
+            assert data["token_cost"] == 5.0
+            assert data["timeout_seconds"] == 60
+
+    def test_export_definition_maps_title_to_label(self) -> None:
+        """Test that title field is mapped to label."""
+        definition = NodeDefinition(
+            id="test-v1.0.0",
+            name="test",
+            version="1.0.0",
+            title="My Test Node",
+            description="Test",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test.json"
+            export_definition(definition, output_path)
+
+            data = json.loads(output_path.read_text())
+            assert "label" in data
+            assert data["label"] == "My Test Node"
+            assert "title" not in data
+
+    def test_export_definition_maps_default_retry_to_retry(self) -> None:
+        """Test that default_retry field is mapped to retry."""
+        retry_config = RetryConfig(
+            max_attempts=3,
+            initial_delay_ms=500,
+            backoff_multiplier=1.5,
+            max_delay_ms=10000,
+        )
+        definition = NodeDefinition(
+            id="test-v1.0.0",
+            name="test",
+            version="1.0.0",
+            title="Test",
+            description="Test",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+            default_retry=retry_config,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test.json"
+            export_definition(definition, output_path)
+
+            data = json.loads(output_path.read_text())
+            assert "retry" in data
+            assert data["retry"]["max_attempts"] == 3
+            assert data["retry"]["initial_delay_ms"] == 500
+            assert data["retry"]["backoff_multiplier"] == 1.5
+            assert data["retry"]["max_delay_ms"] == 10000
+
+    def test_export_definition_includes_all_required_fields(self) -> None:
+        """Test that export_definition includes all required fields."""
+        definition = NodeDefinition(
+            id="test-v1.0.0",
+            name="test",
+            version="1.0.0",
+            title="Test",
+            description="Test",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test.json"
+            export_definition(definition, output_path)
+
+            data = json.loads(output_path.read_text())
+            required_fields = [
+                "name",
+                "version",
+                "label",
+                "description",
+                "category",
+                "input_schema",
+                "output_schema",
+                "invoke_type",
+                "invoke_url",
+                "token_cost",
+                "timeout_seconds",
+                "retry",
+                "tags",
+                "styles",
+            ]
+            for field in required_fields:
+                assert field in data, f"Missing required field: {field}"
+
+    def test_export_definition_with_custom_invoke_type(self) -> None:
+        """Test that custom invoke_type is included."""
+        definition = NodeDefinition(
+            id="test-v1.0.0",
+            name="test",
+            version="1.0.0",
+            title="Test",
+            description="Test",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test.json"
+            export_definition(definition, output_path, invoke_type="lambda")
+
+            data = json.loads(output_path.read_text())
+            assert data["invoke_type"] == "lambda"
+
+    def test_export_definition_with_invoke_url(self) -> None:
+        """Test that invoke_url is included when provided."""
+        definition = NodeDefinition(
+            id="test-v1.0.0",
+            name="test",
+            version="1.0.0",
+            title="Test",
+            description="Test",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test.json"
+            export_definition(definition, output_path, invoke_url="https://node.example.com")
+
+            data = json.loads(output_path.read_text())
+            assert data["invoke_url"] == "https://node.example.com"
+
+    def test_export_definition_with_custom_tags(self) -> None:
+        """Test that custom tags are included."""
+        definition = NodeDefinition(
+            id="test-v1.0.0",
+            name="test",
+            version="1.0.0",
+            title="Test",
+            description="Test",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        )
+
+        tags = ["machine-learning", "segmentation", "point-cloud"]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test.json"
+            export_definition(definition, output_path, tags=tags)
+
+            data = json.loads(output_path.read_text())
+            assert data["tags"] == tags
+
+    def test_export_definition_with_custom_styles(self) -> None:
+        """Test that custom styles override definition.styles."""
+        definition = NodeDefinition(
+            id="test-v1.0.0",
+            name="test",
+            version="1.0.0",
+            title="Test",
+            description="Test",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        )
+
+        custom_styles = {"icon": "Brain", "color": "emerald"}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test.json"
+            export_definition(definition, output_path, styles=custom_styles)
+
+            data = json.loads(output_path.read_text())
+            assert data["styles"] == custom_styles
+
+    def test_export_definition_uses_definition_styles_when_not_overridden(self) -> None:
+        """Test that definition.styles is used when not overridden."""
+        from canvastekk_workflow_sdk.definition import NodeStyles
+
+        styles = NodeStyles(icon="Box", color="blue")
+        definition = NodeDefinition(
+            id="test-v1.0.0",
+            name="test",
+            version="1.0.0",
+            title="Test",
+            description="Test",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+            styles=styles,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test.json"
+            export_definition(definition, output_path)
+
+            data = json.loads(output_path.read_text())
+            assert data["styles"] == {"icon": "Box", "color": "blue"}
+
+    def test_export_definition_with_constraints(self) -> None:
+        """Test that constraints are included when provided."""
+        definition = NodeDefinition(
+            id="test-v1.0.0",
+            name="test",
+            version="1.0.0",
+            title="Test",
+            description="Test",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        )
+
+        constraints = {"gpu_required": True, "memory_gb": 8}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test.json"
+            export_definition(definition, output_path, constraints=constraints)
+
+            data = json.loads(output_path.read_text())
+            assert data["constraints"] == constraints
+
+    def test_export_definition_with_node_status(self) -> None:
+        """Test that node_status is included."""
+        definition = NodeDefinition(
+            id="test-v1.0.0",
+            name="test",
+            version="1.0.0",
+            title="Test",
+            description="Test",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test.json"
+            export_definition(definition, output_path, node_status="inactive")
+
+            data = json.loads(output_path.read_text())
+            assert data["node_status"] == "inactive"
+
+    def test_export_definition_creates_parent_directories(self) -> None:
+        """Test that export_definition creates parent directories."""
+        definition = NodeDefinition(
+            id="test-v1.0.0",
+            name="test",
+            version="1.0.0",
+            title="Test",
+            description="Test",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "nested" / "dir" / "test.json"
+            export_definition(definition, output_path)
+
+            assert output_path.exists()
+            data = json.loads(output_path.read_text())
+            assert data["name"] == "test"
+
+    def test_export_definition_writes_formatted_json(self) -> None:
+        """Test that export_definition writes formatted JSON with newlines."""
+        definition = NodeDefinition(
+            id="test-v1.0.0",
+            name="test",
+            version="1.0.0",
+            title="Test",
+            description="Test",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test.json"
+            export_definition(definition, output_path)
+
+            content = output_path.read_text()
+            assert content.endswith("\n")
+            assert "\n" in content
+
+
+class TestValidateFileInput:
+    """Tests for NodeDefinition.validate_file_input()."""
+
+    def _make_definition(self, **schema_overrides):
+        props = {
+            "file": {
+                "type": "string",
+                "format": "file",
+                "x-accept": [".txt", ".csv"],
+                "x-maxSizeBytes": 1000,
+            },
+        }
+        props.update(schema_overrides)
+        return NodeDefinition(
+            id="test-v1.0.0",
+            name="test",
+            version="1.0.0",
+            title="Test",
+            description="Test",
+            input_schema={"type": "object", "properties": props},
+            output_schema={"type": "object"},
+        )
+
+    def test_valid_file_passes(self, tmp_path) -> None:
+        definition = self._make_definition()
+        f = tmp_path / "data.txt"
+        f.write_text("hello")
+        definition.validate_file_input("file", f)
+
+    def test_rejects_wrong_extension(self, tmp_path) -> None:
+        definition = self._make_definition()
+        f = tmp_path / "data.json"
+        f.write_text("{}")
+        with pytest.raises(Exception, match="not allowed"):
+            definition.validate_file_input("file", f)
+
+    def test_rejects_oversized_file(self, tmp_path) -> None:
+        definition = self._make_definition()
+        f = tmp_path / "data.txt"
+        f.write_bytes(b"x" * 2000)
+        with pytest.raises(Exception, match="exceeds maximum"):
+            definition.validate_file_input("file", f)
+
+    def test_passes_when_no_extensions_defined(self, tmp_path) -> None:
+        props = {
+            "file": {
+                "type": "string",
+                "format": "file",
+            },
+        }
+        definition = NodeDefinition(
+            id="test-v1.0.0",
+            name="test",
+            version="1.0.0",
+            title="Test",
+            description="Test",
+            input_schema={"type": "object", "properties": props},
+            output_schema={"type": "object"},
+        )
+        f = tmp_path / "data.xyz"
+        f.write_text("anything")
+        definition.validate_file_input("file", f)
