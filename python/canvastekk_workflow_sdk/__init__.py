@@ -118,4 +118,4 @@ __all__ = [
     "register_node",
 ]
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
