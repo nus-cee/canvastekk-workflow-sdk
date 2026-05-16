@@ -41,22 +41,7 @@ Standard liveness and readiness endpoints for container orchestration:
 | `GET /live` | Liveness — "don't restart me" | Returns 200 if the process is alive. Kubernetes restarts the pod if this fails. |
 | `GET /ready` | Readiness — "send me traffic" | Returns 200 when ready to accept traffic. Calls `node.health_check()` if defined. Kubernetes removes the pod from service if this fails. |
 
-Kubernetes manifest example:
-
-```yaml
-livenessProbe:
-  httpGet:
-    path: /live
-    port: 8001
-  initialDelaySeconds: 5
-  periodSeconds: 10
-readinessProbe:
-  httpGet:
-    path: /ready
-    port: 8001
-  initialDelaySeconds: 5
-  periodSeconds: 10
-```
+See [`examples/deployment/`](./examples/deployment/) for Kubernetes manifest examples.
 
 ### Environment Mode
 
@@ -178,6 +163,7 @@ The validator checks:
 | Example | Directory | Description |
 |---------|-----------|-------------|
 | Echo Node | [`examples/echo_node/`](./examples/echo_node/) | Minimal node with file input/output, presigned URL download, and `validate_file_input()` usage |
+| Deployment | [`examples/deployment/`](./examples/deployment/) | Kubernetes manifest templates for deployers (not part of the SDK) |
 
 ## Environment Variables
 
@@ -187,7 +173,6 @@ The SDK reads the following environment variables. None are required by default 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CANVASTEKK_OUTPUT_DIR` | `/tmp` | Base directory for node output files. The SDK creates `{CANVASTEKK_OUTPUT_DIR}/{run_id}/{node_id}/` for each execution. Override in production to use a persistent volume. |
 | `CANVASTEKK_NODE_ENV` | `dev` | Node environment mode. `dev`/`development`/`test` → `"mode": "dev"`. `uat`/`staging` → `"mode": "uat"`. `production` → `"mode": "production"`. The engine reads this from `/manifest` to adjust routing and test behaviour. |
 | `CANVASTEKK_LOG_LEVEL` | `INFO` | SDK-wide log level: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. |
 | `CANVASTEKK_LOG_FORMAT` | `json` | `json` (one JSON object per line — CloudWatch/Datadog/ELK) or `text` (human-readable for local dev). |
@@ -209,25 +194,6 @@ Auth environment variables are only read when the corresponding `NodeAuth` backe
 | Variable | Description |
 |----------|-------------|
 | `CANVASTEKK_DEV_MODE` | Set to `true`, `1`, or `yes` to **bypass all authentication**. Useful for local development. **Never enable in production.** |
-
-### Docker / Kubernetes Example
-
-```yaml
-env:
-  - name: CANVASTEKK_NODE_ENV
-    value: production
-  - name: CANVASTEKK_OUTPUT_DIR
-    value: /data/outputs
-  - name: CANVASTEKK_LOG_LEVEL
-    value: info
-  - name: CANVASTEKK_LOG_FORMAT
-    value: json
-  - name: CANVASTEKK_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: node-secrets
-        key: api-key
-```
 
 ## Architecture Decisions
 

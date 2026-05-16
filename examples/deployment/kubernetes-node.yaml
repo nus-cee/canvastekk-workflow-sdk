@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: canvastekk-node
+  labels:
+    app: canvastekk-node
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: canvastekk-node
+  template:
+    metadata:
+      labels:
+        app: canvastekk-node
+    spec:
+      containers:
+        - name: canvastekk-node
+          image: your-registry/canvastekk-node:latest
+          ports:
+            - containerPort: 8001
+          env:
+            - name: CANVASTEKK_NODE_ENV
+              value: production
+            - name: CANVASTEKK_OUTPUT_DIR
+              value: /data/outputs
+            - name: CANVASTEKK_LOG_LEVEL
+              value: INFO
+            - name: CANVASTEKK_LOG_FORMAT
+              value: json
+            - name: CANVASTEKK_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: node-secrets
+                  key: api-key
+          volumeMounts:
+            - name: output-data
+              mountPath: /data/outputs
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: 8001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: output-data
+          persistentVolumeClaim:
+            claimName: node-output-pvc
