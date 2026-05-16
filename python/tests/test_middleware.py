@@ -3,7 +3,7 @@
 from typing import Any
 
 from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, NodeExecutionRequest
-from canvastekk_workflow_sdk.middleware import LoggingMiddleware, SDKVersionMiddleware, TimingMiddleware
+from canvastekk_workflow_sdk.middleware import LoggingMiddleware, TimingMiddleware
 
 
 class EchoNode(BaseNode):
