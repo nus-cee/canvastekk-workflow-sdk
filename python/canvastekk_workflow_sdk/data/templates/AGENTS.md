@@ -1,8 +1,6 @@
-@README.md
-
 ## CanvasTEKK Node Development
 
-This repo contains the CanvasTEKK Workflow SDK. When a user asks to create, scaffold, or build a workflow node, follow these routing rules:
+This project uses the CanvasTEKK Workflow SDK. When a user asks to create, scaffold, or build a workflow node, follow these routing rules:
 
 ### Skill Routing
 
@@ -28,12 +26,3 @@ When creating CanvasTEKK workflow nodes, always follow these rules:
 8. **Node IDs follow `{name}-v{version}` format**: e.g., `segment-v1.0.0`
 9. **Report progress with `context.report_progress()`**: At key stages (download, process, save)
 10. **Always generate Dockerfile + pyproject.toml + tests**: A complete node project includes all four files
-
-### SDK Development
-
-When working on the SDK itself (the `python/` directory):
-
-- Run `poetry run ruff check canvastekk_workflow_sdk/ tests/` before committing
-- Run `poetry run pytest -v` to verify all tests pass
-- The echo node at `examples/echo_node/` is the canonical reference implementation
-- SDK version is in `python/canvastekk_workflow_sdk/__init__.py` and `python/pyproject.toml`
