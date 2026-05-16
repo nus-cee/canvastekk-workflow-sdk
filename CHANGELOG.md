@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1] - 2026-05-16
+
+### Bug Fixes
+
+- Resolve ruff N812 and I001 lint errors in test files
+
+
 ## [0.5.0] - 2026-05-16
 
 ### Features
@@ -45,6 +52,7 @@ All notable changes to this project will be documented in this file.
 - Add workflow_dispatch and __init__.py bump to release workflow
 - Regenerate poetry.lock (remove python-multipart, promote httpx to main)
 - Configure git-cliff to not bump major on breaking for 0.x
+- **release**: Prepare v0.5.0
 
 
 ## [0.4.9] - 2026-05-14
