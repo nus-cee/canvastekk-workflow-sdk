@@ -9,10 +9,11 @@ subprocess.run.
 
 import json
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
-PYTHON_BIN = Path("/home/silentx/VSCODE/canvastekk-workflow-sdk/python/.venv/bin/python")
+PYTHON_BIN = Path(sys.executable)
 
 
 def test_validate_valid_definition():
