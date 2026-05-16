@@ -3,6 +3,7 @@
 from typing import Any
 
 from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, NodeExecutionRequest
+from canvastekk_workflow_sdk import __version__ as SDK_VERSION
 from canvastekk_workflow_sdk.middleware import LoggingMiddleware, TimingMiddleware
 
 
@@ -197,3 +198,14 @@ class TestTimingMiddleware:
             )
 
         assert len(timer.timings) == 5
+
+
+class TestSDKVersionMiddleware:
+    def test_adds_header(self) -> None:
+        from starlette.testclient import TestClient
+
+        from canvastekk_workflow_sdk.app import create_node_app
+
+        client = TestClient(create_node_app(EchoNode()))
+        response = client.get("/health")
+        assert response.headers["x-sdk-version"] == SDK_VERSION

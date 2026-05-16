@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import logging
 import os
-import urllib.request
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+import httpx
 
 if TYPE_CHECKING:
     from canvastekk_workflow_sdk.response import NodeExecutionResponse
@@ -40,7 +41,7 @@ class OutputUploader(Protocol):
 class S3PresignedUploader:
     """Upload binary outputs to S3 via pre-signed PUT URLs.
 
-    Uses only stdlib ``urllib`` — no ``boto3`` dependency required.
+    Uses httpx for HTTP requests.
 
     If an individual upload fails, the error is **logged but not raised**,
     so that one failed upload does not incorrectly report the entire
@@ -55,20 +56,11 @@ class S3PresignedUploader:
             presigned_url: Pre-signed S3 PUT URL.
 
         Raises:
-            urllib.error.URLError: If the upload fails.
+            httpx.HTTPStatusError: If the upload fails.
         """
-        file_size = os.path.getsize(file_path)
         with open(file_path, "rb") as f:
-            req = urllib.request.Request(
-                presigned_url,
-                data=f,
-                method="PUT",
-                headers={
-                    "Content-Type": "application/octet-stream",
-                    "Content-Length": str(file_size),
-                },
-            )
-            urllib.request.urlopen(req)
+            resp = httpx.put(presigned_url, content=f, headers={"Content-Type": "application/octet-stream"})
+            resp.raise_for_status()
 
     def upload_outputs(
         self,
@@ -110,4 +102,5 @@ _default_uploader = S3PresignedUploader()
 
 
 def get_default_uploader() -> S3PresignedUploader:
+    """Return the process-wide default :class:`S3PresignedUploader` instance."""
     return _default_uploader

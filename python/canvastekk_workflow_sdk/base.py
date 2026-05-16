@@ -105,7 +105,7 @@ class BaseNode(ABC):
 
         Args:
             inputs: Input values (already validated against input_schema).
-                    File inputs may be local paths (downloaded by SDK) or URLs.
+                    File inputs are presigned GET URLs provided by the engine. Node authors download them directly.
             context: Execution context providing run_id, node_id, output_dir, logger, etc.
 
         Returns:

@@ -26,6 +26,11 @@ class NodeExecutionError(Exception):
         self.details = details or {}
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize the error to a JSON-friendly dict.
+
+        Returns:
+            Dict with ``error_code``, ``message``, and ``details`` keys.
+        """
         return {
             "error_code": self.error_code,
             "message": self.message,
@@ -68,6 +73,11 @@ class NodeValidationError(NodeExecutionError):
         self.errors = errors or []
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize with an additional ``errors`` list.
+
+        Returns:
+            Dict with ``error_code``, ``message``, ``details``, and ``errors``.
+        """
         result = super().to_dict()
         result["errors"] = self.errors
         return result
@@ -128,6 +138,11 @@ class NodeOutputValidationError(NodeExecutionError):
         self.errors = errors or []
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize with an additional ``errors`` list.
+
+        Returns:
+            Dict with ``error_code``, ``message``, ``details``, and ``errors``.
+        """
         result = super().to_dict()
         result["errors"] = self.errors
         return result
@@ -144,4 +159,12 @@ ERROR_CODE_TO_HTTP_STATUS: dict[str, int] = {
 
 
 def get_http_status_for_error(exc: NodeExecutionError) -> int:
+    """Map a :class:`NodeExecutionError` to the appropriate HTTP status code.
+
+    Args:
+        exc: A structured node execution error.
+
+    Returns:
+        Integer HTTP status code (defaults to 500 for unknown error codes).
+    """
     return ERROR_CODE_TO_HTTP_STATUS.get(exc.error_code, 500)

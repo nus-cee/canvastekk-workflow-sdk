@@ -1,7 +1,5 @@
 """Tests for FastAPI app factory."""
 
-import io
-import json
 import os
 import tempfile
 from pathlib import Path
@@ -10,10 +8,11 @@ from unittest.mock import patch
 
 import pytest
 from fastapi import APIRouter, Depends, Request
+
+from canvastekk_workflow_sdk import __version__ as SDK_VERSION
 from fastapi.testclient import TestClient
 
 from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, create_node_app
-from canvastekk_workflow_sdk.app import _coerce_form_value
 
 
 class EchoNode(BaseNode):
@@ -52,7 +51,7 @@ class FileProcessingNode(BaseNode):
         input_schema={
             "type": "object",
             "properties": {
-                "point_cloud": {"type": "string", "format": "binary", "description": "Point cloud file"},
+                "point_cloud": {"type": "string", "format": "file", "description": "Point cloud file"},
                 "threshold": {"type": "number", "default": 0.5},
                 "iterations": {"type": "integer", "default": 10},
                 "verbose": {"type": "boolean", "default": False},
@@ -61,10 +60,10 @@ class FileProcessingNode(BaseNode):
         output_schema={
             "type": "object",
             "properties": {
-                "result_path": {"type": "string"},
-                "threshold_used": {"type": "number"},
+                "result_path": {"type": "string", "format": "file"},
             },
         },
+        token_cost=0.0,
     )
 
     def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
@@ -147,14 +146,6 @@ def degraded_client() -> TestClient:
     return TestClient(app)
 
 
-@pytest.fixture
-def file_proc_client() -> TestClient:
-    """Create test client for file processing node."""
-    node = FileProcessingNode()
-    app = create_node_app(node)
-    return TestClient(app)
-
-
 class TestExecuteEndpoint:
     """Tests for POST /execute endpoint."""
 
@@ -208,6 +199,24 @@ class TestExecuteEndpoint:
         assert data["error"] == "Intentional failure"
         assert data["error_type"] == "ValueError"
 
+    def test_execute_with_presigned_url_input(self) -> None:
+        """Test execution with presigned URL for file input field."""
+        node = FileProcessingNode()
+        client = TestClient(create_node_app(node))
+        response = client.post(
+            "/execute",
+            json={
+                "run_id": "run-1",
+                "node_id": "node-1",
+                "inputs": {
+                    "point_cloud": "https://s3.amazonaws.com/bucket/file.ply?signature=abc",
+                },
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "pass"
+
 
 class TestHealthEndpoint:
     """Tests for GET /health endpoint."""
@@ -231,99 +240,6 @@ class TestHealthEndpoint:
         assert data["checks"]["secondary"] is False
 
 
-class TestMultipartExecuteEndpoint:
-    """Tests for POST /execute with multipart/form-data."""
-
-    def test_multipart_with_file_upload(self, file_proc_client: TestClient) -> None:
-        """Test multipart execution with a file upload."""
-        file_content = b"x,y,z\n1.0,2.0,3.0\n4.0,5.0,6.0"
-        response = file_proc_client.post(
-            "/execute",
-            data={
-                "run_id": "test-run",
-                "node_id": "test-node",
-            },
-            files={
-                "point_cloud": ("cloud.csv", io.BytesIO(file_content), "text/csv"),
-            },
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "pass"
-        assert data["outputs"]["file_content"] == file_content.decode()
-        assert data["outputs"]["file_name"] == "cloud.csv"
-
-    def test_multipart_with_mixed_inputs(self, file_proc_client: TestClient) -> None:
-        """Test multipart execution with file + scalar inputs."""
-        file_content = b"point cloud data"
-        response = file_proc_client.post(
-            "/execute",
-            data={
-                "run_id": "test-run",
-                "node_id": "test-node",
-                "threshold": "0.75",
-                "iterations": "20",
-                "verbose": "true",
-            },
-            files={
-                "point_cloud": ("data.ply", io.BytesIO(file_content), "application/octet-stream"),
-            },
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "pass"
-        outputs = data["outputs"]
-        assert outputs["file_content"] == "point cloud data"
-        assert outputs["file_name"] == "data.ply"
-        assert outputs["threshold_used"] == 0.75
-        assert outputs["iterations_used"] == 20
-        assert outputs["verbose_used"] is True
-
-    def test_json_still_works(self, file_proc_client: TestClient) -> None:
-        """Test that JSON payloads still work (backward compatibility)."""
-        response = file_proc_client.post(
-            "/execute",
-            json={
-                "run_id": "test-run",
-                "node_id": "test-node",
-                "inputs": {"threshold": 0.9},
-            },
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "pass"
-        assert data["outputs"]["threshold_used"] == 0.9
-
-
-class TestCoerceFormValue:
-    """Tests for _coerce_form_value helper."""
-
-    def test_coerce_number(self) -> None:
-        assert _coerce_form_value("x", "3.14", {"type": "number"}) == 3.14
-
-    def test_coerce_integer(self) -> None:
-        assert _coerce_form_value("x", "42", {"type": "integer"}) == 42
-
-    def test_coerce_boolean_true(self) -> None:
-        assert _coerce_form_value("x", "true", {"type": "boolean"}) is True
-
-    def test_coerce_boolean_yes(self) -> None:
-        assert _coerce_form_value("x", "yes", {"type": "boolean"}) is True
-
-    def test_coerce_boolean_one(self) -> None:
-        assert _coerce_form_value("x", "1", {"type": "boolean"}) is True
-
-    def test_coerce_boolean_false(self) -> None:
-        assert _coerce_form_value("x", "false", {"type": "boolean"}) is False
-
-    def test_coerce_string(self) -> None:
-        assert _coerce_form_value("x", "hello", {"type": "string"}) == "hello"
-
-    def test_coerce_no_type(self) -> None:
-        """No type in schema defaults to string passthrough."""
-        assert _coerce_form_value("x", "hello", {}) == "hello"
-
-
 class TestDefinitionEndpoint:
     """Tests for GET /definition endpoint."""
 
@@ -344,14 +260,14 @@ class TestDefinitionEndpoint:
 
 
 class FileOutputNode(BaseNode):
-    """Node that produces binary file outputs for S3 upload testing."""
+    """Node that produces file outputs for S3 upload testing."""
 
     definition = NodeDefinition(
         id="file-output-v1.0.0",
         name="file-output",
         version="1.0.0",
         title="File Output",
-        description="Produces a binary file output",
+        description="Produces a file output",
         input_schema={
             "type": "object",
             "properties": {"input_data": {"type": "string"}},
@@ -359,7 +275,7 @@ class FileOutputNode(BaseNode):
         output_schema={
             "type": "object",
             "properties": {
-                "result_path": {"type": "string", "format": "binary"},
+                "result_path": {"type": "string", "format": "file"},
                 "summary": {"type": "string"},
             },
         },
@@ -386,43 +302,13 @@ class FailingOutputNode(BaseNode):
         output_schema={
             "type": "object",
             "properties": {
-                "result_path": {"type": "string", "format": "binary"},
+                "result_path": {"type": "string", "format": "file"},
             },
         },
     )
 
     def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
         raise RuntimeError("Node execution failed")
-
-
-class FileInOutNode(BaseNode):
-    """Node with both binary input and binary output for multipart + S3 upload tests."""
-
-    definition = NodeDefinition(
-        id="file-inout-v1.0.0",
-        name="file-inout",
-        version="1.0.0",
-        title="File In/Out",
-        description="Accepts file input and produces file output",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "point_cloud": {"type": "string", "format": "binary"},
-            },
-        },
-        output_schema={
-            "type": "object",
-            "properties": {
-                "result_path": {"type": "string", "format": "binary"},
-            },
-        },
-    )
-
-    def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
-        fd, path = tempfile.mkstemp(suffix=".ply")
-        os.close(fd)
-        Path(path).write_bytes(b"output data")
-        return {"result_path": path}
 
 
 @pytest.fixture
@@ -510,35 +396,6 @@ class TestOutputUploadToS3:
             # No upload should happen
             mock_upload.assert_not_called()
 
-    def test_multipart_output_upload_url_parsed_from_json(self) -> None:
-        """When output_upload_url is sent as JSON string in multipart form data, it's correctly parsed."""
-        node = FileInOutNode()
-        client = TestClient(create_node_app(node))
-        upload_urls = {"result_path": "https://s3.amazonaws.com/presigned-put"}
-
-        file_content = b"point cloud data"
-        with patch("canvastekk_workflow_sdk.uploads.S3PresignedUploader.upload_file") as mock_upload:
-            response = client.post(
-                "/execute",
-                data={
-                    "run_id": "run-1",
-                    "node_id": "node-1",
-                    "output_upload_url": json.dumps(upload_urls),
-                },
-                files={
-                    "point_cloud": ("cloud.ply", io.BytesIO(file_content), "application/octet-stream"),
-                },
-            )
-
-            assert response.status_code == 200
-            data = response.json()
-            assert data["status"] == "pass"
-
-            # Verify upload was triggered (parsed from JSON string in form data)
-            mock_upload.assert_called_once()
-            call_args = mock_upload.call_args
-            assert call_args[0][1] == "https://s3.amazonaws.com/presigned-put"
-
 
 class TestAsyncExecution:
     """Tests for async execution with asyncio.to_thread (Phase 1)."""
@@ -576,25 +433,6 @@ class TestAsyncExecution:
         assert data["outputs"] is None
         assert data["error"] == "Intentional failure"
         assert data["error_type"] == "ValueError"
-
-    def test_multipart_with_async_wrapper_and_s3_upload(self, file_proc_client: TestClient) -> None:
-        """Test that multipart requests work with async wrapper and S3 upload."""
-        file_content = b"point cloud async test"
-        with patch("canvastekk_workflow_sdk.uploads.S3PresignedUploader.upload_file"):
-            response = file_proc_client.post(
-                "/execute",
-                data={
-                    "run_id": "run-1",
-                    "node_id": "node-1",
-                    "output_upload_url": '{"result_path": "https://s3.amazonaws.com/upload"}',
-                },
-                files={
-                    "point_cloud": ("cloud.ply", io.BytesIO(file_content), "application/octet-stream"),
-                },
-            )
-            assert response.status_code == 200
-            data = response.json()
-            assert data["status"] == "pass"
 
 
 class TestDependencyInjection:
@@ -965,3 +803,135 @@ class TestIntegrationLifecycle:
             assert no_auth_response.status_code == 401
 
         assert shutdown_called
+
+
+class TestManifestEndpoint:
+    def test_manifest_includes_sdk_version(self, echo_client: TestClient) -> None:
+        response = echo_client.get("/manifest")
+        assert response.status_code == 200
+        data = response.json()
+        assert "sdk_version" in data
+        assert data["sdk_version"] == SDK_VERSION
+
+    def test_manifest_includes_node_fields(self, echo_client: TestClient) -> None:
+        response = echo_client.get("/manifest")
+        data = response.json()
+        assert data["name"] == "echo"
+        assert data["version"] == "1.0.0"
+        assert data["id"] == "echo-v1.0.0"
+        assert "input_schema" in data
+        assert "output_schema" in data
+
+    def test_manifest_defaults_to_dev_mode(self, echo_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("CANVASTEKK_NODE_ENV", raising=False)
+        response = echo_client.get("/manifest")
+        assert response.json()["mode"] == "dev"
+
+    def test_manifest_dev_mode(self, echo_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CANVASTEKK_NODE_ENV", "dev")
+        response = echo_client.get("/manifest")
+        assert response.json()["mode"] == "dev"
+
+    def test_manifest_development_mode(self, echo_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CANVASTEKK_NODE_ENV", "development")
+        response = echo_client.get("/manifest")
+        assert response.json()["mode"] == "dev"
+
+    def test_manifest_staging_mode(self, echo_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CANVASTEKK_NODE_ENV", "staging")
+        response = echo_client.get("/manifest")
+        assert response.json()["mode"] == "uat"
+
+    def test_manifest_uat_mode(self, echo_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CANVASTEKK_NODE_ENV", "uat")
+        response = echo_client.get("/manifest")
+        assert response.json()["mode"] == "uat"
+
+    def test_manifest_production_mode(self, echo_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CANVASTEKK_NODE_ENV", "production")
+        response = echo_client.get("/manifest")
+        assert response.json()["mode"] == "production"
+
+    def test_manifest_unknown_env_maps_to_production(self, echo_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CANVASTEKK_NODE_ENV", "qa")
+        response = echo_client.get("/manifest")
+        assert response.json()["mode"] == "production"
+
+
+class TestSDKVersionHeader:
+    def test_sdk_version_header_on_execute(self, echo_client: TestClient) -> None:
+        response = echo_client.post(
+            "/execute",
+            json={"run_id": "r1", "node_id": "n1", "inputs": {"message": "hi"}},
+        )
+        assert response.headers.get("x-sdk-version") == SDK_VERSION
+
+    def test_sdk_version_header_on_manifest(self, echo_client: TestClient) -> None:
+        response = echo_client.get("/manifest")
+        assert response.headers.get("x-sdk-version") == SDK_VERSION
+
+    def test_sdk_version_header_on_health(self, echo_client: TestClient) -> None:
+        response = echo_client.get("/health")
+        assert response.headers.get("x-sdk-version") == SDK_VERSION
+
+
+class TestLivenessProbe:
+    def test_liveness_returns_200(self, echo_client: TestClient) -> None:
+        response = echo_client.get("/live")
+        assert response.status_code == 200
+        assert response.json() == {"status": "alive"}
+
+
+class TestReadinessProbe:
+    def test_readiness_returns_200_when_no_checks(self, echo_client: TestClient) -> None:
+        response = echo_client.get("/ready")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ready"
+        assert data["checks"] == {}
+
+    def test_readiness_returns_200_when_all_checks_pass(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class HealthyNode(BaseNode):
+            definition = NodeDefinition(
+                id="healthy-v1",
+                name="healthy",
+                version="1.0.0",
+                title="Healthy",
+                description="Always healthy",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+            )
+
+            def health_check(self) -> dict[str, Any]:
+                return {"db": True, "cache": True}
+
+            def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+                return {}
+
+        client = TestClient(create_node_app(HealthyNode()))
+        response = client.get("/ready")
+        assert response.status_code == 200
+        assert response.json()["status"] == "ready"
+
+    def test_readiness_returns_503_when_check_fails(self) -> None:
+        class UnhealthyNode(BaseNode):
+            definition = NodeDefinition(
+                id="unhealthy-v1",
+                name="unhealthy",
+                version="1.0.0",
+                title="Unhealthy",
+                description="Always unhealthy",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+            )
+
+            def health_check(self) -> dict[str, Any]:
+                return {"db": True, "model": False}
+
+            def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+                return {}
+
+        client = TestClient(create_node_app(UnhealthyNode()))
+        response = client.get("/ready")
+        assert response.status_code == 503
+        assert response.json()["status"] == "not_ready"

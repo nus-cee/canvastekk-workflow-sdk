@@ -43,7 +43,7 @@ poetry run pytest -v
 | FastAPI | ^0.135 | HTTP framework |
 | Pydantic | ^2.12 | Data validation |
 | Uvicorn | ^0.43 | ASGI server |
-| python-multipart | >=0.0.22 | File upload support |
+| httpx | ^0.28 | HTTP client (presigned URL downloads, registry, uploads) |
 
 ### Dev Dependencies
 
@@ -51,7 +51,6 @@ poetry run pytest -v
 |---------|---------|---------|
 | pytest | ^9.0 | Test runner |
 | pytest-asyncio | ^1.3 | Async test support |
-| httpx | ^0.28 | HTTP client for testing |
 | ruff | ^0.15 | Linter & formatter |
 
 ---
@@ -128,7 +127,7 @@ curl http://localhost:8001/health
 
 # Node manifest
 curl http://localhost:8001/manifest
-# {"id":"uppercase-v1.0.0","name":"uppercase","version":"1.0.0",...}
+# {"id":"uppercase-v1.0.0","name":"uppercase","version":"1.0.0","sdk_version":"0.6.0","mode":"dev",...}
 
 # Execute the node
 curl -X POST http://localhost:8001/execute \
@@ -294,7 +293,7 @@ app = FileProcessorNode().create_app()
 
 ### Declaring File Inputs
 
-Mark input fields as binary using `"format": "binary"` in `input_schema`:
+Mark input fields as files using `"format": "file"` in `input_schema`. Use `x-accept` and `x-maxSizeBytes` extensions to specify accepted file types and size limits:
 
 ```python
 definition = NodeDefinition(
@@ -306,7 +305,13 @@ definition = NodeDefinition(
     input_schema={
         "type": "object",
         "properties": {
-            "point_cloud": {"type": "string", "format": "binary", "description": "Point cloud file"},
+            "point_cloud": {
+                "type": "string",
+                "format": "file",
+                "description": "Point cloud file",
+                "x-accept": [".ply", ".pcd"],
+                "x-maxSizeBytes": 52428800,  # 50 MB
+            },
             "confidence": {"type": "number", "default": 0.5},
         },
     },
@@ -319,42 +324,56 @@ definition = NodeDefinition(
 )
 ```
 
-When the SDK detects `format: binary`, the field becomes a file input (`definition.file_input_fields` returns `["point_cloud"]`).
+When the SDK detects `format: "file"`, the field becomes a file input (`definition.file_input_fields` returns `["point_cloud"]`).
 
-### Receiving Files via Multipart/Form-Data
+### How File Inputs Work
 
-When a client sends `multipart/form-data` to `POST /execute`, the SDK:
-
-1. Saves uploaded files to a temporary directory
-2. Replaces the field value with the local file path
-3. Coerces scalar fields to their declared types (`number` → `float`, `integer` → `int`, `boolean` → `bool`)
-
-```bash
-curl -X POST http://localhost:8001/execute \
-  -F "run_id=run-1" \
-  -F "node_id=node-1" \
-  -F "confidence=0.8" \
-  -F "point_cloud=@/path/to/scan.ply"
-```
-
-Inside `execute()`, `inputs["point_cloud"]` will be a local file path:
+When the workflow engine executes your node, file input values are presigned GET URLs (strings). The node downloads them:
 
 ```python
+import httpx
+
 def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-    from pathlib import Path
+    # File input is a presigned GET URL
+    presigned_url = inputs["point_cloud"]
 
-    cloud_path = Path(inputs["point_cloud"])
-    cloud_data = cloud_path.read_bytes()
+    # Download the file
+    response = httpx.get(presigned_url)
+    response.raise_for_status()
 
-    confidence = inputs.get("confidence", 0.5)  # already coerced to float
+    cloud_data = response.content
+    confidence = inputs.get("confidence", 0.5)
 
     # ... process the point cloud ...
     return {"instances": "42 objects found"}
 ```
 
+### Runtime Validation
+
+After downloading, validate against the constraints defined in `x-accept` and `x-maxSizeBytes`:
+
+```python
+def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+    import httpx
+    from pathlib import Path
+
+    presigned_url = inputs["point_cloud"]
+    response = httpx.get(presigned_url)
+    response.raise_for_status()
+
+    # Validate file type and size
+    definition.validate_file_input(
+        field_name="point_cloud",
+        data=response.content,
+    )
+
+    # Process the validated data
+    # ...
+```
+
 ### Writing Output Files
 
-Use `context.output_dir` and `context.output_path(filename)` for output files:
+Use `context.output_path(filename)` for output files:
 
 ```python
 def execute(self, inputs: dict, context: ExecutionContext) -> dict:
@@ -367,12 +386,9 @@ def execute(self, inputs: dict, context: ExecutionContext) -> dict:
 
 `context.output_dir` is created automatically at `/tmp/{run_id}/{node_id}`.
 
-### S3 Output Upload
+### Output Upload
 
-To have output files uploaded to S3 automatically, declare binary output fields and provide `output_upload_url`:
-
-1. Mark output field as binary: `"format": "binary"` in `output_schema`
-2. Client sends `output_upload_url` mapping field names to pre-signed S3 PUT URLs
+The engine provides presigned PUT URLs via the `output_upload_url` field in the request. The SDK uploads file outputs automatically after successful execution:
 
 ```python
 definition = NodeDefinition(
@@ -384,13 +400,13 @@ definition = NodeDefinition(
     input_schema={
         "type": "object",
         "properties": {
-            "input_file": {"type": "string", "format": "binary"},
+            "input_file": {"type": "string", "format": "file"},
         },
     },
     output_schema={
         "type": "object",
         "properties": {
-            "converted": {"type": "string", "format": "binary"},
+            "converted": {"type": "string", "format": "file"},
             "metadata": {"type": "object"},
         },
     },
@@ -403,23 +419,94 @@ Client request:
 {
   "run_id": "run-1",
   "node_id": "node-1",
-  "inputs": {"input_file": "/tmp/upload.ply"},
+  "inputs": {
+    "input_file": "https://s3.amazonaws.com/bucket/input.ply?X-Amz-Signature=..."
+  },
   "output_upload_url": {
     "converted": "https://s3.amazonaws.com/bucket/result.ply?X-Amz-Signature=..."
   }
 }
 ```
 
-The SDK uploads the file at `outputs["converted"]` to the pre-signed URL after a successful execution. If execution fails (`status: "fail"`), the upload is skipped.
+After successful execution, the SDK uploads the file at `outputs["converted"]` to the pre-signed PUT URL. If execution fails (`status: "fail"`), the upload is skipped.
 
-For multipart/form-data, pass `output_upload_url` as a JSON string:
+### Complete Example
+
+```python
+from canvastekk_workflow_sdk import BaseNode, NodeDefinition, ExecutionContext
+import httpx
+
+
+class PointCloudSegmenter(BaseNode):
+    definition = NodeDefinition(
+        id="segment-v1.0.0",
+        name="segment",
+        version="1.0.0",
+        title="Segment",
+        description="Segments a point cloud",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "point_cloud": {
+                    "type": "string",
+                    "format": "file",
+                    "description": "Point cloud file",
+                    "x-accept": [".ply", ".pcd"],
+                    "x-maxSizeBytes": 52428800,
+                },
+                "confidence": {"type": "number", "default": 0.5},
+            },
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "instances": {"type": "string", "format": "file"},
+                "count": {"type": "integer"},
+            },
+        },
+    )
+
+    def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+        # Download file from presigned URL
+        response = httpx.get(inputs["point_cloud"])
+        response.raise_for_status()
+
+        # Validate file type and size
+        self.definition.validate_file_input(
+            field_name="point_cloud",
+            data=response.content,
+        )
+
+        # Process the point cloud
+        confidence = inputs.get("confidence", 0.5)
+        result_data = b"Processed point cloud data..."
+
+        # Write output file
+        output_file = context.output_path("instances.ply")
+        output_file.write_bytes(result_data)
+
+        return {
+            "instances": str(output_file),
+            "count": 42,
+        }
+
+
+app = PointCloudSegmenter().create_app()
+```
+
+### Testing with Presigned URLs
 
 ```bash
 curl -X POST http://localhost:8001/execute \
-  -F "run_id=run-1" \
-  -F "node_id=node-1" \
-  -F 'output_upload_url={"converted":"https://s3.amazonaws.com/bucket/result.ply?..."}' \
-  -F "input_file=@/path/to/file.ply"
+  -H "Content-Type: application/json" \
+  -d '{
+    "run_id": "run-1",
+    "node_id": "node-1",
+    "inputs": {
+      "point_cloud": "https://s3.amazonaws.com/bucket/scan.ply?X-Amz-Signature=...",
+      "confidence": 0.8
+    }
+  }'
 ```
 
 ---
@@ -533,7 +620,6 @@ Test the full HTTP stack including multipart uploads:
 
 ```python
 # tests/test_my_node_api.py
-import io
 from fastapi.testclient import TestClient
 from my_node import app
 
@@ -584,12 +670,20 @@ def test_metrics_endpoint():
     assert data["total_executions"] >= 1
 
 
-def test_multipart_file_upload():
-    file_content = b"x,y,z\n1.0,2.0,3.0"
+def test_presigned_url_file_input():
+    # Simulate a presigned URL GET endpoint (mock server would provide this)
+    presigned_url = "https://s3.amazonaws.com/bucket/scan.ply?X-Amz-Signature=..."
+
     response = client.post(
         "/execute",
-        data={"run_id": "test-run", "node_id": "test-node"},
-        files={"point_cloud": ("cloud.csv", io.BytesIO(file_content), "text/csv")},
+        json={
+            "run_id": "test-run",
+            "node_id": "test-node",
+            "inputs": {
+                "point_cloud": presigned_url,
+                "confidence": 0.8,
+            },
+        },
     )
     assert response.status_code == 200
     data = response.json()
@@ -822,6 +916,157 @@ Response from `POST /execute`:
 
 ---
 
+## Utilities
+
+### CLI Manifest Validation
+
+Validate your node definition offline without starting the server:
+
+```bash
+# Basic validation
+python -m canvastekk_workflow_sdk validate my_node.handler:definition
+
+# Structured JSON output (for CI)
+python -m canvastekk_workflow_sdk validate my_node.handler:definition --json
+```
+
+The validator checks:
+- All file fields use `format: "file"` (rejects `format: "binary"`)
+- File fields have `type: "string"` (not `"object"` or `"array"`)
+- Warns on file fields missing `x-accept` or `x-maxSizeBytes` extensions
+- Reports detected file input/output fields and their constraints
+
+Exit codes: `0` = valid, `1` = validation errors.
+
+### Echo Node Example
+
+A minimal reference node with file I/O is available at [`examples/echo_node/`](../examples/echo_node/).
+
+It demonstrates:
+- File input/output with `format: "file"` and `x-*` extensions
+- Downloading from presigned URLs with `httpx`
+- Runtime validation with `validate_file_input()`
+- CLI manifest validation
+- Unit and integration tests
+- Docker build
+
+---
+
+## Structured Logging
+
+The SDK provides production-ready structured logging out of the box. It is configured automatically at app startup — no setup required.
+
+### How It Works
+
+`create_node_app()` calls `configure_logging()` during startup. This reads two environment variables:
+
+| Variable | Default | Values | Description |
+|----------|---------|--------|-------------|
+| `CANVASTEKK_LOG_FORMAT` | `json` | `json`, `text` | `json` = one JSON object per line (CloudWatch/Datadog/ELK). `text` = human-readable for local dev. |
+| `CANVASTEKK_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` | SDK-wide log level. |
+
+### JSON Format (default)
+
+```json
+{"timestamp":"2026-05-16T12:34:56.789000+00:00","level":"INFO","logger":"node.ff-1","message":"Processing started","run_id":"run-abc123","node_id":"ff-1"}
+```
+
+Every log line includes:
+- `timestamp` — ISO 8601 UTC
+- `level` — `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
+- `logger` — logger name (e.g. `node.ff-1`, `canvastekk_workflow_sdk.app`)
+- `message` — the log message
+- `run_id` / `node_id` — correlation IDs (when set by middleware)
+- Any extra fields passed via `extra={}`
+
+### Text Format (local dev)
+
+```
+2026-05-16 12:34:56 [   INFO] node.ff-1: Processing started
+[run-abc1] 2026-05-16 12:34:57 [   INFO] node.ff-1: Downloaded 1.2 MB
+```
+
+Set `CANVASTEKK_LOG_FORMAT=text` for human-readable output during development.
+
+### Using the Logger in `execute()`
+
+The `ExecutionContext` provides a pre-configured logger:
+
+```python
+def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+    context.logger.info("Processing started")
+
+    # With extra structured fields
+    context.logger.info("File downloaded", extra={
+        "file_size_bytes": len(data),
+        "file_name": "scan.ply",
+    })
+
+    # → JSON: {"message":"File downloaded","file_size_bytes":1200000,"file_name":"scan.ply",...}
+
+    return {"result": "done"}
+```
+
+### Getting a Logger Outside `execute()`
+
+Use `get_node_logger()` for background tasks or setup code:
+
+```python
+from canvastekk_workflow_sdk import get_node_logger
+
+logger = get_node_logger("my-node")
+
+logger.info("Background task started")
+logger.error("Upload failed", extra={"url": presigned_url})
+```
+
+### Manual Configuration (tests, scripts)
+
+Call `configure_logging()` explicitly when running outside the HTTP server:
+
+```python
+from canvastekk_workflow_sdk import configure_logging
+import logging
+
+# Use defaults (reads env vars)
+configure_logging()
+
+# Or override explicitly
+configure_logging(level=logging.DEBUG, fmt="text")
+```
+
+### Deployment Examples
+
+**Docker (production):**
+```dockerfile
+ENV CANVASTEKK_LOG_FORMAT=json
+ENV CANVASTEKK_LOG_LEVEL=INFO
+```
+
+**Docker (local dev):**
+```dockerfile
+ENV CANVASTEKK_LOG_FORMAT=text
+ENV CANVASTEKK_LOG_LEVEL=DEBUG
+```
+
+**Kubernetes:**
+```yaml
+env:
+  - name: CANVASTEKK_LOG_FORMAT
+    value: json
+  - name: CANVASTEKK_LOG_LEVEL
+    value: info
+```
+
+**CloudWatch Logs Insights query example:**
+```
+filter @message like /"level":"ERROR"/
+| parse @message '{"message":"*","level":"*","run_id":"*"}' as msg, lvl, rid
+| stats count() by msg
+```
+
+---
+
 ## Advanced: Middleware, Health Checks, and Hooks
 
 ### Custom Middleware
@@ -967,12 +1212,16 @@ Every node exposes these endpoints automatically:
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/execute` | POST | Run the node (JSON or multipart/form-data) |
+| `/execute` | POST | Run the node (JSON body) |
 | `/health` | GET | Health check |
-| `/manifest` | GET | Node self-description (NodeDefinition) |
+| `/manifest` | GET | Node self-description (NodeDefinition) + `sdk_version` + `mode` |
 | `/definition` | GET | Deprecated, redirects to `/manifest` |
 | `/hook` | POST | Webhook/callback handler (override `hook()`) |
 | `/metrics` | GET | Execution metrics summary |
+| `/live` | GET | Liveness probe — returns 200 if the process is alive (Kubernetes) |
+| `/ready` | GET | Readiness probe — returns 200 if ready to accept traffic (Kubernetes) |
+
+All SDK responses include the `X-SDK-Version` header (e.g. `X-SDK-Version: 0.6.0`).
 
 ---
 
@@ -1026,7 +1275,9 @@ git commit -m "feat: new endpoint with BREAKING CHANGE"   # major bump
 ## Roadmap
 
 - [ ] JWT authentication
-- [ ] Signed URL handling for file inputs/outputs
+- [x] Signed URL handling for file inputs/outputs (v0.6.0 — presigned URL pipeline)
 - [ ] Idempotency checks (S3 output exists?)
 - [ ] Async callback support
-- [ ] Input validation against JSON Schema
+- [x] Input validation against JSON Schema (Draft7Validator)
+- [x] CLI manifest validation (v0.6.0 — `python -m canvastekk_workflow_sdk validate`)
+- [x] File field constraint validation (v0.6.0 — `validate_file_input()` with `x-accept`, `x-maxSizeBytes`)

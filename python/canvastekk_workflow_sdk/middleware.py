@@ -4,12 +4,19 @@ Middleware System
 Provides a plugin architecture for pre/post execute hooks.
 Node authors can register middleware to add cross-cutting concerns
 (logging, metrics, auth, etc.) without modifying core execution logic.
+
+Also provides ``SDKVersionMiddleware`` which injects the ``X-SDK-Version``
+response header on all HTTP responses.
 """
 
 from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 
 if TYPE_CHECKING:
     from canvastekk_workflow_sdk.context import ExecutionContext
@@ -172,3 +179,19 @@ class TimingMiddleware:
                 "error_type": type(error).__name__,
             }
         )
+
+
+class SDKVersionMiddleware(BaseHTTPMiddleware):
+    """Inject ``X-SDK-Version`` header into every HTTP response.
+
+    Industry-standard pattern (Stripe, AWS SDKs, Twilio) that enables
+    engine-side version-aware routing and debugging without parsing
+    the response body.
+    """
+
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
+        response = await call_next(request)
+        import canvastekk_workflow_sdk
+
+        response.headers["X-SDK-Version"] = canvastekk_workflow_sdk.__version__
+        return response
