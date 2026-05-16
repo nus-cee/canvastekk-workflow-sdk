@@ -2,11 +2,61 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-05-16
+
+### Features
+
+- **sdk**: V0.5.0 — public-endpoint hardening with auth, timeout enforcement, and DX improvements (#14)
+- Migrate format:binary to format:file, remove multipart, add CLI validate (**BREAKING**)
+- Add industry-standard SDK enhancements, structured logging, env vars docs
+- Migrate format:binary to format:file, add SDK enhancements (DA-894) (**BREAKING**)
+
+
+### Bug Fixes
+
+- Address code review findings — P0/P1/P2 fixes
+- Use sys.executable instead of hardcoded .venv path in test_main.py (CI fix)
+- Revert manual version bump to 0.4.9, let release workflow handle bump
+
+
+### Documentation
+
+- **plan**: Add PLAN-DA-894 for format:binary → format:file migration
+- **plan**: Revise PLAN-DA-894 with architecture review findings
+- **plan**: Add end-to-end file flow, release coordination, and reference docs
+- **plan**: Simplify file flow to CDS-only — remove MODE A browser upload
+- **plan**: Add file field validation helper and x-* extensions
+- **plan**: Hard break — remove dual detection, promote httpx
+- **plan**: Add manifest format enforcement via Pydantic validator
+- **plan**: Add full workflow diagram and manifest enforcement diagram
+- **plan**: Clarify HTTP client choice in publisher, add CLI validate utility
+- **plan+readme+example**: Add utilities section, architecture decisions, echo node example
+- Add logging section to Python README, expand root README features, update plan checkboxes
+
+
+### Style
+
+- Remove unused SDKVersionMiddleware import in test_middleware
+- Fix ruff N812 and I001 in test files — use __version__ directly
+
+
+### Miscellaneous Tasks
+
+- Add workflow_dispatch and __init__.py bump to release workflow
+- Regenerate poetry.lock (remove python-multipart, promote httpx to main)
+- Configure git-cliff to not bump major on breaking for 0.x
+
+
 ## [0.4.9] - 2026-05-14
 
 ### Bug Fixes
 
 - **release**: Upload Python SDK as release assets instead of GitHub Packages
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.4.9
 
 
 ## [0.4.8] - 2026-05-14
