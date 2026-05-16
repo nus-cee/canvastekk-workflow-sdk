@@ -219,10 +219,11 @@ This is a **coordinated cross-repo release** (per DA-889 design decisions). Engi
  ║         │                                                                    ║
  ║         ▼  (passes validation)                                                ║
  ║  ┌─────────────────────────────────────────┐                                 ║
- ║  │  GET /manifest → JSON response           │                                ║
- ║  │  {                                       │                                ║
- ║  │    "name": "floor-flatness-assessment",  │                                ║
- ║  │    "version": "1.0.0",                   │                                ║
+  ║  │  GET /manifest → JSON response           │                                ║
+  ║  │  {                                       │                                ║
+  ║  │    "sdk_version": "0.6.0",  ◄────────────┼── auto-injected by SDK         ║
+  ║  │    "name": "floor-flatness-assessment",  │                                ║
+  ║  │    "version": "1.0.0",                   │                                ║
  ║  │    "input_schema": {                     │                                ║
  ║  │      "properties": {                     │                                ║
  ║  │        "pcd_path": {                     │                                ║
@@ -458,6 +459,9 @@ This is a **coordinated cross-repo release** (per DA-889 design decisions). Engi
 - [ ] README reflects JSON-only, presigned URL file handling
 - [ ] README documents `x-*` file field extensions and download patterns
 - [ ] `export_definition()` and `/manifest` correctly expose `format: "file"` schemas for engine consumption
+- [ ] `/manifest` response includes `sdk_version` field (auto-injected, not set by node authors)
+- [ ] All SDK HTTP responses include `X-SDK-Version` header
+- [ ] `/ready` and `/live` endpoints available for Kubernetes health probes
 
 ---
 
@@ -472,12 +476,89 @@ This is a **coordinated cross-repo release** (per DA-889 design decisions). Engi
 
 ---
 
+## Phase 9: Industry-Standard SDK Enhancements
+
+### 9.1 Add `sdk_version` to `/manifest` response
+- [ ] Inject `sdk_version` field into the `/manifest` JSON response (read from `canvastekk_workflow_sdk.__version__`)
+- [ ] The engine reads `/manifest` for auto-discovery — it needs to know which SDK version built the node (e.g. `0.6.0` enforces `format:"file"`)
+- [ ] `sdk_version` is NOT part of `NodeDefinition` — it's injected at the endpoint level so node authors never set it manually
+- [ ] Update `/manifest` endpoint in `app.py` to merge `sdk_version` into the response dict
+- [ ] Update manifest diagram in this plan to show `sdk_version` field
+
+### 9.2 Add `X-SDK-Version` response header
+- [ ] Add middleware that injects `X-SDK-Version: <version>` header on all SDK responses
+- [ ] Industry standard (Stripe, AWS SDKs, Twilio all include SDK version in HTTP headers)
+- [ ] Enables engine-side version-aware routing and debugging without parsing the body
+- [ ] Implement as a Starlette `BaseHTTPMiddleware` in `middleware.py`
+
+### 9.3 Add readiness and liveness probe endpoints (K8s standard)
+- [ ] Add `GET /ready` endpoint — returns 200 when the app is ready to accept traffic (post-startup)
+- [ ] Add `GET /live` endpoint — returns 200 while the app process is alive (always returns 200 unless crashed)
+- [ ] Kubernetes convention: `/live` = "don't restart me", `/ready` = "send me traffic"
+- [ ] `/live` returns `{"status": "alive"}` — always succeeds if the process is running
+- [ ] `/ready` calls `node.health_check()` and returns 200 only if all checks pass (or if no checks defined = ready by default)
+- [ ] Document in root README and Python README
+- [ ] Wire into `create_node_app()` alongside existing endpoints
+
+### 9.4 Update acceptance criteria
+- [ ] `/manifest` response includes `sdk_version` field with current SDK version
+ - [ ] All SDK responses include `X-SDK-Version` header
+ - [ ] `/ready` and `/live` endpoints available for K8s deployments
+ - [ ] All new endpoints tested
+ - [ ] Root README.md documents all SDK environment variables with required/default columns
+ - [ ] Dev-mode bypass warning clearly documented
+
+---
+
+## Phase 10: Environment Variables Documentation
+
+### 10.1 Document all SDK environment variables in root README.md
+- [ ] Add "Environment Variables" section to root README.md
+- [ ] Cover all env vars the SDK reads (node authors need to set these):
+
+| Variable | Layer | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `CANVASTEKK_OUTPUT_DIR` | Core | No | `/tmp` | Base directory for node output files. SDK creates `{CANVASTEKK_OUTPUT_DIR}/{run_id}/{node_id}/` |
+| `CANVASTEKK_DEV_MODE` | Auth | No | — | Set to `true`, `1`, or `yes` to bypass all authentication. **Never use in production** |
+| `CANVASTEKK_API_KEY` | Auth (Layer 1) | If using `NodeAuth.api_key()` | — | Shared secret for API key authentication. Sent as `X-API-Key` header |
+| `CANVASTEKK_JWT_SECRET` | Auth (Layer 2) | If using `NodeAuth.jwt()` | — | HMAC secret for HS256 JWT token validation |
+| `CANVASTEKK_KEYCLOAK_SERVER_URL` | Auth (Layer 3) | If using `NodeAuth.keycloak()` | — | Keycloak base URL (e.g., `https://keycloak.example.com`) |
+| `CANVASTEKK_KEYCLOAK_REALM` | Auth (Layer 3) | If using `NodeAuth.keycloak()` | — | Keycloak realm name |
+| `CANVASTEKK_KEYCLOAK_AUDIENCE` | Auth (Layer 3) | No | — | Expected `aud` claim in Keycloak JWT tokens |
+| `CANVASTEKK_LOG_LEVEL` | Logging | No | `INFO` | SDK-wide log level: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
+| `CANVASTEKK_LOG_FORMAT` | Logging | No | `json` | `json` (CloudWatch/Datadog/ELK) or `text` (local dev) |
+
+- [ ] Document dev-mode bypass warning
+- [ ] Document that auth env vars are only read when the corresponding auth backend is configured
+- [ ] Add example `.env` file or Docker env snippet
+- [ ] Cross-reference from Python README
+
+### 10.2 Add structured JSON logging module (`logging.py`)
+- [ ] Create `canvastekk_workflow_sdk/logging.py` with:
+  - `StructuredJsonFormatter` — emits one JSON object per line with `timestamp`, `level`, `logger`, `message`, `run_id`, `node_id`
+  - `HumanReadableFormatter` — plain text for local dev with correlation IDs
+  - `configure_logging()` — reads `CANVASTEKK_LOG_LEVEL` and `CANVASTEKK_LOG_FORMAT` env vars
+  - `get_node_logger()` — returns a logger named `node.<node_id>`
+- [ ] Benefits for consumers:
+  - **AWS Lambda**: JSON logs are auto-parsed by CloudWatch Logs Insights — query by `run_id`, `node_id`, `level`
+  - **EC2/ECS**: JSON logs feed into CloudWatch Agent, Datadog, ELK without custom parsing
+  - **Local dev**: Set `CANVASTEKK_LOG_FORMAT=text` for human-readable output
+  - **Correlation**: `run_id` and `node_id` propagated automatically by `LoggingMiddleware`
+- [ ] Wire `configure_logging()` into `create_node_app()` lifespan (auto-called at startup)
+- [ ] Update `context.py` to use `get_node_logger()` instead of raw `logging.getLogger()`
+- [ ] Export `configure_logging`, `get_node_logger`, `StructuredJsonFormatter` from `__init__.py`
+- [ ] Add `tests/test_logging.py` — test JSON formatter, text formatter, env var parsing, correlation IDs
+
+---
+
 ## Modified Files
 
 | File | Changes |
 | --- | --- |
 | `python/canvastekk_workflow_sdk/definition.py` | Hard switch to `format: "file"`, add `validate_file_input()` helper, updated docstrings |
-| `python/canvastekk_workflow_sdk/app.py` | Remove multipart handling, remove `_coerce_form_value`, remove dead imports |
+| `python/canvastekk_workflow_sdk/app.py` | Inject `sdk_version` into /manifest, add /ready and /live endpoints |
+| `python/canvastekk_workflow_sdk/middleware.py` | Add `SDKVersionMiddleware` for `X-SDK-Version` header |
+| `README.md` | Document readiness/liveness probes, SDK version in manifest |
 | `python/canvastekk_workflow_sdk/base.py` | Update execute() docstring for presigned URL flow |
 | `python/canvastekk_workflow_sdk/__main__.py` | CLI `validate` subcommand for offline manifest validation |
 | `examples/echo_node/handler.py` | Minimal echo node with file I/O |

@@ -73,7 +73,17 @@ class NodeExecutionResponse(BaseModel):
         duration_ms: int = 0,
         token_usage: float = 0.0,
     ) -> NodeExecutionResponse:
-        """Create a successful response."""
+        """Create a successful execution response.
+
+        Args:
+            execution_id: Unique identifier for this execution.
+            outputs: Output values matching the node's output_schema.
+            duration_ms: Execution time in milliseconds.
+            token_usage: Tokens consumed during execution.
+
+        Returns:
+            A :class:`NodeExecutionResponse` with ``status="pass"``.
+        """
         return cls(
             execution_id=execution_id,
             status="pass",
@@ -91,7 +101,18 @@ class NodeExecutionResponse(BaseModel):
         duration_ms: int = 0,
         error_code: str | None = None,
     ) -> NodeExecutionResponse:
-        """Create a failure response."""
+        """Create a failed execution response.
+
+        Args:
+            execution_id: Unique identifier for this execution.
+            error: Human-readable error message.
+            error_type: Exception class name (e.g. ``"NodeTimeoutError"``).
+            duration_ms: Execution time before failure.
+            error_code: Structured error code (e.g. ``"TIMEOUT"``).
+
+        Returns:
+            A :class:`NodeExecutionResponse` with ``status="fail"``.
+        """
         return cls(
             execution_id=execution_id,
             status="fail",

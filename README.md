@@ -87,6 +87,56 @@ The validator checks:
 |---------|-----------|-------------|
 | Echo Node | [`examples/echo_node/`](./examples/echo_node/) | Minimal node with file input/output, presigned URL download, and `validate_file_input()` usage |
 
+## Environment Variables
+
+The SDK reads the following environment variables. None are required by default — nodes work out of the box with no configuration.
+
+### Core
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CANVASTEKK_OUTPUT_DIR` | `/tmp` | Base directory for node output files. The SDK creates `{CANVASTEKK_OUTPUT_DIR}/{run_id}/{node_id}/` for each execution. Override in production to use a persistent volume. |
+| `CANVASTEKK_NODE_ENV` | `dev` | Node environment mode. `dev`/`development`/`test` → `"mode": "dev"`. `uat`/`staging` → `"mode": "uat"`. `production` → `"mode": "production"`. The engine reads this from `/manifest` to adjust routing and test behaviour. |
+| `CANVASTEKK_LOG_LEVEL` | `INFO` | SDK-wide log level: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. |
+| `CANVASTEKK_LOG_FORMAT` | `json` | `json` (one JSON object per line — CloudWatch/Datadog/ELK) or `text` (human-readable for local dev). |
+
+### Authentication
+
+Auth environment variables are only read when the corresponding `NodeAuth` backend is configured. If no auth is configured, none of these are needed.
+
+| Variable | Auth Layer | Description |
+|----------|-----------|-------------|
+| `CANVASTEKK_API_KEY` | API Key (`NodeAuth.api_key()`) | Shared secret validated against the `X-API-Key` request header. |
+| `CANVASTEKK_JWT_SECRET` | JWT / HMAC (`NodeAuth.jwt()`) | Signing secret for HS256 JWT token validation. Requires `PyJWT` package. |
+| `CANVASTEKK_KEYCLOAK_SERVER_URL` | Keycloak (`NodeAuth.keycloak()`) | Keycloak base URL (e.g., `https://keycloak.example.com`). Requires `PyJWT` + `cryptography`. |
+| `CANVASTEKK_KEYCLOAK_REALM` | Keycloak | Keycloak realm name. |
+| `CANVASTEKK_KEYCLOAK_AUDIENCE` | Keycloak | Expected `aud` claim in JWT tokens. Optional — skip if tokens don't include `aud`. |
+
+### Dev Mode
+
+| Variable | Description |
+|----------|-------------|
+| `CANVASTEKK_DEV_MODE` | Set to `true`, `1`, or `yes` to **bypass all authentication**. Useful for local development. **Never enable in production.** |
+
+### Docker / Kubernetes Example
+
+```yaml
+env:
+  - name: CANVASTEKK_NODE_ENV
+    value: production
+  - name: CANVASTEKK_OUTPUT_DIR
+    value: /data/outputs
+  - name: CANVASTEKK_LOG_LEVEL
+    value: info
+  - name: CANVASTEKK_LOG_FORMAT
+    value: json
+  - name: CANVASTEKK_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: node-secrets
+        key: api-key
+```
+
 ## Architecture Decisions
 
 Key decisions recorded as the SDK evolves. See [`PLANS/PLAN-DA-894.md`](./PLANS/PLAN-DA-894.md) for full context on the file pipeline migration.

@@ -32,6 +32,7 @@ class ExecutionMetric:
     timestamp: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize the metric to a JSON-friendly dictionary."""
         return {
             "run_id": self.run_id,
             "node_id": self.node_id,
@@ -60,12 +61,25 @@ class MetricsCollector:
         self._lock = threading.Lock()
 
     def record(self, metric: ExecutionMetric) -> None:
+        """Append a metric, evicting the oldest entry when capacity is reached."""
         with self._lock:
             self._metrics.append(metric)
             if len(self._metrics) > self._max_records:
                 self._metrics = self._metrics[-self._max_records :]
 
     def get_summary(self, last_n: int | None = None) -> dict[str, Any]:
+        """Return aggregated statistics over the collected metrics.
+
+        Args:
+            last_n: If set, only consider the most recent *last_n* records.
+
+        Returns:
+            A dict with keys ``total_executions``, ``pass_count``,
+            ``fail_count``, ``success_rate``, ``avg_duration_ms``,
+            ``min_duration_ms``, ``max_duration_ms``, and
+            ``total_token_usage``.  Returns ``{"total_executions": 0}``
+            when no metrics have been recorded.
+        """
         with self._lock:
             metrics = list(self._metrics[-last_n:]) if last_n else list(self._metrics)
         if not metrics:
@@ -87,5 +101,6 @@ class MetricsCollector:
         }
 
     def clear(self) -> None:
+        """Remove all collected metrics."""
         with self._lock:
             self._metrics.clear()

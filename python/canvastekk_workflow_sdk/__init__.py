@@ -64,7 +64,8 @@ from canvastekk_workflow_sdk.exceptions import (
     NodeTimeoutError,
     NodeValidationError,
 )
-from canvastekk_workflow_sdk.middleware import LoggingMiddleware, NodeMiddleware, TimingMiddleware
+from canvastekk_workflow_sdk.logging import StructuredJsonFormatter, configure_logging, get_node_logger
+from canvastekk_workflow_sdk.middleware import LoggingMiddleware, NodeMiddleware, SDKVersionMiddleware, TimingMiddleware
 from canvastekk_workflow_sdk.observability import ExecutionMetric, MetricsCollector
 from canvastekk_workflow_sdk.registry import RegistrationError, register_node
 from canvastekk_workflow_sdk.request import NodeExecutionRequest
@@ -103,13 +104,17 @@ __all__ = [
     "PlaneSet",
     "Point3D",
     "RetryConfig",
+    "RegistrationError",
+    "SDKVersionMiddleware",
+    "StructuredJsonFormatter",
     "S3PresignedUploader",
     "TimingMiddleware",
-    "RegistrationError",
     "create_multi_node_app",
     "create_node_app",
+    "configure_logging",
     "export_definition",
     "get_default_uploader",
+    "get_node_logger",
     "register_node",
 ]
 

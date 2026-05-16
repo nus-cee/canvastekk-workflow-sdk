@@ -21,6 +21,8 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from canvastekk_workflow_sdk.exceptions import NodeExecutionError, NodeTimeoutError, get_http_status_for_error
+from canvastekk_workflow_sdk.logging import configure_logging
+from canvastekk_workflow_sdk.middleware import SDKVersionMiddleware
 from canvastekk_workflow_sdk.request import NodeExecutionRequest
 from canvastekk_workflow_sdk.response import HealthResponse, NodeExecutionResponse
 from canvastekk_workflow_sdk.uploads import get_default_uploader
@@ -123,6 +125,7 @@ def create_node_app(
 
     @asynccontextmanager
     async def _node_lifespan(app: Any) -> Any:
+        configure_logging()
         async with node._lifespan():
             if base_lifespan:
                 async with base_lifespan(app):
@@ -131,6 +134,7 @@ def create_node_app(
                 yield
 
     app = FastAPI(lifespan=_node_lifespan, **default_kwargs)
+    app.add_middleware(SDKVersionMiddleware)
 
     router_dependencies = list(dependencies) if dependencies else []
 
@@ -252,10 +256,27 @@ def create_node_app(
         - Cost (token_cost)
         - Retry defaults
         - Metadata (category, timeout, is_control_flow)
+        - SDK version (sdk_version — auto-injected)
+        - Node environment (mode — "dev" or "production", from CANVASTEKK_NODE_ENV)
 
         Used by registry for auto-discovery and manifest cross-checking.
+        The engine reads ``mode`` to decide routing and test behaviour.
         """
-        return JSONResponse(content=node.definition.to_dict())
+        import os
+
+        import canvastekk_workflow_sdk
+
+        content = node.definition.to_dict()
+        content["sdk_version"] = canvastekk_workflow_sdk.__version__
+        raw_env = os.environ.get("CANVASTEKK_NODE_ENV", "dev").lower()
+        if raw_env in ("dev", "development", "test"):
+            mode = "dev"
+        elif raw_env in ("uat", "staging"):
+            mode = "uat"
+        else:
+            mode = "production"
+        content["mode"] = mode
+        return JSONResponse(content=content)
 
     @router.get(
         "/definition",
@@ -312,6 +333,35 @@ def create_node_app(
         average duration, and token usage.
         """
         return JSONResponse(content=node._metrics_collector.get_summary())
+
+    @router.get(
+        "/live",
+        summary="Liveness probe",
+        description="Returns 200 if the process is alive. Used by Kubernetes to decide whether to restart the pod.",
+        tags=["Health"],
+    )
+    async def liveness() -> JSONResponse:
+        """Liveness probe — always returns 200 if the process is running."""
+        return JSONResponse(content={"status": "alive"})
+
+    @router.get(
+        "/ready",
+        summary="Readiness probe",
+        description="Returns 200 when the node is ready to accept traffic. "
+        "Calls node.health_check(); returns 503 if any check fails.",
+        tags=["Health"],
+    )
+    async def readiness() -> JSONResponse:
+        """Readiness probe — returns 200 when the node can accept traffic."""
+        checks = node.health_check()
+        if not checks or all(checks.values()):
+            return JSONResponse(
+                content={"status": "ready", "node_id": node.definition.id, "checks": checks}
+            )
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "node_id": node.definition.id, "checks": checks},
+        )
 
     app.include_router(router)
 
