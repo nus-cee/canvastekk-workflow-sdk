@@ -4,6 +4,19 @@
 
 This repo contains the CanvasTEKK Workflow SDK. When a user asks to create, scaffold, or build a workflow node, follow these routing rules:
 
+### Critical Documentation Structure
+
+The repo has a layered documentation architecture. These files must be kept in sync when the SDK changes:
+
+| File | Purpose | Audience |
+|------|---------|----------|
+| `docs/EXTERNAL-AUTHOR-GUIDE.md` | **Primary external-facing guide** — build, deploy, and register nodes end-to-end. This is the single source of truth for third-party node authors. Any change to the node creation workflow, registration API, or CI/CD patterns must be reflected here. | External authors |
+| `python/README.md` | Full Python SDK API reference | SDK users |
+| `README.md` | Repo overview, features, architecture | Everyone |
+| `examples/echo_node/` | Canonical reference implementation | All developers |
+
+When updating SDK APIs (especially `register_node()`, `BaseNode`, `NodeDefinition`, or auth), always check if `docs/EXTERNAL-AUTHOR-GUIDE.md` needs corresponding updates.
+
 ### Skill Routing
 
 | User Request Pattern | Skill to Load | When |
