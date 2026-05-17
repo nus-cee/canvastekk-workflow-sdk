@@ -1,6 +1,5 @@
 """Tests for authentication module (Phase 2)."""
 
-
 import pytest
 from fastapi import HTTPException
 
@@ -350,11 +349,7 @@ class TestNodeAuthFactory:
         assert isinstance(auth, _JwtAuth)
 
     def test_jwt_factory_with_custom_params(self) -> None:
-        auth = NodeAuth.jwt(
-            secret_env_var="MY_SECRET",
-            algorithm="HS512",
-            audience="my-app"
-        )
+        auth = NodeAuth.jwt(secret_env_var="MY_SECRET", algorithm="HS512", audience="my-app")
         assert isinstance(auth, _JwtAuth)
         assert auth._secret_env_var == "MY_SECRET"
         assert auth._algorithm == "HS512"
@@ -366,10 +361,7 @@ class TestNodeAuthFactory:
 
     def test_keycloak_factory_with_custom_params(self) -> None:
         auth = NodeAuth.keycloak(
-            server_url="https://auth.example.com",
-            realm="my-realm",
-            audience="my-app",
-            algorithm="RS512"
+            server_url="https://auth.example.com", realm="my-realm", audience="my-app", algorithm="RS512"
         )
         assert isinstance(auth, _KeycloakAuth)
         assert auth._server_url == "https://auth.example.com"

@@ -583,11 +583,7 @@ class TestExtraRoutes:
             return {"test": "data"}
 
         node = EchoNode()
-        app = create_node_app(
-            node,
-            dependencies=[Depends(custom_dependency)],
-            extra_routes=[extra_router]
-        )
+        app = create_node_app(node, dependencies=[Depends(custom_dependency)], extra_routes=[extra_router])
         client = TestClient(app)
 
         response = client.get("/health")
@@ -636,7 +632,9 @@ class TestApiKeyAuthIntegration:
         response = client.get("/metrics", headers=headers)
         assert response.status_code == 200
 
-        response = client.post("/execute", json={"run_id": "r1", "node_id": "n1", "inputs": {"message": "test"}}, headers=headers)
+        response = client.post(
+            "/execute", json={"run_id": "r1", "node_id": "n1", "inputs": {"message": "test"}}, headers=headers
+        )
         assert response.status_code == 200
 
         response = client.post("/hook", json={"event": "test"}, headers=headers)
@@ -658,7 +656,9 @@ class TestApiKeyAuthIntegration:
         response = client.get("/health", headers=headers)
         assert response.status_code == 401
 
-        response = client.post("/execute", json={"run_id": "r1", "node_id": "n1", "inputs": {"message": "test"}}, headers=headers)
+        response = client.post(
+            "/execute", json={"run_id": "r1", "node_id": "n1", "inputs": {"message": "test"}}, headers=headers
+        )
         assert response.status_code == 401
 
     def test_api_key_auth_rejects_missing_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -850,7 +850,9 @@ class TestManifestEndpoint:
         response = echo_client.get("/manifest")
         assert response.json()["mode"] == "production"
 
-    def test_manifest_unknown_env_maps_to_production(self, echo_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_manifest_unknown_env_maps_to_production(
+        self, echo_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("CANVASTEKK_NODE_ENV", "qa")
         response = echo_client.get("/manifest")
         assert response.json()["mode"] == "production"

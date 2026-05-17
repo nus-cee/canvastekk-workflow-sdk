@@ -43,7 +43,9 @@ definition = NodeDefinition(
             text=True,
         )
 
-        assert result.returncode == 0, f"Expected exit 0, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        assert result.returncode == 0, (
+            f"Expected exit 0, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )
         assert "PASS: Manifest is valid" in result.stdout
 
 
@@ -74,7 +76,9 @@ definition = NodeDefinition(
             text=True,
         )
 
-        assert result.returncode == 0, f"Expected exit 0, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        assert result.returncode == 0, (
+            f"Expected exit 0, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )
 
         # Parse the JSON output
         output = json.loads(result.stdout)
@@ -108,7 +112,9 @@ definition = NodeDefinition(
             text=True,
         )
 
-        assert result.returncode == 1, f"Expected exit 1, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        assert result.returncode == 1, (
+            f"Expected exit 1, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )
         assert "Invalid path" in result.stderr or "Invalid path" in result.stdout
 
 
@@ -120,7 +126,9 @@ def test_validate_unknown_command():
         text=True,
     )
 
-    assert result.returncode == 1, f"Expected exit 1, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+    assert result.returncode == 1, (
+        f"Expected exit 1, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+    )
     assert "Unknown command" in result.stderr
 
 
@@ -132,7 +140,9 @@ def test_validate_missing_module_path():
         text=True,
     )
 
-    assert result.returncode == 1, f"Expected exit 1, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+    assert result.returncode == 1, (
+        f"Expected exit 1, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+    )
     assert "module path required" in result.stderr
 
 
@@ -144,7 +154,9 @@ def test_version_flag():
         text=True,
     )
 
-    assert result.returncode == 0, f"Expected exit 0, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+    assert result.returncode == 0, (
+        f"Expected exit 0, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+    )
     assert "canvastekk-workflow-sdk" in result.stdout
 
 
@@ -156,7 +168,9 @@ def test_help_flag():
         text=True,
     )
 
-    assert result.returncode == 0, f"Expected exit 0, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+    assert result.returncode == 0, (
+        f"Expected exit 0, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+    )
     assert "Usage:" in result.stdout
     assert "validate" in result.stdout
     assert "--json" in result.stdout

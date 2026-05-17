@@ -99,7 +99,9 @@ class TestTokenUsage:
 class TestOutputDirEnvironmentVariable:
     """Tests for CANVASTEKK_OUTPUT_DIR environment variable (Phase 1)."""
 
-    def test_output_dir_uses_env_var_when_set(self, exec_request: NodeExecutionRequest, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_output_dir_uses_env_var_when_set(
+        self, exec_request: NodeExecutionRequest, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         """Test that CANVASTEKK_OUTPUT_DIR env var overrides /tmp."""
         monkeypatch.setenv("CANVASTEKK_OUTPUT_DIR", str(tmp_path))
         ctx = ExecutionContext(exec_request)
@@ -107,7 +109,9 @@ class TestOutputDirEnvironmentVariable:
         assert exec_request.run_id in str(ctx.output_dir)
         assert exec_request.node_id in str(ctx.output_dir)
 
-    def test_output_dir_fallback_to_tmp_when_env_not_set(self, exec_request: NodeExecutionRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_output_dir_fallback_to_tmp_when_env_not_set(
+        self, exec_request: NodeExecutionRequest, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test that /tmp is used when CANVASTEKK_OUTPUT_DIR is not set."""
         monkeypatch.delenv("CANVASTEKK_OUTPUT_DIR", raising=False)
         ctx = ExecutionContext(exec_request)
@@ -115,7 +119,9 @@ class TestOutputDirEnvironmentVariable:
         assert exec_request.run_id in str(ctx.output_dir)
         assert exec_request.node_id in str(ctx.output_dir)
 
-    def test_custom_output_dir_overrides_env_var(self, exec_request: NodeExecutionRequest, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def test_custom_output_dir_overrides_env_var(
+        self, exec_request: NodeExecutionRequest, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         """Test that explicit output_dir parameter overrides env var."""
         monkeypatch.setenv("CANVASTEKK_OUTPUT_DIR", "/tmp/should-not-use")
         custom_dir = tmp_path / "custom"
