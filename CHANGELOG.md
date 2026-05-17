@@ -2,12 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2026-05-17
+
+### Features
+
+- **registry**: Add service_token auth support to register_node() [DA-931]
+
+
 ## [0.6.0] - 2026-05-16
 
 ### Features
 
 - **DA-910**: Add opencode skill scaffolding CLI for AI agent node creation
 - **DA-910**: Add opencode skill scaffolding CLI for AI agent node creation (#DA-910)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.6.0
 
 
 ## [0.5.2] - 2026-05-16
