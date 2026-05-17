@@ -27,6 +27,20 @@ class RegistrationError(Exception):
         self.body = body
 
 
+def _extract_node_data(payload: dict[str, Any]) -> dict[str, Any]:
+    """Extract node definition from registry response, handling both old and new formats.
+
+    Args:
+        payload: Parsed JSON response from the registry.
+
+    Returns:
+        The node definition dict.
+    """
+    if "data" in payload and isinstance(payload["data"], dict):
+        return payload["data"]
+    return payload
+
+
 def register_node(
     node: BaseNode,
     registry_url: str,
@@ -34,6 +48,7 @@ def register_node(
     invoke_url: str | None = None,
     invoke_type: str = "http",
     api_key: str | None = None,
+    service_token: str | None = None,
     timeout: int = 30,
 ) -> dict[str, Any]:
     """Register a node with the workflow engine registry.
@@ -50,13 +65,20 @@ def register_node(
         invoke_type: Invocation type (``"http"``, ``"lambda"``, etc.).
         api_key: Optional API key for registry authentication
             (sent as ``X-API-Key`` header).
+        service_token: Optional service token for CI/CD authentication
+            (sent as ``X-Service-Token`` header). Takes precedence over
+            ``api_key`` when both are provided.
         timeout: Request timeout in seconds.
 
     Returns:
-        The parsed JSON response from the registry.
+        The parsed JSON response from the registry. If the response uses
+        the new ``RegisterNodeResponse`` wrapper format (with a ``data``
+        key), the inner node definition dict is returned directly for
+        backward compatibility.
 
     Raises:
         RegistrationError: If the registration request fails.
+        ValueError: If neither ``api_key`` nor ``service_token`` is provided.
 
     Example::
 
@@ -69,7 +91,18 @@ def register_node(
             invoke_url="https://my-node.example.com",
             api_key="secret-key",
         )
+
+        # CI/CD with service token
+        register_node(
+            node,
+            registry_url="https://engine.example.com/api/registry/nodes",
+            invoke_url="https://my-node.example.com",
+            service_token="svs_xxx",
+        )
     """
+    if api_key is None and service_token is None:
+        raise ValueError("Either 'api_key' or 'service_token' must be provided for registration.")
+
     manifest = node.definition.to_dict()
     manifest["invoke_type"] = invoke_type
     if invoke_url is not None:
@@ -79,7 +112,9 @@ def register_node(
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
-    if api_key:
+    if service_token:
+        headers["X-Service-Token"] = service_token
+    elif api_key:
         headers["X-API-Key"] = api_key
 
     try:
