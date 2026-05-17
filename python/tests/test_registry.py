@@ -1,5 +1,7 @@
 """Tests for registry helper."""
 
+from __future__ import annotations
+
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -9,7 +11,7 @@ import pytest
 from canvastekk_workflow_sdk import NodeDefinition
 from canvastekk_workflow_sdk.base import BaseNode
 from canvastekk_workflow_sdk.context import ExecutionContext
-from canvastekk_workflow_sdk.registry import RegistrationError, register_node
+from canvastekk_workflow_sdk.registry import RegistrationError, _extract_node_data, register_node
 
 
 class DummyNode(BaseNode):
@@ -42,7 +44,7 @@ class TestRegisterNode:
         mock_response.raise_for_status = MagicMock()
 
         with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
-            result = register_node(node, registry_url)
+            result = register_node(node, registry_url, api_key="key")
 
         mock_post.assert_called_once()
         assert result == response_body
@@ -90,9 +92,30 @@ class TestRegisterNode:
         call_kwargs = mock_post.call_args[1]
         assert "X-API-Key" in call_kwargs["headers"]
         assert call_kwargs["headers"]["X-API-Key"] == api_key
+        assert "X-Service-Token" not in call_kwargs["headers"]
 
-    def test_omits_api_key_header_when_not_provided(self) -> None:
-        """Test that X-API-Key header is omitted when api_key is not provided."""
+    def test_includes_service_token_header_when_provided(self) -> None:
+        """Test that X-Service-Token header is included when service_token is provided."""
+        node = DummyNode()
+        registry_url = "https://registry.example.com/api/nodes"
+        service_token = "svs_abc123"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "123"}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
+            register_node(node, registry_url, service_token=service_token)
+
+        mock_post.assert_called_once()
+        call_kwargs = mock_post.call_args[1]
+        assert "X-Service-Token" in call_kwargs["headers"]
+        assert call_kwargs["headers"]["X-Service-Token"] == service_token
+        assert "X-API-Key" not in call_kwargs["headers"]
+
+    def test_service_token_takes_precedence_over_api_key(self) -> None:
+        """Test that service_token takes precedence when both are provided."""
         node = DummyNode()
         registry_url = "https://registry.example.com/api/nodes"
 
@@ -102,11 +125,28 @@ class TestRegisterNode:
         mock_response.raise_for_status = MagicMock()
 
         with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
-            register_node(node, registry_url)
+            register_node(node, registry_url, api_key="old-key", service_token="svs_xyz")
 
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args[1]
+        assert call_kwargs["headers"]["X-Service-Token"] == "svs_xyz"
         assert "X-API-Key" not in call_kwargs["headers"]
+
+    def test_raises_value_error_when_no_auth_provided(self) -> None:
+        """Test that ValueError is raised when neither api_key nor service_token is provided."""
+        node = DummyNode()
+        registry_url = "https://registry.example.com/api/nodes"
+
+        with pytest.raises(ValueError, match="api_key.*service_token"):
+            register_node(node, registry_url)
+
+    def test_raises_value_error_when_empty_string_auth_provided(self) -> None:
+        """Test that ValueError is raised when auth params are empty strings."""
+        node = DummyNode()
+        registry_url = "https://registry.example.com/api/nodes"
+
+        with pytest.raises(ValueError, match="api_key.*service_token"):
+            register_node(node, registry_url, api_key="", service_token="")
 
     def test_raises_registration_error_on_network_failure(self) -> None:
         """Test that RegistrationError is raised on network failure."""
@@ -115,7 +155,7 @@ class TestRegisterNode:
 
         with patch("canvastekk_workflow_sdk.registry.httpx.post", side_effect=httpx.ConnectError("Network error")):
             with pytest.raises(RegistrationError) as exc_info:
-                register_node(node, registry_url)
+                register_node(node, registry_url, api_key="key")
 
         assert "Registration failed" in str(exc_info.value)
         assert exc_info.value.status_code is None
@@ -133,7 +173,7 @@ class TestRegisterNode:
 
         with patch("canvastekk_workflow_sdk.registry.httpx.post", side_effect=error):
             with pytest.raises(RegistrationError) as exc_info:
-                register_node(node, registry_url)
+                register_node(node, registry_url, api_key="key")
 
         assert exc_info.value.status_code == 401
 
@@ -149,7 +189,7 @@ class TestRegisterNode:
 
         with patch("canvastekk_workflow_sdk.registry.httpx.post", side_effect=error):
             with pytest.raises(RegistrationError) as exc_info:
-                register_node(node, registry_url)
+                register_node(node, registry_url, service_token="svs_xxx")
 
         assert exc_info.value.status_code == 500
 
@@ -165,7 +205,7 @@ class TestRegisterNode:
         mock_response.raise_for_status = MagicMock()
 
         with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
-            register_node(node, registry_url, invoke_url=invoke_url)
+            register_node(node, registry_url, invoke_url=invoke_url, api_key="key")
 
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args[1]
@@ -183,7 +223,7 @@ class TestRegisterNode:
         mock_response.raise_for_status = MagicMock()
 
         with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
-            register_node(node, registry_url)
+            register_node(node, registry_url, api_key="key")
 
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args[1]
@@ -201,7 +241,7 @@ class TestRegisterNode:
         mock_response.raise_for_status = MagicMock()
 
         with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
-            register_node(node, registry_url, invoke_type=invoke_type)
+            register_node(node, registry_url, invoke_type=invoke_type, api_key="key")
 
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args[1]
@@ -218,7 +258,7 @@ class TestRegisterNode:
         mock_response.raise_for_status = MagicMock()
 
         with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
-            register_node(node, registry_url)
+            register_node(node, registry_url, api_key="key")
 
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args[1]
@@ -236,11 +276,83 @@ class TestRegisterNode:
         mock_response.raise_for_status = MagicMock()
 
         with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
-            register_node(node, registry_url, timeout=timeout)
+            register_node(node, registry_url, timeout=timeout, api_key="key")
 
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args[1]
         assert call_kwargs["timeout"] == timeout
+
+    def test_network_error_with_service_token(self) -> None:
+        """Test that RegistrationError is raised on network failure with service_token."""
+        node = DummyNode()
+        registry_url = "https://registry.example.com/api/nodes"
+
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", side_effect=httpx.ConnectError("Network error")):
+            with pytest.raises(RegistrationError) as exc_info:
+                register_node(node, registry_url, service_token="svs_xxx")
+
+        assert "Registration failed" in str(exc_info.value)
+
+    def test_successful_registration_unwraps_register_node_response(self) -> None:
+        """Test that RegisterNodeResponse wrapper is unwrapped via register_node."""
+        node = DummyNode()
+        registry_url = "https://registry.example.com/api/nodes"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": {"id": "node-123", "name": "test"}, "action": "created"}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
+            result = register_node(node, registry_url, api_key="key")
+
+        mock_post.assert_called_once()
+        assert result == {"id": "node-123", "name": "test"}
+        assert "action" not in result
+
+    def test_successful_registration_returns_old_format_directly(self) -> None:
+        """Test that old response format (no data wrapper) is returned as-is."""
+        node = DummyNode()
+        registry_url = "https://registry.example.com/api/nodes"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "node-123", "name": "test"}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
+            result = register_node(node, registry_url, api_key="key")
+
+        mock_post.assert_called_once()
+        assert result == {"id": "node-123", "name": "test"}
+
+
+class TestExtractNodeData:
+    """Tests for _extract_node_data helper."""
+
+    def test_returns_data_field_from_wrapper_response(self) -> None:
+        """Test that data dict is extracted from wrapper format."""
+        payload = {"data": {"id": "node-123", "name": "test"}, "action": "created"}
+        result = _extract_node_data(payload)
+        assert result == {"id": "node-123", "name": "test"}
+
+    def test_returns_payload_directly_when_no_data_key(self) -> None:
+        """Test that payload is returned as-is when no data key."""
+        payload = {"id": "node-123", "name": "test"}
+        result = _extract_node_data(payload)
+        assert result == {"id": "node-123", "name": "test"}
+
+    def test_returns_payload_when_data_is_not_dict(self) -> None:
+        """Test that payload is returned when data is not a dict."""
+        payload = {"data": "not-a-dict", "id": "node-123"}
+        result = _extract_node_data(payload)
+        assert result == {"data": "not-a-dict", "id": "node-123"}
+
+    def test_empty_data_dict(self) -> None:
+        """Test that empty data dict is returned as-is."""
+        payload = {"data": {}}
+        result = _extract_node_data(payload)
+        assert result == {}
 
 
 class TestRegistrationError:
