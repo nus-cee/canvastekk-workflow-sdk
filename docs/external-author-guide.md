@@ -1,0 +1,475 @@
+# External Author Guide
+
+> **SDK Version:** This guide targets `canvastekk-workflow-sdk` >= 0.7.0. Features documented here may differ in earlier versions.
+
+End-to-end guide for building, deploying, and registering a CanvasTEKK workflow node.
+
+## Overview
+
+The workflow has four stages:
+
+```
+1. Build      → Create a node using the Python SDK
+2. Containerize → Package it as a Docker image
+3. Deploy     → Push the image and run it on your infrastructure
+4. Register   → Tell the engine your node exists via the registry API
+```
+
+After registration, the engine can discover your node and include it in workflows.
+
+---
+
+## Prerequisites
+
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| Python | 3.12+ | Required by the SDK |
+| Docker | 20+ | For building container images |
+| `httpx` | 0.28+ | SDK dependency for file downloads and registration |
+| GitHub account | — | For CI/CD (GitHub Actions) |
+| Engine registry URL | — | Provided by the platform team |
+
+---
+
+## Step 1: Install the SDK
+
+```bash
+pip install canvastekk-workflow-sdk \
+  --index-url https://pypi.pkg.github.com/nus-cee/
+```
+
+For local development:
+
+```bash
+cd python/
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install poetry
+poetry install
+```
+
+---
+
+## Step 2: Create Your Node
+
+Create a file called `handler.py`. Subclass `BaseNode`, define a `NodeDefinition`, implement `execute()`, and call `.create_app()`:
+
+```python
+# handler.py
+from canvastekk_workflow_sdk import BaseNode, NodeDefinition, ExecutionContext
+
+# Module-level definition — needed for CLI validation
+definition = NodeDefinition(
+    id="my-node-v1.0.0",
+    name="my-node",
+    version="1.0.0",
+    title="My Node",
+    description="Does something useful",
+    input_schema={
+        "type": "object",
+        "properties": {"text": {"type": "string"}},
+        "required": ["text"],
+    },
+    output_schema={
+        "type": "object",
+        "properties": {"result": {"type": "string"}},
+    },
+)
+
+
+class MyNode(BaseNode):
+    definition = definition  # Class attribute (same object)
+
+    def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+        context.report_progress(0.5, "Processing")
+        return {"result": inputs["text"].upper()}
+
+
+app = MyNode().create_app()
+```
+
+### Key Requirements
+
+1. **Subclass `BaseNode`** — inherit from `canvastekk_workflow_sdk.BaseNode`
+2. **Define `definition`** as both a module-level variable and a class attribute
+3. **Implement `execute(inputs, context)`** — return a dict matching your `output_schema`
+4. **Call `.create_app()`** — produces a ready-to-run FastAPI app
+
+### Node ID Format
+
+Use `{name}-v{version}`:
+
+```python
+id="segment-v1.0.0"
+id="measure-v2.3.1"
+```
+
+### File Inputs
+
+Use `format: "file"` with `x-accept` and `x-maxSizeBytes`:
+
+```python
+input_schema={
+    "type": "object",
+    "properties": {
+        "point_cloud": {
+            "type": "string",
+            "format": "file",
+            "x-accept": [".ply", ".las"],
+            "x-maxSizeBytes": 52428800,
+        },
+    },
+}
+```
+
+Download with `httpx` and validate after download:
+
+```python
+import httpx
+from pathlib import Path
+
+def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+    url = inputs["point_cloud"]
+
+    with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
+        resp.raise_for_status()
+        dest = context.output_dir / "input_download.ply"
+        with open(dest, "wb") as f:
+            for chunk in resp.iter_bytes(chunk_size=65536):
+                f.write(chunk)
+
+    self.definition.validate_file_input("point_cloud", dest)
+
+    output = context.output_path("result.json")
+    output.write_text('{"count": 42}')
+
+    return {"result_path": str(output)}
+```
+
+### Validate Locally
+
+Before deploying, validate your node definition offline:
+
+```bash
+python -m canvastekk_workflow_sdk validate handler:definition
+```
+
+Exit code `0` = valid, `1` = errors.
+
+---
+
+## Step 3: Containerize
+
+Create a `Dockerfile`:
+
+```dockerfile
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY pyproject.toml handler.py ./
+RUN pip install . --index-url https://pypi.pkg.github.com/nus-cee/
+
+EXPOSE 8001
+
+CMD ["uvicorn", "handler:app", "--host", "0.0.0.0", "--port", "8001"]
+```
+
+Create a `pyproject.toml`:
+
+```toml
+[project]
+name = "my-node"
+version = "1.0.0"
+description = "My CanvasTEKK workflow node"
+requires-python = ">=3.12"
+dependencies = [
+    "canvastekk-workflow-sdk>=0.7.0,<0.8.0",
+]
+```
+
+> **Tip:** Pin to a specific minor version for production nodes. This prevents unexpected breakage when the SDK releases a new minor or major version.
+
+Build and test locally:
+
+```bash
+docker build -t my-node .
+docker run -p 8001:8001 my-node
+
+# Verify
+curl http://localhost:8001/health
+curl http://localhost:8001/manifest
+```
+
+---
+
+## Step 4: Deploy
+
+Push your image to a container registry accessible by the platform:
+
+```bash
+docker tag my-node your-registry.example.com/my-node:1.0.0
+docker push your-registry.example.com/my-node:1.0.0
+```
+
+The platform team will deploy it to the cluster. Once running, your node exposes:
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/execute` | POST | Run the node |
+| `/health` | GET | Health check |
+| `/manifest` | GET | Node self-description |
+| `/hook` | POST | Webhook/callback handler (optional, override `hook()`) |
+| `/metrics` | GET | Execution metrics summary |
+| `/live` | GET | Liveness probe (Kubernetes) |
+| `/ready` | GET | Readiness probe (Kubernetes) |
+
+---
+
+## Step 5: Register with the Engine
+
+After deployment, register your node so the engine can discover it.
+
+### Authentication Methods
+
+| Method | Header | Use Case |
+|--------|--------|----------|
+| **Service Token** | `X-Service-Token` | CI/CD pipelines (recommended) |
+| **API Key** | `X-API-Key` | Manual registration, testing |
+
+### Using `register_node()` (Python)
+
+```python
+from canvastekk_workflow_sdk import BaseNode, NodeDefinition
+from canvastekk_workflow_sdk.registry import register_node
+
+node = MyNode()
+
+# CI/CD with service token (recommended)
+register_node(
+    node,
+    registry_url="https://engine.example.com/api/registry/nodes",
+    invoke_url="https://my-node.example.com",
+    service_token="svs_your-token-here",
+)
+
+# Manual with API key
+register_node(
+    node,
+    registry_url="https://engine.example.com/api/registry/nodes",
+    invoke_url="https://my-node.example.com",
+    api_key="your-api-key",
+)
+```
+
+### Using `curl` (manual)
+
+```bash
+# Get your node manifest
+MANIFEST=$(curl -s http://localhost:8001/manifest)
+
+# Register with service token
+curl -X POST https://engine.example.com/api/registry/nodes \
+  -H "Content-Type: application/json" \
+  -H "X-Service-Token: svs_your-token-here" \
+  -d "$(echo "$MANIFEST" | jq '. + {invoke_url: "https://my-node.example.com", invoke_type: "http"}')"
+```
+
+---
+
+## Required Secrets
+
+Secrets are **never stored in code**. Use your CI/CD provider's secrets store.
+
+| Secret | When Required | Description |
+|--------|--------------|-------------|
+| `REGISTRY_SERVICE_TOKEN` | CI/CD registration | Service token for automated registration (`X-Service-Token` header). Provided by the platform team. |
+| `REGISTRY_API_KEY` | Manual registration | API key for the registry (`X-API-Key` header). Provided by the platform team. |
+| `CANVASTEKK_API_KEY` | Node auth (API Key mode) | Shared secret for authenticating requests to your node. Set via `NodeAuth.api_key()`. |
+| `CANVASTEKK_KEYCLOAK_SERVER_URL` | Node auth (Keycloak mode) | Keycloak base URL. Only needed if using Keycloak auth. |
+| `CANVASTEKK_KEYCLOAK_REALM` | Node auth (Keycloak mode) | Keycloak realm name. |
+| `CANVASTEKK_JWT_SECRET` | Node auth (JWT mode) | HS256 signing secret. Only needed if using JWT auth. |
+
+### Auth Mode Summary
+
+| Auth Mode | Secrets Required | Typical Use Case |
+|-----------|-----------------|------------------|
+| None | None | Local development (`CANVASTEKK_DEV_MODE=true`) |
+| API Key | `CANVASTEKK_API_KEY` | Simple shared-secret protection |
+| Keycloak | `CANVASTEKK_KEYCLOAK_SERVER_URL` + `CANVASTEKK_KEYCLOAK_REALM` | Production SSO integration |
+| JWT | `CANVASTEKK_JWT_SECRET` | Custom token-based auth |
+
+---
+
+## CI/CD Pipeline Example (GitHub Actions)
+
+This workflow builds, pushes, and registers your node automatically:
+
+```yaml
+name: Build and Register Node
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+env:
+  REGISTRY: your-registry.example.com
+  IMAGE_NAME: my-node
+  ENGINE_URL: https://engine.example.com/api/registry/nodes
+
+jobs:
+  build-and-register:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+
+      - name: Push to registry
+        run: |
+          echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login ${{ env.REGISTRY }} -u "${{ secrets.REGISTRY_USERNAME }}" --password-stdin
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Install SDK
+        run: pip install canvastekk-workflow-sdk --index-url https://pypi.pkg.github.com/nus-cee/
+
+      - name: Register node with engine
+        env:
+          REGISTRY_SERVICE_TOKEN: ${{ secrets.REGISTRY_SERVICE_TOKEN }}
+        run: |
+          python -c "
+          import os
+          from handler import MyNode
+          from canvastekk_workflow_sdk.registry import register_node
+
+          register_node(
+              MyNode(),
+              registry_url='${{ env.ENGINE_URL }}',
+              invoke_url='https://my-node.example.com',
+              service_token=os.environ['REGISTRY_SERVICE_TOKEN'],
+          )
+          print('Registration successful')
+          "
+
+      - name: Validate registration
+        run: |
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "X-Service-Token: ${{ secrets.REGISTRY_SERVICE_TOKEN }}" \
+            "${{ env.ENGINE_URL }}/my-node-v1.0.0")
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "Registration verification failed (HTTP $HTTP_STATUS)"
+            exit 1
+          fi
+          echo "Registration verified"
+```
+
+### Required GitHub Secrets
+
+Configure these in **Settings > Secrets and variables > Actions**:
+
+| Secret | Description |
+|--------|-------------|
+| `REGISTRY_SERVICE_TOKEN` | Service token for engine registration |
+| `REGISTRY_USERNAME` | Container registry username |
+| `REGISTRY_PASSWORD` | Container registry password |
+
+---
+
+## Error Handling Reference
+
+When calling the registry API, you may encounter these errors:
+
+| HTTP Status | Error Meaning | Cause | Fix |
+|-------------|--------------|-------|-----|
+| **401** | Unauthorized | Missing or invalid API key / service token | Check your `api_key` or `service_token` value. Ensure the header is correct (`X-API-Key` or `X-Service-Token`). |
+| **403** | Forbidden | Wrong owner — the node is registered under a different owner | Contact the platform team to transfer ownership, or use a different node ID. |
+| **404** | Not Found | Node not found in registry (GET/PUT/DELETE) or registry endpoint doesn't exist | Verify the `registry_url` and node ID. |
+| **409** | Conflict | Node already exists with a different owner | Use a unique node ID or contact the platform team. |
+| **422** | Validation Error | Invalid manifest payload | Validate locally first: `python -m canvastekk_workflow_sdk validate handler:definition` |
+| **500** | Internal Server Error | Engine-side failure | Retry after a few seconds. Contact the platform team if persistent. |
+
+### Handling Errors in Python
+
+```python
+from canvastekk_workflow_sdk.registry import register_node, RegistrationError
+
+try:
+    result = register_node(
+        node,
+        registry_url="https://engine.example.com/api/registry/nodes",
+        invoke_url="https://my-node.example.com",
+        service_token="svs_your-token-here",
+    )
+    print(f"Registered: {result['name']} v{result['version']}")
+except RegistrationError as e:
+    if e.status_code == 401:
+        print("Authentication failed: check your service token")
+    elif e.status_code == 403:
+        print("Forbidden: this node belongs to another owner")
+    elif e.status_code == 409:
+        print("Conflict: node already registered with different owner")
+    else:
+        print(f"Registration failed ({e.status_code}): {e}")
+```
+
+---
+
+## Quick Reference: Complete Minimal Node
+
+```
+my-node/
+├── handler.py
+├── pyproject.toml
+├── Dockerfile
+└── tests/
+    └── test_handler.py
+```
+
+**handler.py** — see [Step 2](#step-2-create-your-node)
+
+**pyproject.toml**:
+
+```toml
+[project]
+name = "my-node"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = ["canvastekk-workflow-sdk>=0.7.0,<0.8.0"]
+```
+
+**Dockerfile** — see [Step 3](#step-3-containerize)
+
+**tests/test_handler.py**:
+
+```python
+from fastapi.testclient import TestClient
+from handler import app
+
+client = TestClient(app)
+
+
+def test_execute():
+    resp = client.post("/execute", json={
+        "run_id": "test", "node_id": "test", "inputs": {"text": "hello"},
+    })
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "pass"
+    assert resp.json()["outputs"]["result"] == "HELLO"
+
+
+def test_manifest():
+    resp = client.get("/manifest")
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "my-node"
+```
+
+---
+
+## Further Reading
+
+- [SDK Python README](../python/README.md) — full API reference
+- [Echo Node Example](../examples/echo_node/) — minimal reference implementation
+- [Root README](../README.md) — SDK overview and architecture

@@ -113,6 +113,16 @@ See [`python/README.md`](./python/) for full documentation.
 
 ## Architecture
 
+Project structure:
+
+| Directory | Purpose |
+|-----------|---------|
+| `python/` | Python SDK source, tests, and package config |
+| `docs/` | External-facing documentation |
+| `examples/` | Reference node implementations and deployment templates |
+| `PLANS/` | Implementation plan files per ticket |
+| `.github/workflows/` | CI/CD and release workflows |
+
 Each language SDK follows the same pattern:
 
 ```
@@ -240,6 +250,16 @@ Auth environment variables are only read when the corresponding `NodeAuth` backe
 | Variable | Description |
 |----------|-------------|
 | `CANVASTEKK_DEV_MODE` | Set to `true`, `1`, or `yes` to **bypass all authentication**. Useful for local development. **Never enable in production.** |
+
+## External Author Guide
+
+Building and deploying a node for the first time? See the **[External Author Guide](./docs/external-author-guide.md)** for a step-by-step walkthrough covering:
+
+- Creating a node with the SDK
+- Containerizing with Docker
+- Deploying and registering with the engine
+- CI/CD pipeline examples (GitHub Actions)
+- Error handling reference (401, 403, 409, etc.)
 
 ## Architecture Decisions
 

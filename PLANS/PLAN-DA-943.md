@@ -6,7 +6,7 @@
 **Repo**: `canvastekk-workflow-sdk`
 **Priority**: P2
 **Size**: S
-**Status**: In Progress
+**Status**: Ready for Review
 
 ---
 
@@ -31,10 +31,10 @@ Part of the **DA-929** epic. DA-931 added `service_token` support to `register_n
 
 ## Acceptance Criteria
 
-- [ ] Step-by-step guide: create node with SDK, deploy, register with engine
-- [ ] Documents required secrets (API key for non-CDS, API key + Keycloak for CDS)
-- [ ] Example CI/CD pipeline (GitHub Actions)
-- [ ] Error handling guidance (403 = wrong owner, 401 = bad key)
+- [x] Step-by-step guide: create node with SDK, deploy, register with engine
+- [x] Documents required secrets (API key for non-CDS, API key + Keycloak for CDS)
+- [x] Example CI/CD pipeline (GitHub Actions)
+- [x] Error handling guidance (403 = wrong owner, 401 = bad key)
 
 ---
 
@@ -42,24 +42,24 @@ Part of the **DA-929** epic. DA-931 added `service_token` support to `register_n
 
 ### Phase 1: Create `docs/external-author-guide.md`
 
-- [ ] Introduction and overview of the end-to-end workflow
-- [ ] Prerequisites (Python 3.12+, Docker, GitHub account)
-- [ ] Step-by-step: create a node with the SDK
-- [ ] Step-by-step: containerize with Docker
-- [ ] Step-by-step: deploy the node
-- [ ] Step-by-step: register with the engine
-- [ ] Required secrets section (API key, service token, Keycloak)
-- [ ] Example GitHub Actions CI/CD pipeline
-- [ ] Error handling reference table (401, 403, 404, 409, 500)
+- [x] Introduction and overview of the end-to-end workflow
+- [x] Prerequisites (Python 3.12+, Docker, GitHub account)
+- [x] Step-by-step: create a node with the SDK
+- [x] Step-by-step: containerize with Docker
+- [x] Step-by-step: deploy the node
+- [x] Step-by-step: register with the engine
+- [x] Required secrets section (API key, service token, Keycloak)
+- [x] Example GitHub Actions CI/CD pipeline
+- [x] Error handling reference table (401, 403, 404, 409, 500)
 
 ### Phase 2: Update `README.md`
 
-- [ ] Add link to `docs/external-author-guide.md` in the relevant section
+- [x] Add link to `docs/external-author-guide.md` in the relevant section
 
 ### Phase 3: Validate and deliver
 
-- [ ] Review all acceptance criteria
-- [ ] Commit and push
+- [x] Review all acceptance criteria
+- [x] Commit and push
 - [ ] Update JIRA ticket with progress
 
 ---
