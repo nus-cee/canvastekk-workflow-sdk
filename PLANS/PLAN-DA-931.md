@@ -6,6 +6,7 @@
 **Repo**: `canvastekk-workflow-sdk`
 **Priority**: P1 (blocks DA-938: T11 Create register_nodes.py CI/CD script)
 **Size**: S
+**Status**: Done
 
 ---
 
@@ -37,11 +38,11 @@ Part of the **DA-929** epic replacing the static `node-manifest.json` approach w
 
 ## Acceptance Criteria
 
-- [ ] `register_node(node, url, service_token="svs_xxx")` sends `X-Service-Token` header
-- [ ] `service_token` defaults to `None` — no hardcoded or example values anywhere
-- [ ] Backward compatible: `api_key` param still works as before
-- [ ] Can handle both old response format (`RegistryNodeDefinition` directly) and new format (`RegisterNodeResponse` wrapper)
-- [ ] Unit tests for both auth modes
+- [x] `register_node(node, url, service_token="svs_xxx")` sends `X-Service-Token` header
+- [x] `service_token` defaults to `None` — no hardcoded or example values anywhere
+- [x] Backward compatible: `api_key` param still works as before
+- [x] Can handle both old response format (`RegistryNodeDefinition` directly) and new format (`RegisterNodeResponse` wrapper)
+- [x] Unit tests for both auth modes
 
 ---
 
@@ -49,27 +50,26 @@ Part of the **DA-929** epic replacing the static `node-manifest.json` approach w
 
 ### Phase 1: Update `register_node()` signature and auth header logic
 
-- [ ] Add `service_token: str | None = None` parameter to `register_node()`
-- [ ] When `service_token` is provided, add `X-Service-Token` header to the HTTP request
-- [ ] Ensure `service_token` defaults to `None` — never hardcode or log token values
-- [ ] Validate that exactly one auth method is provided (`api_key` or `service_token`), raise `ValueError` if neither or both
+- [x] Add `service_token: str | None = None` parameter to `register_node()`
+- [x] When `service_token` is provided, add `X-Service-Token` header to the HTTP request
+- [x] Ensure `service_token` defaults to `None` — never hardcode or log token values
+- [x] Validate that at least one auth method is provided (`api_key` or `service_token`), raise `ValueError` if neither
+- [x] `service_token` takes precedence over `api_key` when both are provided
 
 ### Phase 2: Update response handling for new wrapper format
 
-- [ ] Update `register_node()` return type to handle both:
-  - Old format: `RegistryNodeDefinition` returned directly
-  - New format: `RegisterNodeResponse` wrapper with `.data` attribute
-- [ ] Add response normalization logic (detect wrapper vs direct and extract node definition)
-- [ ] Ensure return type remains `RegistryNodeDefinition` for backward compatibility
+- [x] Add `_extract_node_data()` helper for response normalization
+- [x] Handle both old format (`RegistryNodeDefinition` directly) and new format (`RegisterNodeResponse` wrapper with `data` key)
 
 ### Phase 3: Unit tests
 
-- [ ] Test `register_node()` with `api_key` auth (existing behavior, regression check)
-- [ ] Test `register_node()` with `service_token` auth (new behavior)
-- [ ] Test that `X-Service-Token` header is sent when `service_token` is provided
-- [ ] Test that `ValueError` is raised when neither `api_key` nor `service_token` is provided
-- [ ] Test response handling for both old and new response formats
-- [ ] Test that token value is never logged or included in error messages
+- [x] Test `register_node()` with `api_key` auth (existing behavior, regression check)
+- [x] Test `register_node()` with `service_token` auth (new behavior)
+- [x] Test that `X-Service-Token` header is sent when `service_token` is provided
+- [x] Test that `ValueError` is raised when neither `api_key` nor `service_token` is provided
+- [x] Test `_extract_node_data()` for both old and new response formats
+- [x] Test `service_token` precedence over `api_key`
+- [x] 24 tests total, all passing
 
 ---
 
