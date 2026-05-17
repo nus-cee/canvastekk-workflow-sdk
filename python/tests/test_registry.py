@@ -140,6 +140,14 @@ class TestRegisterNode:
         with pytest.raises(ValueError, match="api_key.*service_token"):
             register_node(node, registry_url)
 
+    def test_raises_value_error_when_empty_string_auth_provided(self) -> None:
+        """Test that ValueError is raised when auth params are empty strings."""
+        node = DummyNode()
+        registry_url = "https://registry.example.com/api/nodes"
+
+        with pytest.raises(ValueError, match="api_key.*service_token"):
+            register_node(node, registry_url, api_key="", service_token="")
+
     def test_raises_registration_error_on_network_failure(self) -> None:
         """Test that RegistrationError is raised on network failure."""
         node = DummyNode()
@@ -284,6 +292,39 @@ class TestRegisterNode:
                 register_node(node, registry_url, service_token="svs_xxx")
 
         assert "Registration failed" in str(exc_info.value)
+
+    def test_successful_registration_unwraps_register_node_response(self) -> None:
+        """Test that RegisterNodeResponse wrapper is unwrapped via register_node."""
+        node = DummyNode()
+        registry_url = "https://registry.example.com/api/nodes"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": {"id": "node-123", "name": "test"}, "action": "created"}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
+            result = register_node(node, registry_url, api_key="key")
+
+        mock_post.assert_called_once()
+        assert result == {"id": "node-123", "name": "test"}
+        assert "action" not in result
+
+    def test_successful_registration_returns_old_format_directly(self) -> None:
+        """Test that old response format (no data wrapper) is returned as-is."""
+        node = DummyNode()
+        registry_url = "https://registry.example.com/api/nodes"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "node-123", "name": "test"}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response) as mock_post:
+            result = register_node(node, registry_url, api_key="key")
+
+        mock_post.assert_called_once()
+        assert result == {"id": "node-123", "name": "test"}
 
 
 class TestExtractNodeData:

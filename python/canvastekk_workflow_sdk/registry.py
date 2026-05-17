@@ -100,7 +100,7 @@ def register_node(
             service_token="svs_xxx",
         )
     """
-    if api_key is None and service_token is None:
+    if not api_key and not service_token:
         raise ValueError("Either 'api_key' or 'service_token' must be provided for registration.")
 
     manifest = node.definition.to_dict()
@@ -120,7 +120,7 @@ def register_node(
     try:
         resp = httpx.post(registry_url, json=manifest, headers=headers, timeout=timeout)
         resp.raise_for_status()
-        return resp.json()
+        return _extract_node_data(resp.json())
     except httpx.HTTPStatusError as e:
         raise RegistrationError(
             f"Registration failed: {e}",
