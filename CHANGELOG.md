@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.1] - 2026-05-17
+
+### Style
+
+- Apply ruff formatter to existing codebase
+
+
 ## [0.7.0] - 2026-05-17
 
 ### Features
 
 - **registry**: Add service_token auth support to register_node() [DA-931]
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.7.0
 
 
 ## [0.6.0] - 2026-05-16
