@@ -167,7 +167,10 @@ class TestS3PresignedUploader:
         mock_response.text = "Error"
         error = httpx.HTTPStatusError("Upload failed", request=MagicMock(), response=mock_response)
 
-        with patch("canvastekk_workflow_sdk.uploads.httpx.put", side_effect=error), patch("canvastekk_workflow_sdk.uploads.logger") as mock_logger:
+        with (
+            patch("canvastekk_workflow_sdk.uploads.httpx.put", side_effect=error),
+            patch("canvastekk_workflow_sdk.uploads.logger") as mock_logger,
+        ):
             uploader.upload_outputs(response, upload_urls, file_output_fields)
             mock_logger.error.assert_called_once()
             assert "Failed to upload output '%s' to S3" in str(mock_logger.error.call_args)

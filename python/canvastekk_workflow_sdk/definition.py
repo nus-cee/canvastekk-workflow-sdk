@@ -187,8 +187,7 @@ class NodeDefinition(BaseModel):
             file_size = file_path.stat().st_size
             if file_size > x_max_size:
                 raise NodeValidationError(
-                    f"File size ({file_size} bytes) exceeds maximum size ({x_max_size} bytes) "
-                    f"for field '{field_name}'"
+                    f"File size ({file_size} bytes) exceeds maximum size ({x_max_size} bytes) for field '{field_name}'"
                 )
 
     @model_validator(mode="after")

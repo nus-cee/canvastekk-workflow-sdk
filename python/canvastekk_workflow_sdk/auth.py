@@ -47,8 +47,7 @@ class _AuthBackend(ABC):
     """Base class for authentication backends."""
 
     @abstractmethod
-    def authenticate(self, request: Request) -> dict[str, Any]:
-        ...
+    def authenticate(self, request: Request) -> dict[str, Any]: ...
 
     def as_dependency(self) -> Any:
         """Return a FastAPI ``Depends()`` callable for this backend."""
@@ -113,8 +112,7 @@ class _JwtAuth(_AuthBackend):
                 self._jwt_module = pyjwt
             except ImportError:
                 raise ImportError(
-                    "PyJWT is required for JWT authentication. "
-                    "Install with: pip install canvastekk-workflow-sdk[jwt]"
+                    "PyJWT is required for JWT authentication. Install with: pip install canvastekk-workflow-sdk[jwt]"
                 )
         return self._jwt_module
 

@@ -446,9 +446,7 @@ class TestBaseNodeOutputValidation:
     def test_valid_output_passes_validation(self) -> None:
         """Test that valid output passes schema validation."""
         node = OutputValidationNode()
-        response = node.run(
-            NodeExecutionRequest(run_id="r1", node_id="n1", inputs={"value": 5})
-        )
+        response = node.run(NodeExecutionRequest(run_id="r1", node_id="n1", inputs={"value": 5}))
         assert response.status == "pass"
         assert response.outputs == {"result": 10, "message": "Doubled: 10"}
         assert response.error is None
@@ -617,6 +615,7 @@ class TestLifecycleHooks:
                 pass
 
         import asyncio
+
         asyncio.run(test_lifespan())
 
         assert hook_order == ["startup", "shutdown"]
@@ -649,6 +648,7 @@ class TestLifecycleHooks:
                     pass
 
         import asyncio
+
         asyncio.run(test_startup_failure())
 
     def test_on_shutdown_exception_propagates(self) -> None:
@@ -679,6 +679,7 @@ class TestLifecycleHooks:
                     pass
 
         import asyncio
+
         asyncio.run(test_shutdown_failure())
 
     def test_lifespan_works_with_create_node_app(self) -> None:

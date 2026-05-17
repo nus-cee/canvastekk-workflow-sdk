@@ -355,9 +355,7 @@ def create_node_app(
         """Readiness probe — returns 200 when the node can accept traffic."""
         checks = node.health_check()
         if not checks or all(checks.values()):
-            return JSONResponse(
-                content={"status": "ready", "node_id": node.definition.id, "checks": checks}
-            )
+            return JSONResponse(content={"status": "ready", "node_id": node.definition.id, "checks": checks})
         return JSONResponse(
             status_code=503,
             content={"status": "not_ready", "node_id": node.definition.id, "checks": checks},

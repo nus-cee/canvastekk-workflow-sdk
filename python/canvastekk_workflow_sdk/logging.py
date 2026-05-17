@@ -147,10 +147,7 @@ def configure_logging(
     handler = _make_handler()
 
     root = logging.getLogger()
-    if not any(
-        isinstance(h, logging.StreamHandler) and getattr(h, "_sdk_configured", False)
-        for h in root.handlers
-    ):
+    if not any(isinstance(h, logging.StreamHandler) and getattr(h, "_sdk_configured", False) for h in root.handlers):
         handler._sdk_configured = True
         root.addHandler(handler)
         root.setLevel(actual_level)
