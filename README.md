@@ -253,7 +253,7 @@ Auth environment variables are only read when the corresponding `NodeAuth` backe
 
 ## External Author Guide
 
-Building and deploying a node for the first time? See the **[External Author Guide](./docs/external-author-guide.md)** for a step-by-step walkthrough covering:
+Building and deploying a node for the first time? See the **[EXTERNAL AUTHOR GUIDE](./docs/EXTERNAL-AUTHOR-GUIDE.md)** for a step-by-step walkthrough covering:
 
 - Creating a node with the SDK
 - Containerizing with Docker
