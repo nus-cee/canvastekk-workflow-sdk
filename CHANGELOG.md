@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.2] - 2026-05-17
+
+### Documentation
+
+- Add EXTERNAL-AUTHOR-GUIDE.md for node registration [DA-943]
+
+
 ## [0.7.1] - 2026-05-17
 
 ### Style
 
 - Apply ruff formatter to existing codebase
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.7.1
 
 
 ## [0.7.0] - 2026-05-17
