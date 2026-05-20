@@ -43,7 +43,7 @@ poetry run pytest -v
 | FastAPI | ^0.135 | HTTP framework |
 | Pydantic | ^2.12 | Data validation |
 | Uvicorn | ^0.43 | ASGI server |
-| httpx | ^0.28 | HTTP client (presigned URL downloads, registry, uploads) |
+| httpx | ^0.28 | HTTP client (auto-download pipeline, registry, uploads) |
 
 ### Dev Dependencies
 
@@ -328,46 +328,45 @@ When the SDK detects `format: "file"`, the field becomes a file input (`definiti
 
 ### How File Inputs Work
 
-When the workflow engine executes your node, file input values are presigned GET URLs (strings). The node downloads them:
+When the workflow engine executes your node, file input values are presigned GET URLs (strings). The SDK **automatically downloads** them to `context.downloads_dir` before calling `execute()`:
+
+- URL inputs (`https://` or `http://`) are downloaded to a local file
+- Local path inputs are passed through unchanged
+- Downloaded files are auto-validated against `x-accept` and `x-maxSizeBytes`
+- Download metadata is available via `context.metadata[field_name]`
 
 ```python
-import httpx
-
 def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-    # File input is a presigned GET URL
-    presigned_url = inputs["point_cloud"]
+    # inputs["point_cloud"] is now a LOCAL FILE PATH (auto-downloaded by SDK)
+    cloud_path = Path(inputs["point_cloud"])
+    cloud_data = cloud_path.read_bytes()
 
-    # Download the file
-    response = httpx.get(presigned_url)
-    response.raise_for_status()
-
-    cloud_data = response.content
     confidence = inputs.get("confidence", 0.5)
+
+    # Check download metadata if needed
+    meta = context.metadata.get("point_cloud", {})
 
     # ... process the point cloud ...
     return {"instances": "42 objects found"}
 ```
 
+> **Note:** You no longer need to manually download with `httpx` or call `validate_file_input()` for standard file inputs — the SDK handles this automatically. Manual download is only needed for non-file URLs or opt-out scenarios.
+
 ### Runtime Validation
 
-After downloading, validate against the constraints defined in `x-accept` and `x-maxSizeBytes`:
+The SDK **automatically validates** downloaded file inputs against the constraints defined in `x-accept` and `x-maxSizeBytes`. This happens before `execute()` is called, so you can trust that file inputs are valid.
+
+If you need to validate additional files (e.g., files you generate or download manually), use:
 
 ```python
 def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-    import httpx
-    from pathlib import Path
+    # Auto-validated inputs are guaranteed to pass constraints
+    cloud_path = Path(inputs["point_cloud"])
 
-    presigned_url = inputs["point_cloud"]
-    response = httpx.get(presigned_url)
-    response.raise_for_status()
+    # Validate additional files manually if needed
+    extra_file = context.output_path("extra.dat")
+    self.definition.validate_file_input("point_cloud", extra_file)
 
-    # Validate file type and size
-    definition.validate_file_input(
-        field_name="point_cloud",
-        data=response.content,
-    )
-
-    # Process the validated data
     # ...
 ```
 
@@ -434,7 +433,7 @@ After successful execution, the SDK uploads the file at `outputs["converted"]` t
 
 ```python
 from canvastekk_workflow_sdk import BaseNode, NodeDefinition, ExecutionContext
-import httpx
+from pathlib import Path
 
 
 class PointCloudSegmenter(BaseNode):
@@ -467,15 +466,9 @@ class PointCloudSegmenter(BaseNode):
     )
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-        # Download file from presigned URL
-        response = httpx.get(inputs["point_cloud"])
-        response.raise_for_status()
-
-        # Validate file type and size
-        self.definition.validate_file_input(
-            field_name="point_cloud",
-            data=response.content,
-        )
+        # File inputs are auto-downloaded to local paths by the SDK
+        cloud_path = Path(inputs["point_cloud"])
+        cloud_data = cloud_path.read_bytes()
 
         # Process the point cloud
         confidence = inputs.get("confidence", 0.5)
@@ -671,8 +664,9 @@ def test_metrics_endpoint():
 
 
 def test_presigned_url_file_input():
-    # Simulate a presigned URL GET endpoint (mock server would provide this)
-    presigned_url = "https://s3.amazonaws.com/bucket/scan.ply?X-Amz-Signature=..."
+    # Create a local test file
+    test_file = tmp_path / "scan.ply"
+    test_file.write_bytes(b"test point cloud data")
 
     response = client.post(
         "/execute",
@@ -680,7 +674,7 @@ def test_presigned_url_file_input():
             "run_id": "test-run",
             "node_id": "test-node",
             "inputs": {
-                "point_cloud": presigned_url,
+                "point_cloud": str(test_file),  # Local path passes through
                 "confidence": 0.8,
             },
         },
@@ -944,8 +938,8 @@ A minimal reference node with file I/O is available at [`examples/echo_node/`](.
 
 It demonstrates:
 - File input/output with `format: "file"` and `x-*` extensions
-- Downloading from presigned URLs with `httpx`
-- Runtime validation with `validate_file_input()`
+- Auto-download of presigned URL file inputs (SDK handles this automatically)
+- Runtime validation with `validate_file_input()` (auto-called after download)
 - CLI manifest validation
 - Unit and integration tests
 - Docker build
@@ -1281,3 +1275,4 @@ git commit -m "feat: new endpoint with BREAKING CHANGE"   # major bump
 - [x] Input validation against JSON Schema (Draft7Validator)
 - [x] CLI manifest validation (v0.6.0 — `python -m canvastekk_workflow_sdk validate`)
 - [x] File field constraint validation (v0.6.0 — `validate_file_input()` with `x-accept`, `x-maxSizeBytes`)
+- [x] Auto-download of presigned URL file inputs (v0.7.0 — SDK auto-downloads file inputs before execute())

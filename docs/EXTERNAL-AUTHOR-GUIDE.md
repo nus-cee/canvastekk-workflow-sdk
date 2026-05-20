@@ -122,29 +122,27 @@ input_schema={
 }
 ```
 
-Download with `httpx` and validate after download:
+The SDK **automatically downloads** presigned URL file inputs and validates them before calling `execute()`. Your `execute()` method receives local file paths, not URLs:
 
 ```python
-import httpx
 from pathlib import Path
 
 def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-    url = inputs["point_cloud"]
+    # inputs["point_cloud"] is already a local file path (auto-downloaded)
+    cloud_path = Path(inputs["point_cloud"])
+    data = cloud_path.read_bytes()
 
-    with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
-        resp.raise_for_status()
-        dest = context.output_dir / "input_download.ply"
-        with open(dest, "wb") as f:
-            for chunk in resp.iter_bytes(chunk_size=65536):
-                f.write(chunk)
-
-    self.definition.validate_file_input("point_cloud", dest)
+    # Access download metadata if needed
+    meta = context.metadata.get("point_cloud", {})
+    # meta contains: original_url, local_path, size_bytes
 
     output = context.output_path("result.json")
     output.write_text('{"count": 42}')
 
     return {"result_path": str(output)}
 ```
+
+> **Note:** Manual download with `httpx.stream()` is only needed for non-file URLs or opt-out scenarios. Standard file inputs are handled automatically.
 
 ### Validate Locally
 

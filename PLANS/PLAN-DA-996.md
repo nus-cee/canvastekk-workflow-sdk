@@ -1,11 +1,11 @@
-# PLAN-DA-996: SDK Auto-Download Middleware for Presigned URL File Inputs
+# PLAN-DA-996: SDK Auto-Download Pipeline for Presigned URL File Inputs
 
 **Jira Ticket**: [DA-996](https://betekk.atlassian.net/browse/DA-996)
 **Branch**: `DA-996`
 **Repo**: `canvastekk-workflow-sdk`
 **Priority**: P2
 **Size**: M
-**Status**: Planning
+**Status**: In Progress
 
 ---
 
@@ -15,7 +15,9 @@ Every node that receives file inputs must implement its own download logic for p
 
 ## Proposal
 
-Add built-in file download middleware to the SDK that auto-downloads presigned URL inputs before calling `execute()`, replaces URL values with local file paths, preserves original URLs in `context.metadata`, and optionally validates downloaded files.
+Add a built-in file download pipeline step in `BaseNode.run()` that auto-downloads presigned URL inputs before calling `execute()`, replaces URL values with local file paths, preserves original URLs in `context.metadata`, and validates downloaded files automatically.
+
+**Architecture decision**: This is a built-in pipeline step in `run()`, NOT a `NodeMiddleware`. The `NodeMiddleware` protocol doesn't pass `NodeDefinition`, and auto-download is core SDK infrastructure, not a user-extensible hook.
 
 ---
 
@@ -23,30 +25,31 @@ Add built-in file download middleware to the SDK that auto-downloads presigned U
 
 | File | Change |
 |------|--------|
-| `python/canvastekk_workflow_sdk/middleware.py` | Add `FileDownloadMiddleware` class |
 | `python/canvastekk_workflow_sdk/context.py` | Add `metadata` dict + `downloads_dir` property |
-| `python/canvastekk_workflow_sdk/base.py` | Register `FileDownloadMiddleware` by default when node has file inputs; update `execute()` docstring |
-| `python/canvastekk_workflow_sdk/definition.py` | Add `x-auto-validate` support in `validate_file_input` schema check |
-| `python/tests/test_file_download_middleware.py` | New test file |
-| `python/canvastekk_workflow_sdk/__init__.py` | Export `FileDownloadMiddleware` |
+| `python/canvastekk_workflow_sdk/base.py` | Add `_prepare_file_inputs()` method; wire into `run()` as pipeline step; update docstrings |
+| `python/tests/test_file_download.py` | New test file |
+| `python/canvastekk_workflow_sdk/__init__.py` | Bump version |
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] `FileDownloadMiddleware.on_before_execute()` auto-downloads presigned URL inputs to `context.downloads_dir`
+- [ ] `_prepare_file_inputs()` auto-downloads presigned URL inputs to `context.downloads_dir`
 - [ ] File input values in `inputs` dict are replaced with local file paths
-- [ ] Original presigned URLs preserved in `context.metadata["{field_name}_original_url"]`
-- [ ] When `x-auto-validate: true` is set on a field schema, `validate_file_input()` is called automatically after download
+- [ ] Original presigned URLs preserved in `context.metadata[field_name]` dict (with `original_url`, `local_path`, `size_bytes`)
+- [ ] Downloaded files auto-validated with `validate_file_input()` (always, not opt-in)
 - [ ] Local file paths pass through unchanged (backward compatible)
 - [ ] Download uses `httpx.stream()` with `timeout=30.0`, `follow_redirects=True`, `chunk_size=65536`
 - [ ] Download errors raise `NodeIOError` with descriptive message
 - [ ] `ExecutionContext` gains `metadata` dict and `downloads_dir` property
-- [ ] `BaseNode.run()` registers `FileDownloadMiddleware` when `definition.has_file_inputs` is true
+- [ ] `request.inputs` is NOT mutated — `run()` copies inputs before modification
+- [ ] Optional file fields (`None` / missing) handled gracefully
+- [ ] Filenames sanitized against path traversal (`Path(name).name`)
+- [ ] Only `https://` and `http://` URLs trigger download; non-string values skipped
+- [ ] Partial download failures cleaned up
+- [ ] Field name prefixed filenames prevent collisions (`{field_name}_{filename}`)
 - [ ] All existing tests pass
-- [ ] New unit tests cover: URL download, local path passthrough, auto-validate, error cases
 - [ ] Ruff lint passes
-- [ ] `docs/EXTERNAL-AUTHOR-GUIDE.md` updated to mention auto-download behavior
 
 ---
 
@@ -58,39 +61,65 @@ Add built-in file download middleware to the SDK that auto-downloads presigned U
 - [ ] Add `metadata` property (returns the dict)
 - [ ] Add `downloads_dir` property that returns `self._output_dir / "downloads"` and creates it lazily
 
-### Phase 2: Implement `FileDownloadMiddleware`
+### Phase 2: Implement `_prepare_file_inputs()` in `BaseNode`
 
-- [ ] Create `FileDownloadMiddleware` class implementing `NodeMiddleware` protocol
-- [ ] `on_before_execute()`: iterate `definition.file_input_fields`, detect URL strings (`http://` or `https://`), download to `context.downloads_dir / filename`
-- [ ] Extract filename from `Content-Disposition` header or URL path
+- [ ] Add `_prepare_file_inputs(inputs, context)` method to `BaseNode`
+- [ ] Iterate `self.definition.file_input_fields`, skip `None` / missing / non-string values
+- [ ] Detect URL strings (`http://` or `https://`), skip local paths
+- [ ] Download to `context.downloads_dir / f"{field_name}_{sanitized_filename}"`
+- [ ] Extract filename from `Content-Disposition` header, fallback to URL path
+- [ ] Sanitize filename: `Path(filename).name` to strip directory components
 - [ ] Replace `inputs[field_name]` with `str(local_path)`
-- [ ] Store original URL in `context.metadata[f"{field_name}_original_url"]`
-- [ ] If field schema has `x-auto-validate: true`, call `self._definition.validate_file_input(field_name, local_path)`
-- [ ] Raise `NodeIOError` on download failure (network, timeout, HTTP error)
-- [ ] Skip fields where value is already a local path (not starting with `http`)
+- [ ] Store metadata in `context.metadata[field_name]` with `original_url`, `local_path`, `size_bytes`
+- [ ] Call `self.definition.validate_file_input(field_name, local_path)` after download
+- [ ] Raise `NodeIOError` on download failure with cleanup of partial downloads
+- [ ] Report progress with `context.report_progress()`
 
 ### Phase 3: Wire into `BaseNode.run()`
 
-- [ ] In `BaseNode.__init__()`, check `self.definition.has_file_inputs` and register `FileDownloadMiddleware` if true
-- [ ] Update `execute()` docstring to note file inputs may be local paths when auto-download is active
-- [ ] Export `FileDownloadMiddleware` from `__init__.py`
+- [ ] Copy inputs: `inputs = dict(request.inputs)` before any modification
+- [ ] Add pipeline step after context creation, before middleware:
+  ```
+  if self.definition.has_file_inputs:
+      inputs = self._prepare_file_inputs(inputs, context)
+  ```
+- [ ] Update `execute()` docstring to note file inputs may be local paths
 
 ### Phase 4: Tests
 
-- [ ] Test: URL input is downloaded and replaced with local path
-- [ ] Test: original URL stored in `context.metadata`
-- [ ] Test: local path input passes through unchanged
-- [ ] Test: `x-auto-validate: true` triggers `validate_file_input()`
-- [ ] Test: download failure raises `NodeIOError`
-- [ ] Test: multiple file inputs all processed
-- [ ] Test: non-file inputs untouched
+- [ ] URL input downloaded and replaced with local path
+- [ ] Original URL stored in `context.metadata`
+- [ ] Local path input passes through unchanged
+- [ ] Optional file field with `None` skipped
+- [ ] Optional file field missing from inputs — no crash
+- [ ] Empty string file input skipped
+- [ ] Non-file string input (URL-like) not downloaded
+- [ ] Download HTTP error raises `NodeIOError`
+- [ ] Download timeout raises `NodeIOError`
+- [ ] Content-Disposition path traversal sanitized
+- [ ] Two file inputs with same server filename — no collision
+- [ ] URL with query params — filename extracted from path
+- [ ] URL with no file extension — fallback filename
+- [ ] `request.inputs` not mutated by pipeline
+- [ ] Node with zero file inputs — `run()` unaffected
+- [ ] Non-string value in file field skipped
+- [ ] Multiple file inputs all processed
+- [ ] Non-file inputs untouched
 
-### Phase 5: Documentation & Lint
+### Phase 5: Lint & Existing Tests
 
-- [ ] Update `execute()` docstring in `base.py`
-- [ ] Update `docs/EXTERNAL-AUTHOR-GUIDE.md` to mention auto-download
 - [ ] Run `poetry run ruff check canvastekk_workflow_sdk/ tests/`
 - [ ] Run `poetry run pytest -v`
+
+### Phase 6: Documentation Sync (deferred to separate commit)
+
+- [ ] Update `AGENTS.md` rules 4-5
+- [ ] Update `python/README.md` File Handling Guide
+- [ ] Update `docs/EXTERNAL-AUTHOR-GUIDE.md` File Inputs section
+- [ ] Update `.opencode/skills/canvastekk-node-builder/SKILL.md`
+- [ ] Update `.opencode/skills/canvastekk-node-patterns/SKILL.md`
+- [ ] Update `README.md` File Input Validation + Architecture Decisions
+- [ ] Update `examples/echo_node/` to demonstrate new pattern
 
 ---
 
@@ -105,5 +134,9 @@ Add built-in file download middleware to the SDK that auto-downloads presigned U
 |------|-----------|
 | Breaking existing nodes that download manually | Local paths pass through unchanged — fully backward compatible |
 | Large file downloads timeout | Configurable timeout (default 30s), streaming chunks |
-| Filename collisions in `downloads_dir` | Prefix with field name to avoid overwrites |
+| Filename collisions in `downloads_dir` | Prefix with field name: `{field_name}_{filename}` |
 | Memory pressure from many concurrent downloads | Each download streams to disk, not memory |
+| SSRF via crafted URLs | URL scheme check; SDK runs in trusted orchestrator context |
+| Path traversal in filenames | `Path(filename).name` strips directory components |
+| `request.inputs` mutation affects error recording | Copy inputs dict before modification |
+| Optional file fields with None values | Explicit None/missing/non-string skip logic |
