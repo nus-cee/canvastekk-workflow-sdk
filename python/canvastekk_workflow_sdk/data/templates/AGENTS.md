@@ -18,11 +18,10 @@ When creating CanvasTEKK workflow nodes, always follow these rules:
 
 1. **Use `canvastekk-workflow-sdk` from GitHub Packages**: `pip install canvastekk-workflow-sdk --index-url https://pypi.pkg.github.com/nus-cee/`
 2. **File fields use `format: "file"` with `type: "string"`**: Never use `format: "binary"` or `type: "object"` on file fields — the SDK's model_validator rejects them
-3. **Include `x-accept` and `x-maxSizeBytes`** on every file input field
-4. **Download with `httpx.stream()`**: Use streaming with `iter_bytes(chunk_size=65536)`, `timeout=30.0`, and `follow_redirects=True`
-5. **Call `validate_file_input()` after download**: Always validate downloaded files against schema constraints
-6. **Write outputs to `context.output_path(filename)`**: Never hardcode paths; return them as `str(output_path)`
-7. **`definition` must be both module-level AND class attribute**: Module-level enables CLI validation; class attribute satisfies `BaseNode.__init_subclass__`
-8. **Node IDs follow `{name}-v{version}` format**: e.g., `segment-v1.0.0`
-9. **Report progress with `context.report_progress()`**: At key stages (download, process, save)
-10. **Always generate Dockerfile + pyproject.toml + tests**: A complete node project includes all four files
+3. **Include `x-accept` and `x-maxSizeBytes`** on every file input field — the SDK auto-validates downloaded files against these constraints
+4. **File inputs are auto-downloaded by the SDK**: The SDK downloads presigned URL file inputs to `context.downloads_dir` before calling `execute()`. Node authors receive local file paths, not URLs. Manual download with `httpx.stream()` is only needed for non-file URLs or opt-out scenarios.
+5. **Write outputs to `context.output_path(filename)`**: Never hardcode paths; return them as `str(output_path)`
+6. **`definition` must be both module-level AND class attribute**: Module-level enables CLI validation; class attribute satisfies `BaseNode.__init_subclass__`
+7. **Node IDs follow `{name}-v{version}` format**: e.g., `segment-v1.0.0`
+8. **Report progress with `context.report_progress()`**: At key stages (process, save)
+9. **Always generate Dockerfile + pyproject.toml + tests**: A complete node project includes all four files

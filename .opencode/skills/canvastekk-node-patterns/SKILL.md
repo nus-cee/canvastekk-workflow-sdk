@@ -29,7 +29,7 @@ Load this skill when:
 - You need a specific code pattern for a CanvasTEKK node type (point cloud, measurement, inference, etc.)
 - A user asks "how do I use InstanceSet/MeasurementSet/PlaneSet in a node?"
 - You need to add authentication, middleware, or webhooks to an existing node
-- You want example code for testing file I/O with mocked presigned URLs
+- You want example code for file I/O (note: SDK auto-downloads presigned URL file inputs before execute())
 - The `canvastekk-node-builder` skill has been loaded and you need domain-specific patterns
 
 This skill complements `canvastekk-node-builder` — load both when creating a node from scratch.
@@ -105,16 +105,12 @@ class SegmentNode(BaseNode):
     definition = definition
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-        url = inputs["point_cloud"]
+        # NOTE: Standard file inputs are auto-downloaded by the SDK.
+        # inputs["point_cloud"] is already a local path.
+        local_path = Path(inputs["point_cloud"])
         threshold = inputs.get("confidence_threshold", 0.5)
 
-        # Download input file
-        context.report_progress(0.1, "Downloading point cloud")
-        local_path = context.output_dir / "input.ply"
-        self._download(url, local_path)
-
-        # Validate file constraints
-        self.definition.validate_file_input("point_cloud", local_path)
+        # Auto-validated by SDK before execute() is called
 
         # Process point cloud (replace with actual ML inference)
         context.report_progress(0.3, "Running segmentation")
@@ -161,6 +157,8 @@ class SegmentNode(BaseNode):
             ),
         ]
 
+    # NOTE: _download helper is only needed for non-file URL downloads.
+    # Standard file inputs (format: "file") are auto-downloaded by the SDK.
     @staticmethod
     def _download(url: str, dest: Path) -> None:
         with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
@@ -235,12 +233,9 @@ class MeasureNode(BaseNode):
     definition = definition
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-        url = inputs["instances"]
-
-        # Download and parse InstanceSet
-        context.report_progress(0.1, "Downloading instances")
-        local_path = context.output_dir / "instances.json"
-        self._download(url, local_path)
+        # NOTE: Standard file inputs are auto-downloaded by the SDK.
+        # inputs["instances"] is already a local path.
+        local_path = Path(inputs["instances"])
 
         try:
             instance_set = InstanceSet.load_json(local_path)
@@ -288,6 +283,8 @@ class MeasureNode(BaseNode):
             "measurement_count": len(measurements),
         }
 
+    # NOTE: _download helper is only needed for non-file URL downloads.
+    # Standard file inputs (format: "file") are auto-downloaded by the SDK.
     @staticmethod
     def _download(url: str, dest: Path) -> None:
         with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
@@ -356,13 +353,11 @@ class PlaneDetectNode(BaseNode):
     definition = definition
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-        url = inputs["point_cloud"]
-        context.report_progress(0.1, "Downloading point cloud")
+    # NOTE: Standard file inputs are auto-downloaded by the SDK.
+    # inputs["point_cloud"] is already a local path.
+    local_path = Path(inputs["point_cloud"])
 
-        local_path = context.output_dir / "input.ply"
-        self._download(url, local_path)
-        self.definition.validate_file_input("point_cloud", local_path)
-
+        # Auto-validated by SDK before execute() is called
         context.report_progress(0.4, "Detecting planes")
         planes = self._detect_planes(local_path)
 
@@ -386,6 +381,8 @@ class PlaneDetectNode(BaseNode):
             Plane(point=Point3D(x=0, y=0, z=2800), normal=Point3D(x=0, y=0, z=-1), label="ceiling"),
         ]
 
+    # NOTE: _download helper is only needed for non-file URL downloads.
+    # Standard file inputs (format: "file") are auto-downloaded by the SDK.
     @staticmethod
     def _download(url: str, dest: Path) -> None:
         with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
@@ -488,12 +485,11 @@ class InferenceNode(BaseNode):
         if self.model is None:
             raise NodeConfigurationError("Model not loaded — startup may have failed")
 
-        url = inputs["input_data"]
-        context.report_progress(0.1, "Downloading input")
+        # NOTE: Standard file inputs are auto-downloaded by the SDK.
+        # inputs["input_data"] is already a local path.
+        local_path = Path(inputs["input_data"])
 
-        local_path = context.output_dir / "input.bin"
-        self._download(url, local_path)
-        self.definition.validate_file_input("input_data", local_path)
+        # Auto-validated by SDK before execute() is called
 
         context.report_progress(0.3, "Running inference")
         try:
@@ -513,6 +509,8 @@ class InferenceNode(BaseNode):
         import json
         return json.dumps({"status": "ok", "predictions": []})
 
+    # NOTE: _download helper is only needed for non-file URL downloads.
+    # Standard file inputs (format: "file") are auto-downloaded by the SDK.
     @staticmethod
     def _download(url: str, dest: Path) -> None:
         with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
@@ -741,13 +739,12 @@ class ConvertNode(BaseNode):
     definition = definition
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-        url = inputs["input_file"]
+        # NOTE: Standard file inputs are auto-downloaded by the SDK.
+        # inputs["input_file"] is already a local path.
+        input_path = Path(inputs["input_file"])
         output_format = inputs.get("output_format", "xyz")
 
-        context.report_progress(0.1, "Downloading input")
-        input_path = context.output_dir / "input.ply"
-        self._download(url, input_path)
-        self.definition.validate_file_input("input_file", input_path)
+        # Auto-validated by SDK before execute() is called
 
         context.report_progress(0.5, f"Converting to {output_format}")
         output_path = context.output_path(f"output.{output_format}")
@@ -766,6 +763,8 @@ class ConvertNode(BaseNode):
         output_path.write_bytes(data)
         return 1000  # placeholder point count
 
+    # NOTE: _download helper is only needed for non-file URL downloads.
+    # Standard file inputs (format: "file") are auto-downloaded by the SDK.
     @staticmethod
     def _download(url: str, dest: Path) -> None:
         with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
@@ -783,6 +782,9 @@ app = ConvertNode().create_app()
 ## Testing Patterns
 
 ### Testing File Download with Mocked httpx
+
+# NOTE: Auto-download can be tested by providing local file paths directly.
+# Mock httpx.stream only when testing non-file URL scenarios.
 
 ```python
 from pathlib import Path
@@ -899,6 +901,8 @@ def test_execute_with_mocked_download():
     """Test the full HTTP stack with mocked file download."""
     from unittest.mock import patch
 
+    # NOTE: Auto-download can be tested by providing local file paths directly.
+    # Mock httpx.stream only when testing non-file URL scenarios.
     with patch("handler.httpx.stream") as mock_stream:
         # Set up mock
         mock_stream.return_value = make_mock_stream_response(b"test data")

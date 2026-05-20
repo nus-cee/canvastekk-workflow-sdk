@@ -5,8 +5,8 @@ Minimal example showing file input/output with the CanvasTEKK Workflow SDK.
 ## What it demonstrates
 
 - **File fields**: `format: "file"` with `x-accept` and `x-maxSizeBytes` extensions
-- **Presigned URL download**: Uses `httpx` to download from engine-provided presigned GET URLs
-- **Runtime validation**: Calls `definition.validate_file_input()` after download
+- **Auto-download**: SDK automatically downloads presigned URL file inputs before execute()
+- **Runtime validation**: SDK auto-validates downloaded files against `x-accept` and `x-maxSizeBytes`
 - **Output upload**: Returns a local path; SDK uploads via presigned PUT URL
 - **CLI validation**: Offline manifest validation during development
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from canvastekk_workflow_sdk.logging import get_node_logger
 
@@ -25,6 +25,8 @@ class ExecutionContext:
     Provides access to:
     - Run and node identifiers
     - Output directory for temporary files
+    - Downloads directory for auto-downloaded file inputs
+    - Metadata dict for download tracking
     - Logger with context
     - Progress reporting (for long-running operations)
     """
@@ -48,6 +50,8 @@ class ExecutionContext:
         self._logger = get_node_logger(request.node_id)
 
         self._token_usage: dict[str, int] = {}
+        self._metadata: dict[str, Any] = {}
+        self._downloads_dir: Path | None = None
 
     @property
     def run_id(self) -> str:
@@ -83,6 +87,27 @@ class ExecutionContext:
             Full path in the output directory
         """
         return self._output_dir / filename
+
+    @property
+    def downloads_dir(self) -> Path:
+        """Directory for auto-downloaded file inputs.
+
+        Created lazily on first access. Separate from ``output_dir``
+        to keep downloaded inputs distinct from node-generated outputs.
+        """
+        if self._downloads_dir is None:
+            self._downloads_dir = self._output_dir / "downloads"
+            self._downloads_dir.mkdir(parents=True, exist_ok=True)
+        return self._downloads_dir
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        """Mutable metadata dict for tracking download info and other context.
+
+        The SDK stores download metadata here (original URLs, local paths,
+        file sizes). Node authors may also use this for custom metadata.
+        """
+        return self._metadata
 
     def report_progress(self, progress: float, message: str = "") -> None:
         """
