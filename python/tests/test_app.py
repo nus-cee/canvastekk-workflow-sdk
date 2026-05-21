@@ -17,7 +17,6 @@ class EchoNode(BaseNode):
     """Simple echo node for testing."""
 
     definition = NodeDefinition(
-        id="echo-v1.0.0",
         name="echo",
         version="1.0.0",
         title="Echo",
@@ -41,7 +40,6 @@ class FileProcessingNode(BaseNode):
     """Node that accepts file uploads and scalar inputs."""
 
     definition = NodeDefinition(
-        id="file-proc-v1.0.0",
         name="file-proc",
         version="1.0.0",
         title="File Processor",
@@ -84,7 +82,6 @@ class FailingNode(BaseNode):
     """Node that always fails."""
 
     definition = NodeDefinition(
-        id="failing-v1.0.0",
         name="failing",
         version="1.0.0",
         title="Failing",
@@ -101,7 +98,6 @@ class DegradedNode(BaseNode):
     """Node with mixed health checks."""
 
     definition = NodeDefinition(
-        id="degraded-v1.0.0",
         name="degraded",
         version="1.0.0",
         title="Degraded",
@@ -270,7 +266,6 @@ class FileOutputNode(BaseNode):
     """Node that produces file outputs for S3 upload testing."""
 
     definition = NodeDefinition(
-        id="file-output-v1.0.0",
         name="file-output",
         version="1.0.0",
         title="File Output",
@@ -300,7 +295,6 @@ class FailingOutputNode(BaseNode):
     """Node that always fails — for testing S3 upload skip on failure."""
 
     definition = NodeDefinition(
-        id="fail-output-v1.0.0",
         name="fail-output",
         version="1.0.0",
         title="Fail Output",
@@ -902,7 +896,6 @@ class TestReadinessProbe:
     def test_readiness_returns_200_when_all_checks_pass(self, monkeypatch: pytest.MonkeyPatch) -> None:
         class HealthyNode(BaseNode):
             definition = NodeDefinition(
-                id="healthy-v1",
                 name="healthy",
                 version="1.0.0",
                 title="Healthy",
@@ -925,7 +918,6 @@ class TestReadinessProbe:
     def test_readiness_returns_503_when_check_fails(self) -> None:
         class UnhealthyNode(BaseNode):
             definition = NodeDefinition(
-                id="unhealthy-v1",
                 name="unhealthy",
                 version="1.0.0",
                 title="Unhealthy",

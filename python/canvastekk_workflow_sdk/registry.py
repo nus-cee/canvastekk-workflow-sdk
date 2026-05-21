@@ -120,7 +120,11 @@ def register_node(
     try:
         resp = httpx.post(registry_url, json=manifest, headers=headers, timeout=timeout)
         resp.raise_for_status()
-        return _extract_node_data(resp.json())
+        response_data = resp.json()
+        action = response_data.get("action")
+        if action:
+            logger.info("Node registration action: %s", action)
+        return _extract_node_data(response_data)
     except httpx.HTTPStatusError as e:
         raise RegistrationError(
             f"Registration failed: {e}",

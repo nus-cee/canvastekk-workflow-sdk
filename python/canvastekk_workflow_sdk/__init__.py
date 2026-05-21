@@ -10,7 +10,6 @@ Quick Start:
 
     class MyNode(BaseNode):
         definition = NodeDefinition(
-            id="my-node-v1.0.0",
             name="my-node",
             version="1.0.0",
             title="My Node",

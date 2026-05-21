@@ -25,7 +25,6 @@ def test_validate_valid_definition():
 from canvastekk_workflow_sdk import NodeDefinition
 
 definition = NodeDefinition(
-    id="test-node-v1.0.0",
     name="test-node",
     version="1.0.0",
     title="Test Node",
@@ -58,7 +57,6 @@ def test_validate_with_json_flag():
 from canvastekk_workflow_sdk import NodeDefinition
 
 definition = NodeDefinition(
-    id="test-node-v1.0.0",
     name="test-node",
     version="1.0.0",
     title="Test Node",
@@ -94,7 +92,6 @@ def test_validate_invalid_path_format():
 from canvastekk_workflow_sdk import NodeDefinition
 
 definition = NodeDefinition(
-    id="test-node-v1.0.0",
     name="test-node",
     version="1.0.0",
     title="Test Node",

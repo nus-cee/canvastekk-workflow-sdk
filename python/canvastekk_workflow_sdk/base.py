@@ -48,7 +48,6 @@ class BaseNode(ABC):
     Example:
         class EchoNode(BaseNode):
             definition = NodeDefinition(
-                id="echo-v1.0.0",
                 name="echo",
                 version="1.0.0",
                 title="Echo",

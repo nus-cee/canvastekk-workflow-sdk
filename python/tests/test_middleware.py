@@ -8,7 +8,6 @@ from canvastekk_workflow_sdk.middleware import LoggingMiddleware, TimingMiddlewa
 
 class EchoNode(BaseNode):
     definition = NodeDefinition(
-        id="echo-v1.0.0",
         name="echo",
         version="1.0.0",
         title="Echo",
@@ -23,7 +22,6 @@ class EchoNode(BaseNode):
 
 class FailingNode(BaseNode):
     definition = NodeDefinition(
-        id="failing-v1.0.0",
         name="failing",
         version="1.0.0",
         title="Failing",

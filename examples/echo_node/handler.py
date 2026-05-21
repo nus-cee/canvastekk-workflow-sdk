@@ -15,7 +15,6 @@ import httpx
 from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition
 
 definition = NodeDefinition(
-    id="echo-v1.0.0",
     name="echo",
     version="1.0.0",
     title="Echo",

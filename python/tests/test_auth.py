@@ -1,9 +1,18 @@
 """Tests for authentication module (Phase 2)."""
 
+from typing import Any
+
 import pytest
 from fastapi import HTTPException
 
 from canvastekk_workflow_sdk.auth import NodeAuth, _ApiKeyAuth, _is_dev_mode, _JwtAuth, _KeycloakAuth
+
+
+def _raise_import_error(message: str):
+    def _raiser(*args: Any, **kwargs: Any) -> Any:
+        raise ImportError(message)
+
+    return _raiser
 
 
 class TestIsDevMode:
@@ -157,6 +166,9 @@ class TestJwtAuth:
             headers: dict[str, str] = {}
 
         auth = _JwtAuth()
+        auth._jwt_module = None
+        monkeypatch.setattr(auth, "_get_jwt", _raise_import_error("PyJWT is required for JWT authentication"))
+
         request = MockRequest()
         request.headers["Authorization"] = "Bearer test-token"
 
@@ -244,6 +256,9 @@ class TestJwtAuth:
             headers: dict[str, str] = {}
 
         auth = _JwtAuth()
+        auth._jwt_module = None
+        monkeypatch.setattr(auth, "_get_jwt", _raise_import_error("PyJWT is required"))
+
         request = MockRequest()
         request.headers["Authorization"] = "Bearer test-token"
 
@@ -259,6 +274,11 @@ class TestKeycloakAuth:
             headers: dict[str, str] = {}
 
         auth = _KeycloakAuth()
+        auth._jwt_module = None
+        monkeypatch.setattr(
+            auth, "_get_jwt", _raise_import_error("PyJWT and cryptography are required for Keycloak authentication")
+        )
+
         request = MockRequest()
         request.headers["Authorization"] = "Bearer test-token"
 
@@ -325,6 +345,9 @@ class TestKeycloakAuth:
             headers: dict[str, str] = {}
 
         auth = _KeycloakAuth()
+        auth._jwt_module = None
+        monkeypatch.setattr(auth, "_get_jwt", _raise_import_error("PyJWT and cryptography are required"))
+
         request = MockRequest()
         request.headers["Authorization"] = "Bearer test-token"
 

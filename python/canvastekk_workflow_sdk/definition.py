@@ -8,12 +8,17 @@ Every compliant node must provide a NodeDefinition.
 from __future__ import annotations
 
 import json
+import re
+import warnings
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
 from canvastekk_workflow_sdk.exceptions import NodeValidationError
+
+_SLUG_PATTERN = re.compile(r"^[a-z]([a-z0-9-]*[a-z0-9])?$")
+_SEMVER_PATTERN = re.compile(r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
 
 # fmt: off
 ColorPreset = Literal[
@@ -88,7 +93,6 @@ class NodeDefinition(BaseModel):
     """
 
     # Identity
-    id: str = Field(description="Unique identifier with version (e.g., 'segmentation-v1.2.0')")
     name: str = Field(description="Slug for routing (e.g., 'segmentation')")
     version: str = Field(description="Semantic version (e.g., '1.2.0')")
     title: str = Field(description="Human-readable title (e.g., 'Point Cloud Segmentation')")
@@ -135,6 +139,40 @@ class NodeDefinition(BaseModel):
         default=None,
         description="Icon and color for the workflow builder UI",
     )
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def id(self) -> str:
+        return f"{self.name}-v{self.version}"
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, v: str) -> str:
+        if not _SLUG_PATTERN.match(v):
+            raise ValueError(
+                f"Node name must be a lowercase slug (alphanumeric and hyphens only, no leading/trailing hyphens). Got: '{v}'"
+            )
+        return v
+
+    @field_validator("version")
+    @classmethod
+    def _validate_version(cls, v: str) -> str:
+        if not _SEMVER_PATTERN.match(v):
+            raise ValueError(f"Node version must be semantic version (X.Y.Z). Got: '{v}'")
+        return v
+
+    @model_validator(mode="before")
+    @classmethod
+    def _handle_deprecated_id(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "id" in data:
+            warnings.warn(
+                "Providing 'id' manually is deprecated. "
+                f"Auto-derived '{data.get('name', '')}-v{data.get('version', '')}' will be used.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            del data["id"]
+        return data
 
     @property
     def file_input_fields(self) -> list[str]:
@@ -243,6 +281,7 @@ def export_definition(
     Field mapping:
         NodeDefinition.title  -> label
         NodeDefinition.default_retry -> retry
+        NodeDefinition.id (computed) -> intentionally omitted; registry derives its own identifier from name + version
 
     Args:
         definition: The SDK NodeDefinition to export.
