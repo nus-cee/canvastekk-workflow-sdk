@@ -8,7 +8,7 @@ registry via its REST API. Intended for use in CI/CD pipelines.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, get_args
 
 import httpx
 from pydantic import BaseModel
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 InvokeType = Literal["http", "lambda", "sagemaker", "in-process"]
-VALID_INVOKE_TYPES: set[str] = {"http", "lambda", "sagemaker", "in-process"}
+VALID_INVOKE_TYPES: set[str] = set(get_args(InvokeType))
 
 
 class RegistrationError(Exception):
@@ -33,7 +33,11 @@ class RegistrationError(Exception):
 
 
 class RegisterNodeResult(BaseModel):
-    """Structured result from node registration."""
+    """Structured result from node registration.
+
+    Supports dict-like access (``result["name"]``) for backward compatibility
+    by delegating to the ``node`` field.
+    """
 
     node: dict[str, Any]
     action: str | None = None
@@ -41,11 +45,20 @@ class RegisterNodeResult(BaseModel):
     previous_version: str | None = None
     changes: list[str] | None = None
 
+    def __getitem__(self, key: str) -> Any:
+        return self.node[key]
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.node
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.node.get(key, default)
+
 
 def build_registry_payload(
     definition: NodeDefinition,
     *,
-    invoke_type: str = "http",
+    invoke_type: InvokeType = "http",
     invoke_url: str | None = None,
     invoke_config: dict[str, Any] | None = None,
     tags: list[str] | None = None,
@@ -59,7 +72,8 @@ def build_registry_payload(
 
     Args:
         definition: The SDK NodeDefinition to convert.
-        invoke_type: Invocation type (http, lambda, sagemaker, in-process).
+        invoke_type: Invocation type (``"http"``, ``"lambda"``,
+            ``"sagemaker"``, or ``"in-process"``).
         invoke_url: URL/ARN for invoking the node.
         invoke_config: Extra invocation parameters.
         tags: Searchable tags for the registry.
@@ -91,7 +105,8 @@ def build_registry_payload(
         "node_status": node_status,
     }
 
-    payload["invoke_url"] = invoke_url
+    if invoke_url is not None:
+        payload["invoke_url"] = invoke_url
     if invoke_config is not None:
         payload["invoke_config"] = invoke_config
     if constraints is not None:
@@ -102,6 +117,9 @@ def build_registry_payload(
 
 def _extract_node_data(payload: dict[str, Any]) -> dict[str, Any]:
     """Extract node definition from registry response, handling multiple formats.
+
+    The ``"node"`` key takes precedence over ``"data"`` when both are present,
+    matching the engine's current ``RegisterNodeResponse`` schema.
 
     Args:
         payload: Parsed JSON response from the registry.
@@ -127,7 +145,7 @@ def register_node(
     tags: list[str] | None = None,
     invoke_config: dict[str, Any] | None = None,
     timeout: int = 30,
-) -> dict[str, Any]:
+) -> RegisterNodeResult:
     """Register a node with the workflow engine registry.
 
     POSTs the node manifest to the registry endpoint. Intended for
@@ -150,9 +168,11 @@ def register_node(
         timeout: Request timeout in seconds.
 
     Returns:
-        The parsed JSON response from the registry. If the response uses
-        a wrapper format (``{"node": ...}`` or ``{"data": ...}``), the inner
-        node definition dict is returned directly for backward compatibility.
+        A :class:`RegisterNodeResult` containing the registered node data,
+        the action taken (``"created"``, ``"updated"``, ``"unchanged"``),
+        and metadata such as ``revision_id``, ``previous_version``, and
+        ``changes``. For backward compatibility, the result supports dict-like
+        access (``result["name"]``) by delegating to the ``node`` field.
 
     Raises:
         RegistrationError: If the registration request fails.
@@ -164,12 +184,15 @@ def register_node(
         from canvastekk_workflow_sdk.registry import register_node
 
         node = MyNode()
-        register_node(
+        result = register_node(
             node,
             registry_url="https://engine.example.com/api/workflows/nodes/",
             invoke_url="https://my-node.example.com",
             api_key="secret-key",
         )
+        print(result.action)         # "created"
+        print(result.revision_id)    # "rev-abc123"
+        print(result["name"])        # dict-like access for backward compat
 
         # CI/CD with service token
         register_node(
@@ -223,7 +246,14 @@ def register_node(
         if changes:
             logger.info("Changed fields: %s", changes)
 
-        return _extract_node_data(response_data)
+        node_data = _extract_node_data(response_data)
+        return RegisterNodeResult(
+            node=node_data,
+            action=action,
+            revision_id=revision_id,
+            previous_version=previous_version,
+            changes=changes,
+        )
     except httpx.HTTPStatusError as e:
         raise RegistrationError(
             f"Registration failed: {e}",

@@ -11,11 +11,14 @@ import json
 import re
 import warnings
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
 from canvastekk_workflow_sdk.exceptions import NodeValidationError
+
+if TYPE_CHECKING:
+    from canvastekk_workflow_sdk.registry import InvokeType
 
 _SLUG_PATTERN = re.compile(r"^[a-z]([a-z0-9-]*[a-z0-9])?$")
 _SEMVER_PATTERN = re.compile(r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
@@ -265,7 +268,7 @@ def export_definition(
     definition: NodeDefinition,
     output_path: str | Path,
     *,
-    invoke_type: str = "http",
+    invoke_type: InvokeType = "http",
     invoke_url: str | None = None,
     node_status: str = "active",
     tags: list[str] | None = None,

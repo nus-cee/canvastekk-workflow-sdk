@@ -38,7 +38,7 @@ class TestRegisterNode:
     """Tests for register_node function."""
 
     def test_successful_registration_returns_parsed_response(self) -> None:
-        """Test that successful registration returns parsed JSON response."""
+        """Test that successful registration returns RegisterNodeResult."""
         node = DummyNode()
         registry_url = "https://registry.example.com/api/nodes"
         response_body = {"id": "node-123", "status": "registered"}
@@ -52,7 +52,10 @@ class TestRegisterNode:
             result = register_node(node, registry_url, api_key="key")
 
         mock_post.assert_called_once()
-        assert result == response_body
+        assert isinstance(result, RegisterNodeResult)
+        assert result.node == response_body
+        assert result["id"] == "node-123"
+        assert "status" in result
 
     def test_posts_correct_manifest_json(self) -> None:
         """Test that POSTs correct manifest JSON with all required fields."""
@@ -218,8 +221,8 @@ class TestRegisterNode:
         assert "invoke_url" in call_kwargs["json"]
         assert call_kwargs["json"]["invoke_url"] == invoke_url
 
-    def test_invoke_url_included_as_none_when_not_provided(self) -> None:
-        """Test that invoke_url is included as None when not provided."""
+    def test_invoke_url_omitted_when_not_provided(self) -> None:
+        """Test that invoke_url is omitted from manifest when not provided."""
         node = DummyNode()
         registry_url = "https://registry.example.com/api/nodes"
 
@@ -233,8 +236,7 @@ class TestRegisterNode:
 
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args[1]
-        assert "invoke_url" in call_kwargs["json"]
-        assert call_kwargs["json"]["invoke_url"] is None
+        assert "invoke_url" not in call_kwargs["json"]
 
     def test_custom_invoke_type_in_manifest(self) -> None:
         """Test that custom invoke_type is included in manifest."""
@@ -314,8 +316,10 @@ class TestRegisterNode:
             result = register_node(node, registry_url, api_key="key")
 
         mock_post.assert_called_once()
-        assert result == {"id": "node-123", "name": "test"}
-        assert "action" not in result
+        assert isinstance(result, RegisterNodeResult)
+        assert result.node == {"id": "node-123", "name": "test"}
+        assert result.action == "created"
+        assert "action" not in result.node
 
     def test_successful_registration_returns_old_format_directly(self) -> None:
         """Test that old response format (no data wrapper) is returned as-is."""
@@ -331,7 +335,9 @@ class TestRegisterNode:
             result = register_node(node, registry_url, api_key="key")
 
         mock_post.assert_called_once()
-        assert result == {"id": "node-123", "name": "test"}
+        assert isinstance(result, RegisterNodeResult)
+        assert result.node == {"id": "node-123", "name": "test"}
+        assert result["name"] == "test"
 
 
 class TestExtractNodeData:
@@ -457,11 +463,10 @@ class TestBuildRegistryPayload:
         payload = build_registry_payload(definition, tags=["ml", "segmentation"])
         assert payload["tags"] == ["ml", "segmentation"]
 
-    def test_invoke_url_always_included(self) -> None:
+    def test_invoke_url_omitted_when_none(self) -> None:
         definition = self._make_definition()
         payload = build_registry_payload(definition)
-        assert "invoke_url" in payload
-        assert payload["invoke_url"] is None
+        assert "invoke_url" not in payload
 
     def test_invoke_url_with_value(self) -> None:
         definition = self._make_definition()
@@ -501,7 +506,7 @@ class TestBuildRegistryPayload:
             "input_schema", "output_schema", "invoke_type",
             "category", "token_cost", "timeout_seconds",
             "is_control_flow", "retry", "tags", "styles",
-            "node_status", "invoke_url",
+            "node_status",
         }
         assert expected_keys.issubset(payload.keys())
 
@@ -638,9 +643,13 @@ class TestRegisterNodeNewFeatures:
         with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response):
             result = register_node(node, "https://registry.example.com/api/nodes", api_key="key")
 
-        assert result == {"id": "uuid-123", "name": "test"}
-        assert "action" not in result
-        assert "revision_id" not in result
+        assert isinstance(result, RegisterNodeResult)
+        assert result.node == {"id": "uuid-123", "name": "test"}
+        assert result.action == "created"
+        assert result.revision_id == "rev-456"
+        assert result["id"] == "uuid-123"
+        assert "action" not in result.node
+        assert "revision_id" not in result.node
 
     def test_logs_response_metadata(self) -> None:
         node = DummyNode()
