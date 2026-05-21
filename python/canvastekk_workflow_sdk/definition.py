@@ -276,7 +276,7 @@ def export_definition(
     Export a NodeDefinition as a RegistryNodeDefinition-compatible JSON file.
 
     Maps SDK NodeDefinition fields to the registry schema and writes the result
-    as a clean JSON file suitable for CI/CD registration via POST /registry/nodes.
+    as a clean JSON file suitable for CI/CD registration via POST /api/workflows/nodes/.
 
     Field mapping:
         NodeDefinition.title  -> label
@@ -296,31 +296,21 @@ def export_definition(
     Returns:
         The resolved Path where the file was written.
     """
+    from canvastekk_workflow_sdk.registry import build_registry_payload
+
     output_path = Path(output_path)
 
-    # Use explicitly passed styles, fall back to definition.styles
-    resolved_styles = styles
-    if resolved_styles is None and definition.styles is not None:
-        resolved_styles = definition.styles.model_dump(mode="json")
+    registry_dict = build_registry_payload(
+        definition,
+        invoke_type=invoke_type,
+        invoke_url=invoke_url,
+        tags=tags,
+        constraints=constraints,
+        node_status=node_status,
+    )
 
-    registry_dict: dict[str, Any] = {
-        "name": definition.name,
-        "version": definition.version,
-        "label": definition.title,
-        "description": definition.description,
-        "category": definition.category,
-        "node_status": node_status,
-        "input_schema": definition.input_schema,
-        "output_schema": definition.output_schema,
-        "invoke_type": invoke_type,
-        "invoke_url": invoke_url,
-        "styles": resolved_styles,
-        "constraints": constraints,
-        "tags": tags or [],
-        "token_cost": definition.token_cost,
-        "timeout_seconds": definition.timeout_seconds,
-        "retry": definition.default_retry.model_dump(mode="json"),
-    }
+    if styles is not None:
+        registry_dict["styles"] = styles
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(registry_dict, indent=2) + "\n")

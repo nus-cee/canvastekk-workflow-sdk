@@ -1,6 +1,6 @@
 # External Author Guide
 
-> **SDK Version:** This guide targets `canvastekk-workflow-sdk` >= 0.7.0. Features documented here may differ in earlier versions.
+> **SDK Version:** This guide targets `canvastekk-workflow-sdk` >= 0.9.0. Features documented here may differ in earlier versions.
 
 End-to-end guide for building, deploying, and registering a CanvasTEKK workflow node.
 
@@ -180,7 +180,7 @@ version = "1.0.0"
 description = "My CanvasTEKK workflow node"
 requires-python = ">=3.12"
 dependencies = [
-    "canvastekk-workflow-sdk>=0.7.0,<0.8.0",
+    "canvastekk-workflow-sdk>=0.9.0,<1.0.0",
 ]
 ```
 
@@ -244,19 +244,46 @@ node = MyNode()
 # CI/CD with service token (recommended)
 register_node(
     node,
-    registry_url="https://engine.example.com/api/registry/nodes",
+    registry_url="https://engine.example.com/api/workflows/nodes/",
     invoke_url="https://my-node.example.com",
     service_token="svs_your-token-here",
+    tags=["category:utility", "team:platform"],
 )
 
 # Manual with API key
 register_node(
     node,
-    registry_url="https://engine.example.com/api/registry/nodes",
+    registry_url="https://engine.example.com/api/workflows/nodes/",
     invoke_url="https://my-node.example.com",
     api_key="your-api-key",
 )
+
+# Lambda invocation
+register_node(
+    node,
+    registry_url="https://engine.example.com/api/workflows/nodes/",
+    invoke_type="lambda",
+    invoke_url="arn:aws:lambda:ap-southeast-1:123456789:function:my-node",
+    invoke_config={"region": "ap-southeast-1"},
+    service_token="svs_your-token-here",
+)
 ```
+
+#### Registration Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `node` | `BaseNode` | Yes | The node instance to register |
+| `registry_url` | `str` | Yes | Engine registry endpoint (e.g., `/api/workflows/nodes/`) |
+| `invoke_url` | `str \| None` | No | URL where the node is reachable |
+| `invoke_type` | `"http" \| "lambda" \| "sagemaker" \| "in-process"` | No | Invocation type (default: `"http"`) |
+| `api_key` | `str \| None` | Yes* | API key for auth (`X-API-Key` header) |
+| `service_token` | `str \| None` | Yes* | Service token for CI/CD (`X-Service-Token` header, takes precedence) |
+| `tags` | `list[str] \| None` | No | Searchable tags for the registry |
+| `invoke_config` | `dict \| None` | No | Extra invocation parameters (e.g., Lambda region) |
+| `timeout` | `int` | No | Request timeout in seconds (default: 30) |
+
+*Either `api_key` or `service_token` must be provided.
 
 ### Using `curl` (manual)
 
@@ -265,7 +292,7 @@ register_node(
 MANIFEST=$(curl -s http://localhost:8001/manifest)
 
 # Register with service token
-curl -X POST https://engine.example.com/api/registry/nodes \
+curl -X POST https://engine.example.com/api/workflows/nodes/ \
   -H "Content-Type: application/json" \
   -H "X-Service-Token: svs_your-token-here" \
   -d "$(echo "$MANIFEST" | jq '. + {invoke_url: "https://my-node.example.com", invoke_type: "http"}')"
@@ -312,7 +339,7 @@ on:
 env:
   REGISTRY: your-registry.example.com
   IMAGE_NAME: my-node
-  ENGINE_URL: https://engine.example.com/api/registry/nodes
+  ENGINE_URL: https://engine.example.com/api/workflows/nodes/
 
 jobs:
   build-and-register:
@@ -346,6 +373,7 @@ jobs:
               registry_url='${{ env.ENGINE_URL }}',
               invoke_url='https://my-node.example.com',
               service_token=os.environ['REGISTRY_SERVICE_TOKEN'],
+              tags=['ci-cd', 'auto-registered'],
           )
           print('Registration successful')
           "
@@ -395,7 +423,7 @@ from canvastekk_workflow_sdk.registry import register_node, RegistrationError
 try:
     result = register_node(
         node,
-        registry_url="https://engine.example.com/api/registry/nodes",
+        registry_url="https://engine.example.com/api/workflows/nodes/",
         invoke_url="https://my-node.example.com",
         service_token="svs_your-token-here",
     )
@@ -433,7 +461,7 @@ my-node/
 name = "my-node"
 version = "1.0.0"
 requires-python = ">=3.12"
-dependencies = ["canvastekk-workflow-sdk>=0.7.0,<0.8.0"]
+dependencies = ["canvastekk-workflow-sdk>=0.9.0,<1.0.0"]
 ```
 
 **Dockerfile** — see [Step 3](#step-3-containerize)
