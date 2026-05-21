@@ -66,7 +66,12 @@ from canvastekk_workflow_sdk.exceptions import (
 from canvastekk_workflow_sdk.logging import StructuredJsonFormatter, configure_logging, get_node_logger
 from canvastekk_workflow_sdk.middleware import LoggingMiddleware, NodeMiddleware, SDKVersionMiddleware, TimingMiddleware
 from canvastekk_workflow_sdk.observability import ExecutionMetric, MetricsCollector
-from canvastekk_workflow_sdk.registry import RegistrationError, register_node
+from canvastekk_workflow_sdk.registry import (
+    RegisterNodeResult,
+    RegistrationError,
+    build_registry_payload,
+    register_node,
+)
 from canvastekk_workflow_sdk.request import NodeExecutionRequest
 from canvastekk_workflow_sdk.response import HealthResponse, NodeExecutionResponse
 from canvastekk_workflow_sdk.router import create_multi_node_app
@@ -104,6 +109,7 @@ __all__ = [
     "Point3D",
     "RetryConfig",
     "RegistrationError",
+    "RegisterNodeResult",
     "SDKVersionMiddleware",
     "StructuredJsonFormatter",
     "S3PresignedUploader",
@@ -115,6 +121,7 @@ __all__ = [
     "get_default_uploader",
     "get_node_logger",
     "register_node",
+    "build_registry_payload",
 ]
 
 __version__ = "0.9.0"

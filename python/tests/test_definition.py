@@ -375,7 +375,7 @@ class TestExportDefinition:
             assert data["input_schema"] == definition.input_schema
             assert data["output_schema"] == definition.output_schema
             assert data["invoke_type"] == "http"
-            assert data["invoke_url"] is None
+            assert "invoke_url" not in data
             assert data["token_cost"] == 5.0
             assert data["timeout_seconds"] == 60
 
@@ -453,7 +453,6 @@ class TestExportDefinition:
                 "input_schema",
                 "output_schema",
                 "invoke_type",
-                "invoke_url",
                 "token_cost",
                 "timeout_seconds",
                 "retry",

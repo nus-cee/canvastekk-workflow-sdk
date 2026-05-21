@@ -126,7 +126,7 @@ curl http://localhost:8001/health
 
 # Node manifest
 curl http://localhost:8001/manifest
-# {"id":"uppercase-v1.0.0","name":"uppercase","version":"1.0.0","sdk_version":"0.6.0","mode":"dev",...}
+# {"id":"uppercase-v1.0.0","name":"uppercase","version":"1.0.0","sdk_version":"0.9.0","mode":"dev",...}
 
 # Execute the node
 curl -X POST http://localhost:8001/execute \
@@ -940,6 +940,128 @@ It demonstrates:
 
 ---
 
+## Registry & Registration
+
+The SDK provides utilities for registering nodes with the CanvasTEKK Workflow Engine registry. These are typically used in CI/CD pipelines after deployment.
+
+### `register_node()`
+
+Register a node with the workflow engine registry via `POST /api/workflows/nodes/`:
+
+```python
+from canvastekk_workflow_sdk.registry import register_node
+
+node = MyNode()
+result = register_node(
+    node,
+    registry_url="https://engine.example.com/api/workflows/nodes/",
+    invoke_url="https://my-node.example.com",
+    service_token="svs_your-token-here",
+    tags=["category:utility", "team:platform"],
+)
+
+print(result.action)         # "created"
+print(result.revision_id)    # "rev-abc123"
+print(result["name"])        # dict-like access for backward compat
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `node` | `BaseNode` | Yes | The node instance to register |
+| `registry_url` | `str` | Yes | Engine registry endpoint |
+| `invoke_url` | `str \| None` | No | URL where the node is reachable |
+| `invoke_type` | `InvokeType` | No | `"http"`, `"lambda"`, `"sagemaker"`, or `"in-process"` (default: `"http"`) |
+| `api_key` | `str \| None` | Yes* | API key auth (`X-API-Key` header) |
+| `service_token` | `str \| None` | Yes* | CI/CD auth (`X-Service-Token` header, takes precedence) |
+| `tags` | `list[str] \| None` | No | Searchable tags for the registry |
+| `invoke_config` | `dict \| None` | No | Extra invocation parameters (e.g., Lambda region) |
+| `timeout` | `int` | No | Request timeout in seconds (default: 30) |
+
+*Either `api_key` or `service_token` must be provided.
+
+### `RegisterNodeResult`
+
+The return type of `register_node()`. Contains the node data and registration metadata:
+
+```python
+class RegisterNodeResult(BaseModel):
+    node: dict[str, Any]             # Registered node definition
+    action: str | None               # "created", "updated", or "unchanged"
+    revision_id: str | None          # Engine revision ID
+    previous_version: str | None     # Previous version (if updated)
+    changes: list[str] | None        # Changed fields (if updated)
+```
+
+Supports dict-like access (`result["name"]`, `"name" in result`, `result.get("name")`) for backward compatibility.
+
+### `build_registry_payload()`
+
+Build a registry-compatible payload dict from a `NodeDefinition`. Used internally by both `register_node()` and `export_definition()` to ensure consistent field mapping:
+
+```python
+from canvastekk_workflow_sdk.registry import build_registry_payload
+
+payload = build_registry_payload(
+    node.definition,
+    invoke_type="lambda",
+    invoke_url="arn:aws:lambda:ap-southeast-1:123456789:function:my-node",
+    invoke_config={"region": "ap-southeast-1"},
+    tags=["ml", "segmentation"],
+)
+```
+
+**Field mapping** (SDK → Engine API):
+
+| SDK Field | Engine API Field | Notes |
+|-----------|-----------------|-------|
+| `definition.title` | `label` | Renamed |
+| `definition.default_retry` | `retry` | Renamed |
+| `definition.id` (computed) | — | Omitted from payload |
+| — | `tags` | New optional field |
+| — | `invoke_config` | New optional field |
+
+### `export_definition()`
+
+Export a `NodeDefinition` as a registry-compatible JSON file:
+
+```python
+from canvastekk_workflow_sdk.definition import export_definition
+
+path = export_definition(
+    node.definition,
+    "node-manifest.json",
+    invoke_url="https://my-node.example.com",
+    tags=["ci-cd"],
+)
+```
+
+### `InvokeType`
+
+A `Literal` type for valid invocation types:
+
+```python
+from canvastekk_workflow_sdk.registry import InvokeType
+
+# Valid values: "http", "lambda", "sagemaker", "in-process"
+```
+
+`register_node()` validates `invoke_type` at runtime and raises `ValueError` for invalid values.
+
+### `RegistrationError`
+
+Raised when registration fails. Contains `status_code` and `body` attributes for debugging:
+
+```python
+from canvastekk_workflow_sdk.registry import register_node, RegistrationError
+
+try:
+    result = register_node(node, registry_url=url, service_token="svs_xxx")
+except RegistrationError as e:
+    print(f"Status: {e.status_code}, Body: {e.body}")
+```
+
+---
+
 ## Structured Logging
 
 The SDK provides production-ready structured logging out of the box. It is configured automatically at app startup — no setup required.
@@ -1209,7 +1331,7 @@ Every node exposes these endpoints automatically:
 | `/live` | GET | Liveness probe — returns 200 if the process is alive (Kubernetes) |
 | `/ready` | GET | Readiness probe — returns 200 if ready to accept traffic (Kubernetes) |
 
-All SDK responses include the `X-SDK-Version` header (e.g. `X-SDK-Version: 0.6.0`).
+All SDK responses include the `X-SDK-Version` header (e.g. `X-SDK-Version: 0.9.0`).
 
 ---
 
@@ -1270,3 +1392,5 @@ git commit -m "feat: new endpoint with BREAKING CHANGE"   # major bump
 - [x] CLI manifest validation (v0.6.0 — `python -m canvastekk_workflow_sdk validate`)
 - [x] File field constraint validation (v0.6.0 — `validate_file_input()` with `x-accept`, `x-maxSizeBytes`)
 - [x] Auto-download of presigned URL file inputs (v0.7.0 — SDK auto-downloads file inputs before execute())
+- [x] Node definition versioning with auto-derived `id` field (v0.8.0 — `id` computed from `name` + `version`)
+- [x] Registry field mapping for new engine API (v0.9.0 — `title`→`label`, `default_retry`→`retry`, `RegisterNodeResult`, `InvokeType` validation, `tags`, `invoke_config`)
