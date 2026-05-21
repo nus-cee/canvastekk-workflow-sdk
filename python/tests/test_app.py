@@ -197,19 +197,28 @@ class TestExecuteEndpoint:
         """Test execution with presigned URL for file input field."""
         node = FileProcessingNode()
         client = TestClient(create_node_app(node))
-        response = client.post(
-            "/execute",
-            json={
-                "run_id": "run-1",
-                "node_id": "node-1",
-                "inputs": {
-                    "point_cloud": "https://s3.amazonaws.com/bucket/file.ply?signature=abc",
+
+        with tempfile.NamedTemporaryFile(suffix=".ply", delete=False, mode="w") as f:
+            f.write("fake point cloud data")
+            local_path = f.name
+
+        try:
+            response = client.post(
+                "/execute",
+                json={
+                    "run_id": "run-1",
+                    "node_id": "node-1",
+                    "inputs": {
+                        "point_cloud": local_path,
+                    },
                 },
-            },
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "pass"
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "pass"
+            assert "file_content" in data["outputs"]
+        finally:
+            os.unlink(local_path)
 
 
 class TestHealthEndpoint:

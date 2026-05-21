@@ -1,6 +1,6 @@
 ---
 name: canvastekk-node-builder
-description: Create CanvasTEKK workflow nodes with correct SDK patterns, schemas, file I/O, Dockerfiles, and tests. Covers BaseNode, NodeDefinition, ExecutionContext, contracts, and the complete node creation workflow from analysis to CLI validation.
+description: Create CanvasTEKK workflow nodes with correct SDK patterns, schemas, file I/O, Dockerfiles, and tests. Covers BaseNode, NodeDefinition, ExecutionContext, contracts, and the complete node creation workflow from analysis to CLI validation. File inputs are auto-downloaded by the SDK before execute().
 license: Apache-2.0
 compatibility: opencode
 metadata:
@@ -327,7 +327,7 @@ Before writing any code, determine:
 2. **Input types**: What data does it accept? (point cloud files, JSON contracts, text parameters, numbers)
 3. **Output types**: What does it produce? (files, JSON data, contracts, metrics)
 4. **Category**: `transform` (data conversion), `inference` (ML/AI), `utility` (general), `control-flow` (orchestrator-level)
-5. **File I/O needed**: Does it download files from presigned URLs? Does it write output files?
+5. **File I/O needed**: Does it receive file inputs (auto-downloaded by SDK)? Does it write output files?
 6. **Contracts needed**: Will it produce or consume InstanceSet, MeasurementSet, PlaneSet?
 7. **Special needs**: Model loading at startup? GPU access? Authentication? Custom health checks?
 8. **Timeout**: How long might execution take? (default: 30s, increase for heavy computation)
@@ -409,7 +409,6 @@ Follow this structure exactly:
 
 from pathlib import Path
 
-import httpx
 from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition
 
 definition = NodeDefinition(
@@ -433,11 +432,9 @@ class {{ClassName}}(BaseNode):
         context.report_progress(0.1, "Starting {{title}}")
 
         # === FILE INPUT PATTERN ===
-        # If node has file inputs, download and validate:
-        # url = inputs["file_field"]
-        # local_path = context.output_dir / "downloaded_file.ext"
-        # self._download(url, local_path)
-        # self.definition.validate_file_input("file_field", local_path)
+        # File inputs are auto-downloaded by SDK to context.downloads_dir
+        # Use local file paths directly (SDK already validated against x-accept/x-maxSizeBytes):
+        # local_path = Path(inputs["file_field"])  # SDK provides local path
 
         # === BUSINESS LOGIC ===
         # Process inputs here
@@ -451,15 +448,6 @@ class {{ClassName}}(BaseNode):
 
         context.report_progress(1.0, "Complete")
         return {}
-
-    @staticmethod
-    def _download(url: str, dest: Path) -> None:
-        """Download a file from a presigned URL with streaming."""
-        with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
-            resp.raise_for_status()
-            with open(dest, "wb") as f:
-                for chunk in resp.iter_bytes(chunk_size=65536):
-                    f.write(chunk)
 
 
 app = {{ClassName}}().create_app()
@@ -672,31 +660,22 @@ pytest tests/ -v
 
 ### How File Inputs Work
 
-1. The workflow engine sends a presigned GET URL as the field value (a string)
-2. The node downloads the file using `httpx`
-3. The node validates with `validate_file_input()`
-4. The node processes the file
+1. The workflow engine sends a presigned GET URL as the field value
+2. The SDK downloads the file to `context.downloads_dir` before calling `execute()`
+3. The SDK validates the downloaded file against `x-accept` and `x-maxSizeBytes` constraints
+4. The node receives a local file path in `inputs` (not the URL)
+5. The node processes the file
 
 ```python
 def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-    # 1. Get the presigned URL from inputs
-    presigned_url = inputs["point_cloud"]
+    # 1. Get the local file path from inputs (SDK already downloaded)
+    local_path = Path(inputs["point_cloud"])  # SDK provides local path
 
-    # 2. Download with streaming (for large files)
-    suffix = Path(presigned_url.split("?")[0]).suffix or ".bin"
-    local_path = context.output_dir / f"input_download{suffix}"
-    with httpx.stream("GET", presigned_url, timeout=30.0, follow_redirects=True) as resp:
-        resp.raise_for_status()
-        with open(local_path, "wb") as f:
-            for chunk in resp.iter_bytes(chunk_size=65536):
-                f.write(chunk)
-
-    # 3. Validate file constraints
-    self.definition.validate_file_input("point_cloud", local_path)
-
-    # 4. Process the file
+    # 2. Process the file (SDK already validated constraints)
     # ... your logic here ...
 ```
+
+**Note:** Manual download with `httpx.stream()` is only needed for non-file URLs or opt-out scenarios.
 
 ### How File Outputs Work
 
@@ -759,8 +738,7 @@ Before considering a node complete, verify ALL of these:
 - [ ] Required fields are listed in `"required": [...]`
 
 ### File I/O
-- [ ] Downloads use `httpx.stream()` with timeout and chunked reading
-- [ ] `self.definition.validate_file_input()` is called after downloading
+- [ ] File input values are used as local paths (SDK auto-downloaded and validated)
 - [ ] Output files use `context.output_path(filename)` (never hardcoded paths)
 - [ ] Output file paths returned as `str(output_path)` in outputs dict
 

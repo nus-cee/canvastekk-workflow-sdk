@@ -105,16 +105,12 @@ class SegmentNode(BaseNode):
     definition = definition
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-        url = inputs["point_cloud"]
+        # File inputs are auto-downloaded by SDK before execute()
+        local_path = Path(inputs["point_cloud"])  # SDK provides local path
         threshold = inputs.get("confidence_threshold", 0.5)
 
-        # Download input file
-        context.report_progress(0.1, "Downloading point cloud")
-        local_path = context.output_dir / "input.ply"
-        self._download(url, local_path)
-
-        # Validate file constraints
-        self.definition.validate_file_input("point_cloud", local_path)
+        # Process input file (SDK already validated against x-accept/x-maxSizeBytes)
+        context.report_progress(0.1, "Processing point cloud")
 
         # Process point cloud (replace with actual ML inference)
         context.report_progress(0.3, "Running segmentation")
@@ -163,6 +159,7 @@ class SegmentNode(BaseNode):
 
     @staticmethod
     def _download(url: str, dest: Path) -> None:
+        """Download helper for non-file URLs only (e.g., external APIs)."""
         with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
             resp.raise_for_status()
             with open(dest, "wb") as f:
@@ -235,12 +232,11 @@ class MeasureNode(BaseNode):
     definition = definition
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-        url = inputs["instances"]
+        # File inputs are auto-downloaded by SDK before execute()
+        local_path = Path(inputs["instances"])
 
-        # Download and parse InstanceSet
-        context.report_progress(0.1, "Downloading instances")
-        local_path = context.output_dir / "instances.json"
-        self._download(url, local_path)
+        # Parse InstanceSet (SDK already validated against x-accept/x-maxSizeBytes)
+        context.report_progress(0.1, "Loading instances")
 
         try:
             instance_set = InstanceSet.load_json(local_path)
@@ -290,6 +286,7 @@ class MeasureNode(BaseNode):
 
     @staticmethod
     def _download(url: str, dest: Path) -> None:
+        """Download helper for non-file URLs only (e.g., external APIs)."""
         with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
             resp.raise_for_status()
             with open(dest, "wb") as f:
@@ -356,12 +353,9 @@ class PlaneDetectNode(BaseNode):
     definition = definition
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-        url = inputs["point_cloud"]
-        context.report_progress(0.1, "Downloading point cloud")
-
-        local_path = context.output_dir / "input.ply"
-        self._download(url, local_path)
-        self.definition.validate_file_input("point_cloud", local_path)
+        # File inputs are auto-downloaded by SDK before execute()
+        local_path = Path(inputs["point_cloud"])
+        context.report_progress(0.1, "Processing point cloud")  # SDK already validated
 
         context.report_progress(0.4, "Detecting planes")
         planes = self._detect_planes(local_path)
@@ -388,6 +382,7 @@ class PlaneDetectNode(BaseNode):
 
     @staticmethod
     def _download(url: str, dest: Path) -> None:
+        """Download helper for non-file URLs only (e.g., external APIs)."""
         with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
             resp.raise_for_status()
             with open(dest, "wb") as f:
@@ -488,12 +483,9 @@ class InferenceNode(BaseNode):
         if self.model is None:
             raise NodeConfigurationError("Model not loaded — startup may have failed")
 
-        url = inputs["input_data"]
-        context.report_progress(0.1, "Downloading input")
-
-        local_path = context.output_dir / "input.bin"
-        self._download(url, local_path)
-        self.definition.validate_file_input("input_data", local_path)
+        # File inputs are auto-downloaded by SDK before execute()
+        local_path = Path(inputs["input_data"])
+        context.report_progress(0.1, "Processing input data")  # SDK already validated
 
         context.report_progress(0.3, "Running inference")
         try:
@@ -515,6 +507,7 @@ class InferenceNode(BaseNode):
 
     @staticmethod
     def _download(url: str, dest: Path) -> None:
+        """Download helper for non-file URLs only (e.g., external APIs)."""
         with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
             resp.raise_for_status()
             with open(dest, "wb") as f:
@@ -741,13 +734,11 @@ class ConvertNode(BaseNode):
     definition = definition
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-        url = inputs["input_file"]
+        # File inputs are auto-downloaded by SDK before execute()
+        input_path = Path(inputs["input_file"])
         output_format = inputs.get("output_format", "xyz")
 
-        context.report_progress(0.1, "Downloading input")
-        input_path = context.output_dir / "input.ply"
-        self._download(url, input_path)
-        self.definition.validate_file_input("input_file", input_path)
+        context.report_progress(0.1, "Converting format")  # SDK already validated
 
         context.report_progress(0.5, f"Converting to {output_format}")
         output_path = context.output_path(f"output.{output_format}")
@@ -768,6 +759,7 @@ class ConvertNode(BaseNode):
 
     @staticmethod
     def _download(url: str, dest: Path) -> None:
+        """Download helper for non-file URLs only (e.g., external APIs)."""
         with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
             resp.raise_for_status()
             with open(dest, "wb") as f:

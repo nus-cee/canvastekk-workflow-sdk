@@ -66,16 +66,19 @@ Production-ready structured logging configured automatically at app startup:
 
 See [`python/README.md`](./python/) for the full logging guide.
 
-### File Input Validation
+### Auto-Download Pipeline
 
-The `validate_file_input()` method validates downloaded files against schema constraints:
+The SDK automatically downloads presigned URL file inputs before calling `execute()`:
 
-- `x-accept`: allowed file extensions (e.g. `[".las", ".ply"]`)
-- `x-maxSizeBytes`: maximum file size in bytes
-- Case-insensitive extension matching
+- URL inputs (`https://`/`http://`) are downloaded to `context.downloads_dir`
+- Downloaded files are auto-validated against `x-accept` and `x-maxSizeBytes`
+- `execute()` receives local file paths, not URLs
+- Download metadata available via `context.metadata[field_name]`
 
 ```python
-definition.validate_file_input(field_name="point_cloud", data=response.content)
+def execute(self, inputs, context):
+    cloud_path = Path(inputs["point_cloud"])  # already a local file
+    data = cloud_path.read_bytes()
 ```
 
 ### CLI Manifest Validation
@@ -218,7 +221,7 @@ rm -rf .opencode
 
 | Example | Directory | Description |
 |---------|-----------|-------------|
-| Echo Node | [`examples/echo_node/`](./examples/echo_node/) | Minimal node with file input/output, presigned URL download, and `validate_file_input()` usage |
+| Echo Node | [`examples/echo_node/`](./examples/echo_node/) | Minimal node with file input/output and auto-download pipeline |
 | Deployment | [`examples/deployment/`](./examples/deployment/) | Kubernetes manifest templates for deployers (not part of the SDK) |
 
 ## Environment Variables
@@ -285,6 +288,17 @@ Key decisions recorded as the SDK evolves. See [`PLANS/PLAN-DA-894.md`](./PLANS/
 | `CANVASTEKK_NODE_ENV` → `mode` field | Maps env (`dev`/`uat`/`production`) to manifest `mode`. Engine adjusts behavior per environment |
 | Structured JSON logging (default) | One JSON object per line with `timestamp`, `level`, `run_id`, `node_id`. CloudWatch/Datadog/ELK compatible |
 | `CANVASTEKK_LOG_FORMAT` / `CANVASTEKK_LOG_LEVEL` env vars | Zero-config logging. `json` for production, `text` for local dev. `INFO` default level |
+
+### v0.7.0 — Auto-Download Pipeline (DA-996)
+
+| Decision | Rationale |
+|----------|-----------|
+| Auto-download as built-in pipeline step (not middleware) | Core infrastructure — guarantees ordering, prevents user removal. `NodeMiddleware` protocol lacks `definition` access |
+| `request.inputs` copied before mutation | Avoids side effects on the original request object |
+| `context.metadata[field_name]` stores download info | Node authors can access `original_url`, `local_path`, `size_bytes` |
+| `context.downloads_dir` as lazy temp directory | Only created when file inputs are present; cleaned up with tempdir |
+| Field-prefixed filenames (`{field}_{name}`) | Prevents filename collisions when multiple file inputs are present |
+| Partial download cleanup on failure | Downloaded files removed if download or validation fails |
 
 ## Repository
 
