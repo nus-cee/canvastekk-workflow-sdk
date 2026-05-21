@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.1] - 2026-05-21
+
+### Bug Fixes
+
+- **registry**: Align register_node() payload with engine RegisterNodeRequest schema [DA-1016] (#29)
+
+
 ## [0.9.0] - 2026-05-21
 
 ### Features
 
 - Enforce node definition versioning and auto-derive id field (DA-1014) (#28) (**BREAKING**)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.9.0
 
 
 ## [0.8.0] - 2026-05-20
