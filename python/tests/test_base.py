@@ -18,7 +18,6 @@ class EchoNode(BaseNode):
     """Simple echo node for testing."""
 
     definition = NodeDefinition(
-        id="echo-v1.0.0",
         name="echo",
         version="1.0.0",
         title="Echo",
@@ -41,7 +40,6 @@ class FailingNode(BaseNode):
     """Node that always fails for testing."""
 
     definition = NodeDefinition(
-        id="failing-v1.0.0",
         name="failing",
         version="1.0.0",
         title="Failing",
@@ -58,7 +56,6 @@ class HealthyNode(BaseNode):
     """Node with custom health checks."""
 
     definition = NodeDefinition(
-        id="healthy-v1.0.0",
         name="healthy",
         version="1.0.0",
         title="Healthy",
@@ -81,7 +78,6 @@ class NodeIOErrorNode(BaseNode):
     """Node that raises NodeIOError."""
 
     definition = NodeDefinition(
-        id="io-err-v1.0.0",
         name="io-err",
         version="1.0.0",
         title="IO Error",
@@ -98,7 +94,6 @@ class NodeTimeoutErrorNode(BaseNode):
     """Node that raises NodeTimeoutError."""
 
     definition = NodeDefinition(
-        id="timeout-err-v1.0.0",
         name="timeout-err",
         version="1.0.0",
         title="Timeout Error",
@@ -115,7 +110,6 @@ class TokenReportingNode(BaseNode):
     """Node that reports token usage via context."""
 
     definition = NodeDefinition(
-        id="token-v1.0.0",
         name="token",
         version="1.0.0",
         title="Token",
@@ -134,7 +128,6 @@ class ValidatedNode(BaseNode):
     """Node with required input fields for validation testing."""
 
     definition = NodeDefinition(
-        id="validated-v1.0.0",
         name="validated",
         version="1.0.0",
         title="Validated",
@@ -358,7 +351,6 @@ class OutputValidationNode(BaseNode):
     """Node with strict output schema for validation testing."""
 
     definition = NodeDefinition(
-        id="output-val-v1.0.0",
         name="output-val",
         version="1.0.0",
         title="Output Validation",
@@ -386,7 +378,6 @@ class OutputValidationErrorNode(BaseNode):
     """Node that returns invalid output type."""
 
     definition = NodeDefinition(
-        id="output-err-v1.0.0",
         name="output-err",
         version="1.0.0",
         title="Output Error",
@@ -406,7 +397,6 @@ class OutputMissingRequiredNode(BaseNode):
     """Node that returns missing required field."""
 
     definition = NodeDefinition(
-        id="output-missing-v1.0.0",
         name="output-missing",
         version="1.0.0",
         title="Output Missing",
@@ -427,7 +417,6 @@ class TrivialOutputSchemaNode(BaseNode):
     """Node with trivial output schema."""
 
     definition = NodeDefinition(
-        id="trivial-v1.0.0",
         name="trivial",
         version="1.0.0",
         title="Trivial",
@@ -500,7 +489,6 @@ class TestLifecycleHooks:
 
         class LifecycleNode(BaseNode):
             definition = NodeDefinition(
-                id="lifecycle-v1.0.0",
                 name="lifecycle",
                 version="1.0.0",
                 title="Lifecycle",
@@ -543,7 +531,6 @@ class TestLifecycleHooks:
 
         class ShutdownNode(BaseNode):
             definition = NodeDefinition(
-                id="shutdown-v1.0.0",
                 name="shutdown",
                 version="1.0.0",
                 title="Shutdown",
@@ -590,7 +577,6 @@ class TestLifecycleHooks:
 
         class OrderedLifecycleNode(BaseNode):
             definition = NodeDefinition(
-                id="ordered-v1.0.0",
                 name="ordered",
                 version="1.0.0",
                 title="Ordered",
@@ -625,7 +611,6 @@ class TestLifecycleHooks:
 
         class FailingStartupNode(BaseNode):
             definition = NodeDefinition(
-                id="failing-startup-v1.0.0",
                 name="failing-startup",
                 version="1.0.0",
                 title="Failing Startup",
@@ -656,7 +641,6 @@ class TestLifecycleHooks:
 
         class FailingShutdownNode(BaseNode):
             definition = NodeDefinition(
-                id="failing-shutdown-v1.0.0",
                 name="failing-shutdown",
                 version="1.0.0",
                 title="Failing Shutdown",
@@ -687,7 +671,6 @@ class TestLifecycleHooks:
 
         class LifecycleTestNode(BaseNode):
             definition = NodeDefinition(
-                id="lifespan-test-v1.0.0",
                 name="lifespan-test",
                 version="1.0.0",
                 title="Lifespan Test",
@@ -729,7 +712,6 @@ class TestLifecycleHooks:
 
         class MultiLifecycleNode(BaseNode):
             definition = NodeDefinition(
-                id="multi-lifecycle-v1.0.0",
                 name="multi-lifecycle",
                 version="1.0.0",
                 title="Multi Lifecycle",

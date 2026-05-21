@@ -7,7 +7,6 @@ from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, 
 
 class StrictNode(BaseNode):
     definition = NodeDefinition(
-        id="strict-v1.0.0",
         name="strict",
         version="1.0.0",
         title="Strict",
@@ -30,7 +29,6 @@ class StrictNode(BaseNode):
 
 class LooseNode(BaseNode):
     definition = NodeDefinition(
-        id="loose-v1.0.0",
         name="loose",
         version="1.0.0",
         title="Loose",

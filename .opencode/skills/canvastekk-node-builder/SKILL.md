@@ -128,9 +128,8 @@ from canvastekk_workflow_sdk import NodeDefinition, RetryConfig, NodeStyles
 
 definition = NodeDefinition(
     # === REQUIRED ===
-    id="segment-v1.0.0",              # Unique: "{name}-v{version}"
-    name="segment",                    # Slug for routing (lowercase, hyphens)
-    version="1.0.0",                   # Semantic version
+    name="segment",                    # Slug for routing (lowercase, alphanumeric, hyphens)
+    version="1.0.0",                   # Semantic version (X.Y.Z)
     title="Point Cloud Segmentation",  # Human-readable title
     description="Segments a point cloud into instances",  # What this node does
     input_schema={...},                # JSON Schema (Draft 7)
@@ -413,7 +412,6 @@ import httpx
 from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition
 
 definition = NodeDefinition(
-    id="{{name}}-v{{version}}",
     name="{{name}}",
     version="{{version}}",
     title="{{title}}",
@@ -742,9 +740,9 @@ Before considering a node complete, verify ALL of these:
 - [ ] Docstring describes the node's purpose
 
 ### NodeDefinition
-- [ ] `id` follows `{name}-v{version}` format (e.g., `segment-v1.0.0`)
-- [ ] `name` is a lowercase slug with hyphens (e.g., `point-cloud-segment`)
-- [ ] `version` is semver (e.g., `1.0.0`)
+- [ ] `id` is NOT provided manually — it is auto-derived from `name` + `version` as `{name}-v{version}`
+- [ ] `name` is a valid slug: lowercase alphanumeric characters and hyphens only (e.g., `point-cloud-segment`)
+- [ ] `version` follows semantic versioning (e.g., `1.0.0`)
 - [ ] `title` is human-readable (e.g., `Point Cloud Segmentation`)
 - [ ] `description` explains what the node does
 - [ ] `category` is one of: `transform`, `inference`, `utility`, `control-flow`

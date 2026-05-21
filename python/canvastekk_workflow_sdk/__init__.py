@@ -10,7 +10,6 @@ Quick Start:
 
     class MyNode(BaseNode):
         definition = NodeDefinition(
-            id="my-node-v1.0.0",
             name="my-node",
             version="1.0.0",
             title="My Node",
@@ -118,4 +117,4 @@ __all__ = [
     "register_node",
 ]
 
-__version__ = "0.7.2"
+__version__ = "0.8.0"

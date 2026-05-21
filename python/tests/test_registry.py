@@ -16,7 +16,6 @@ from canvastekk_workflow_sdk.registry import RegistrationError, _extract_node_da
 
 class DummyNode(BaseNode):
     definition = NodeDefinition(
-        id="test-v1.0.0",
         name="test",
         version="1.0.0",
         title="Test Node",

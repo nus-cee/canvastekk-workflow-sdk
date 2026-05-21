@@ -60,7 +60,6 @@ from canvastekk_workflow_sdk import BaseNode, NodeDefinition, ExecutionContext
 
 # Module-level definition — needed for CLI validation
 definition = NodeDefinition(
-    id="my-node-v1.0.0",
     name="my-node",
     version="1.0.0",
     title="My Node",
@@ -97,12 +96,11 @@ app = MyNode().create_app()
 
 ### Node ID Format
 
-Use `{name}-v{version}`:
+The `id` field is automatically derived from `name` + `version` as `{name}-v{version}` (e.g., `my-node-v1.0.0`). Node authors must NOT provide `id` manually.
 
-```python
-id="segment-v1.0.0"
-id="measure-v2.3.1"
-```
+**Requirements:**
+- `name` must be a valid slug: lowercase alphanumeric characters and hyphens only
+- `version` must follow semantic versioning (e.g., `1.0.0`, `2.3.1`)
 
 ### File Inputs
 

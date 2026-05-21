@@ -38,7 +38,7 @@ When creating CanvasTEKK workflow nodes, always follow these rules:
 5. **Call `validate_file_input()` after download**: Always validate downloaded files against schema constraints
 6. **Write outputs to `context.output_path(filename)`**: Never hardcode paths; return them as `str(output_path)`
 7. **`definition` must be both module-level AND class attribute**: Module-level enables CLI validation; class attribute satisfies `BaseNode.__init_subclass__`
-8. **Node IDs follow `{name}-v{version}` format**: e.g., `segment-v1.0.0`
+8. **Node `id` is auto-derived** from `name` + `version` (e.g., `"segment-v1.0.0"`). Node authors must NOT provide `id` manually. `name` must be a valid slug (lowercase alphanumeric, hyphens) and `version` must be semver (X.Y.Z).
 9. **Report progress with `context.report_progress()`**: At key stages (download, process, save)
 10. **Always generate Dockerfile + pyproject.toml + tests**: A complete node project includes all four files
 

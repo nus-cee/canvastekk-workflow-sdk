@@ -10,7 +10,6 @@ from canvastekk_workflow_sdk.router import create_multi_node_app
 
 class EchoNode(BaseNode):
     definition = NodeDefinition(
-        id="echo-v1.0.0",
         name="echo",
         version="1.0.0",
         title="Echo",
@@ -25,7 +24,6 @@ class EchoNode(BaseNode):
 
 class ReverseNode(BaseNode):
     definition = NodeDefinition(
-        id="reverse-v1.0.0",
         name="reverse",
         version="1.0.0",
         title="Reverse",
@@ -40,7 +38,6 @@ class ReverseNode(BaseNode):
 
 class UpperNode(BaseNode):
     definition = NodeDefinition(
-        id="upper-v1.0.0",
         name="upper",
         version="1.0.0",
         title="Upper",

@@ -53,6 +53,9 @@ def _validate_definition(definition) -> dict:
         "warnings": [],
         "file_input_fields": [],
         "file_output_fields": [],
+        "name": definition.name,
+        "version": definition.version,
+        "id": definition.id,
     }
 
     # The model_validator already ran at definition time.

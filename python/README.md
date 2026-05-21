@@ -77,7 +77,6 @@ from canvastekk_workflow_sdk import BaseNode, NodeDefinition, ExecutionContext
 
 class UppercaseNode(BaseNode):
     definition = NodeDefinition(
-        id="uppercase-v1.0.0",
         name="uppercase",
         version="1.0.0",
         title="Uppercase",
@@ -104,7 +103,7 @@ app = UppercaseNode().create_app()
 The four requirements:
 
 1. **Subclass `BaseNode`** — inherit from `canvastekk_workflow_sdk.BaseNode`
-2. **Define `definition`** — a `NodeDefinition` with all required fields (`id`, `name`, `version`, `title`, `description`, `input_schema`, `output_schema`)
+2. **Define `definition`** — a `NodeDefinition` with all required fields (`name`, `version`, `title`, `description`, `input_schema`, `output_schema`). Note: `id` is auto-derived from `name` + `version` and must NOT be provided manually.
 3. **Implement `execute(inputs, context)`** — return a dict matching your `output_schema`
 4. **Call `.create_app()`** — get a ready-to-run FastAPI application
 
@@ -264,7 +263,6 @@ from canvastekk_workflow_sdk.exceptions import NodeIOError, NodeExecutionError
 
 class FileProcessorNode(BaseNode):
     definition = NodeDefinition(
-        id="file-proc-v1.0.0",
         name="file-proc",
         version="1.0.0",
         title="File Processor",
@@ -297,7 +295,6 @@ Mark input fields as files using `"format": "file"` in `input_schema`. Use `x-ac
 
 ```python
 definition = NodeDefinition(
-    id="segment-v1.0.0",
     name="segment",
     version="1.0.0",
     title="Segment",
@@ -392,7 +389,6 @@ The engine provides presigned PUT URLs via the `output_upload_url` field in the 
 
 ```python
 definition = NodeDefinition(
-    id="converter-v1.0.0",
     name="converter",
     version="1.0.0",
     title="Converter",
@@ -439,7 +435,6 @@ import httpx
 
 class PointCloudSegmenter(BaseNode):
     definition = NodeDefinition(
-        id="segment-v1.0.0",
         name="segment",
         version="1.0.0",
         title="Segment",
@@ -709,14 +704,13 @@ poetry run pytest tests/test_my_node.py
 
 ### NodeDefinition
 
-Defines what a node is. **Required fields:** `id`, `name`, `version`, `title`, `description`, `input_schema`, `output_schema`.
+Defines what a node is. **Required fields:** `name`, `version`, `title`, `description`, `input_schema`, `output_schema`. Note: `id` is auto-derived from `name` + `version` and must NOT be provided manually.
 
 ```python
 from canvastekk_workflow_sdk import NodeDefinition, RetryConfig, NodeStyles
 from canvastekk_workflow_sdk.definition import ColorPreset
 
 definition = NodeDefinition(
-    id="my-node-v1.0.0",
     name="my-node",
     version="1.0.0",
     title="My Node",
