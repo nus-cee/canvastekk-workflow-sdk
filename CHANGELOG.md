@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-05-21
+
+### Features
+
+- Enforce node definition versioning and auto-derive id field (DA-1014) (#28) (**BREAKING**)
+
+
 ## [0.8.0] - 2026-05-20
 
 ### Features
 
 - **sdk**: Auto-download presigned URL file inputs before execute() [DA-996] (#26)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.8.0
 
 
 ## [0.7.2] - 2026-05-17
