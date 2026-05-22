@@ -754,7 +754,7 @@ Defines what a node is. Maps to the engine's **registry-level node type** (`Work
 
 **Required fields:** `name`, `version`, `title`, `description`, `input_schema`, `output_schema`. Note: `id` is auto-derived from `name` + `version` and must NOT be provided manually.
 
-**Versioning:** The `version` field is an **author-facing semantic version label** (e.g., `"1.0.0"`). The engine maintains its own independent versioning system (monotonically increasing integer, managed via revision chain). The engine assigns its own version on each `register_node()` call — your `version` field does not control engine versioning.
+**Versioning:** The `version` field is a semantic version string (e.g., `"1.0.0"`) validated against the X.Y.Z pattern. The engine uses this version directly and enforces immutability: re-registering with the same version and changed data is rejected. Bump the version for any schema or metadata changes.
 
 ```python
 from canvastekk_workflow_sdk import NodeDefinition, RetryConfig, NodeStyles
@@ -1011,7 +1011,7 @@ Node authors only interact with `NodeDefinition`. The engine handles `WorkflowDe
 
 ### Versioning
 
-The `NodeDefinition.version` field (semantic version string) is an **author-facing label** only. The engine assigns its own independent version (monotonically increasing integer) on each registration call. These are two separate versioning systems — the SDK version does not control engine versioning.
+The `NodeDefinition.version` field (semantic version string) is the node's authoritative version. The engine stores and enforces this version — re-registering with the same version and changed data is rejected (HTTP 409). Node authors must bump the version for any changes.
 
 ### `register_node()`
 
