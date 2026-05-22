@@ -499,6 +499,58 @@ curl -X POST http://localhost:8001/execute \
 
 ---
 
+## Template Variable Substitution
+
+The workflow engine automatically resolves `{{variable}}` placeholders in string node inputs after edge resolution. Your `execute()` method receives fully resolved strings — you do not handle `{{}}` syntax in your node code.
+
+### Syntax
+
+| Pattern | Behavior |
+|---------|----------|
+| `{{variable}}` | Replaced with `str(inputs["variable"])` |
+| `{variable}` | Literal — single braces are not substituted |
+| `{{unknown_key}}` | Left as-is if key not in inputs (logged at DEBUG) |
+
+Rules:
+- Only `{{double_braces}}` trigger substitution
+- Single-pass — no recursive resolution
+- Non-string values pass through unchanged
+- Requires engine version with [DA-1037](https://betekk.atlassian.net/browse/DA-1037)
+
+### Example
+
+Workflow defines inputs with templates:
+
+```json
+{
+  "folder_path": "{{report_id}}/runs/{{run_id}}/output/zip/",
+  "report_id": 13,
+  "run_id": "a1b2c3d4-..."
+}
+```
+
+Node receives resolved values:
+
+```json
+{
+  "folder_path": "13/runs/a1b2c3d4-.../output/zip/",
+  "report_id": 13,
+  "run_id": "a1b2c3d4-..."
+}
+```
+
+### Input Schema Constraints
+
+`input_schema` constraints (`pattern`, `format`, etc.) validate against the **resolved** value, not the template syntax. Design constraints to match the expected resolved output.
+
+### Security
+
+Single-pass substitution prevents recursive injection. Node authors should still validate resolved values before using them in file paths, URLs, or shell commands.
+
+For the full guide including common variables, design considerations, and conflict avoidance, see [EXTERNAL-AUTHOR-GUIDE: Template Variable Substitution](../docs/EXTERNAL-AUTHOR-GUIDE.md#template-variable-substitution).
+
+---
+
 ## Deploying a Node
 
 ### Uvicorn (Production)
@@ -1412,3 +1464,4 @@ git commit -m "feat: new endpoint with BREAKING CHANGE"   # major bump
 - [x] Node definition versioning with auto-derived `id` field (v0.8.0 — `id` computed from `name` + `version`)
 - [x] Registry field mapping for new engine API (v0.9.0 — `title`→`label`, `default_retry`→`retry`, `RegisterNodeResult`, `InvokeType` validation, `tags`, `invoke_config`)
 - [x] SDK naming convention alignment with engine WorkflowNode/WorkflowDefinitionNode model (v0.10.0 — docstrings, versioning semantics, type mapping documentation)
+- [ ] Template variable substitution documentation for node authors (DA-1038 — `{{variable}}` syntax, schema constraints, security notes)

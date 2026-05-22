@@ -89,6 +89,16 @@ Offline validation without starting the server:
 python -m canvastekk_workflow_sdk validate my_node.handler:definition --json
 ```
 
+### Template Variable Substitution
+
+The workflow engine automatically resolves `{{variable}}` placeholders in string node inputs after edge resolution. Node authors receive fully resolved strings — no code changes needed.
+
+```json
+{"folder_path": "{{report_id}}/runs/{{run_id}}/output/zip/"}
+```
+
+After engine resolution: `"13/runs/abc-123/output/zip/"`. See [EXTERNAL-AUTHOR-GUIDE](./docs/EXTERNAL-AUTHOR-GUIDE.md#template-variable-substitution) for the full guide.
+
 ## Quick Start
 
 ### Python
