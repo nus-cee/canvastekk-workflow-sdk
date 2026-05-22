@@ -70,6 +70,16 @@ def build_registry_payload(
     Centralizes field mapping (title->label, default_retry->retry, omit id)
     so that ``register_node()`` and ``export_definition()`` share the same logic.
 
+    The payload targets the engine's ``RegisterNodeRequest`` schema, which
+    registers a ``WorkflowNode`` (the registry-level node type). This is
+    distinct from ``WorkflowDefinitionNode`` (a node instance in a workflow
+    definition).
+
+    Versioning note:
+        The ``version`` field in the payload is the node author's semantic
+        version label. The engine assigns its own independent version
+        (monotonically increasing integer) on each registration call.
+
     Args:
         definition: The SDK NodeDefinition to convert.
         invoke_type: Invocation type (``"http"``, ``"lambda"``,
@@ -150,6 +160,16 @@ def register_node(
 
     POSTs the node manifest to the registry endpoint. Intended for
     use in CI/CD pipelines after deployment.
+
+    The engine's registry stores the node as a ``WorkflowNode`` (registry-level
+    node type). This is distinct from ``WorkflowDefinitionNode``, which
+    represents a node instance within a specific workflow definition.
+
+    Versioning:
+        The engine assigns its own independent version (monotonically
+        increasing integer) on each registration call, regardless of the
+        SDK's ``NodeDefinition.version`` field (which is the author's
+        semantic version label).
 
     Args:
         node: The BaseNode instance to register.

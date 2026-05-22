@@ -116,6 +116,17 @@ See [`python/README.md`](./python/) for full documentation.
 
 ## Architecture
 
+The SDK provides registry-level node definition tools. In the engine's terminology:
+
+| SDK Type | Engine Type | Purpose |
+|----------|-------------|---------|
+| `NodeDefinition` | `WorkflowNode` | Registry-level node type (schemas, metadata, styles, invocation config) |
+| — | `WorkflowDefinitionNode` | Node instance within a workflow definition (inputs, position, edges) |
+
+Node authors define `NodeDefinition`. The engine handles `WorkflowDefinitionNode` internally when building workflow definitions.
+
+**Versioning:** `NodeDefinition.version` is the node author's own semantic version label. The engine has a separate, independent versioning system (monotonically increasing integer via revision chain). The SDK version field does not control engine versioning.
+
 Project structure:
 
 | Directory | Purpose |

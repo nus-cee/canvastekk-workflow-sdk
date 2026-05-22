@@ -89,15 +89,32 @@ class NodeDefinition(BaseModel):
     """
     Standard definition that every node must provide.
 
-    This is returned by the /manifest endpoint and used by:
-    - Registry to store node metadata
+    This is the SDK's registry-level node type definition. In the engine's
+    terminology, it maps to a ``WorkflowNode`` (the registered node type in
+    the node registry), **not** a ``WorkflowDefinitionNode`` (which represents
+    a node instance within a specific workflow definition).
+
+    Returned by the /manifest endpoint and used by:
+    - Registry to store node metadata (via ``register_node()``)
     - Frontend to render properties panel from input_schema
     - Orchestrator to validate inputs before execution
+
+    Versioning:
+        The ``version`` field is an **author-facing label** (semantic version
+        string like ``"1.2.0"``). The engine maintains its own independent
+        versioning system (monotonically increasing integer, managed via
+        revision chain). When ``register_node()`` is called, the engine
+        assigns its own version — the SDK's ``version`` field does not
+        control engine versioning.
     """
 
     # Identity
     name: str = Field(description="Slug for routing (e.g., 'segmentation')")
-    version: str = Field(description="Semantic version (e.g., '1.2.0')")
+    version: str = Field(
+        description="Author-facing semantic version label (e.g., '1.2.0'). "
+        "This is independent of the engine's own versioning system, which "
+        "auto-assigns an integer version via revision chain on each registration."
+    )
     title: str = Field(description="Human-readable title (e.g., 'Point Cloud Segmentation')")
     description: str = Field(description="What this node does")
 
@@ -276,7 +293,12 @@ def export_definition(
     constraints: dict[str, Any] | None = None,
 ) -> Path:
     """
-    Export a NodeDefinition as a RegistryNodeDefinition-compatible JSON file.
+    Export a NodeDefinition as a WorkflowNode-compatible JSON file.
+
+    The output matches the engine's ``RegisterNodeRequest`` schema, which
+    registers a ``WorkflowNode`` (registry-level node type). This is distinct
+    from ``WorkflowDefinitionNode``, which represents a node instance within
+    a specific workflow definition.
 
     Maps SDK NodeDefinition fields to the registry schema and writes the result
     as a clean JSON file suitable for CI/CD registration via POST /api/workflows/nodes/.
@@ -284,7 +306,8 @@ def export_definition(
     Field mapping:
         NodeDefinition.title  -> label
         NodeDefinition.default_retry -> retry
-        NodeDefinition.id (computed) -> intentionally omitted; registry derives its own identifier from name + version
+        NodeDefinition.id (computed) -> intentionally omitted; registry derives its own identifier
+        NodeDefinition.version -> included as author-facing label; engine assigns its own version
 
     Args:
         definition: The SDK NodeDefinition to export.

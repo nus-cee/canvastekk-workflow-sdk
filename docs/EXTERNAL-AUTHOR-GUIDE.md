@@ -100,7 +100,20 @@ The `id` field is automatically derived from `name` + `version` as `{name}-v{ver
 
 **Requirements:**
 - `name` must be a valid slug: lowercase alphanumeric characters and hyphens only
-- `version` must follow semantic versioning (e.g., `1.0.0`, `2.3.1`)
+- `version` must follow semantic versioning (e.g., `1.0.0`, `2.3.1`) — this is an **author-facing label** for your own tracking
+
+> **Note on engine versioning:** The engine maintains its own independent versioning system (monotonically increasing integer). Your `NodeDefinition.version` is your own semantic version label — it does **not** control the engine's version assignment. The engine assigns a new version automatically each time `register_node()` is called with changed content.
+
+### SDK Types and Engine Terminology
+
+The SDK's `NodeDefinition` maps to the engine's **registry-level node type** (called `WorkflowNode` in the engine). This is distinct from `WorkflowDefinitionNode`, which the engine uses to represent a node instance within a specific workflow definition.
+
+| SDK Type | Engine Type | Purpose |
+|----------|-------------|---------|
+| `NodeDefinition` | `WorkflowNode` | Registry-level node type (schemas, metadata, styles) |
+| — | `WorkflowDefinitionNode` | Node instance within a workflow definition (inputs, position, edges) |
+
+Node authors only interact with `NodeDefinition`. The engine handles `WorkflowDefinitionNode` internally.
 
 ### File Inputs
 
@@ -224,7 +237,7 @@ The platform team will deploy it to the cluster. Once running, your node exposes
 
 ## Step 5: Register with the Engine
 
-After deployment, register your node so the engine can discover it.
+After deployment, register your node so the engine can discover it. The engine stores your node as a `WorkflowNode` (registry-level node type) — distinct from a `WorkflowDefinitionNode`, which represents a node instance within a workflow definition.
 
 ### Authentication Methods
 
