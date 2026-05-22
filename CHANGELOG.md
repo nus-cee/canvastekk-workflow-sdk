@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.0] - 2026-05-22
+
+### Features
+
+- **sdk**: Align SDK docs with engine semver versioning [DA-1041] (#32)
+
+
 ## [0.10.1] - 2026-05-22
 
 ### Documentation
 
 - **sdk**: Document {{variable}} template substitution behavior for node authors [DA-1038] (#31)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.10.1
 
 
 ## [0.10.0] - 2026-05-22
