@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0] - 2026-05-22
+
+### Features
+
+- **docs**: Align SDK naming with engine WorkflowNode/WorkflowDefinitionNode model [DA-1028]
+
+
 ## [0.9.1] - 2026-05-21
 
 ### Bug Fixes
 
 - **registry**: Align register_node() payload with engine RegisterNodeRequest schema [DA-1016] (#29)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.9.1
 
 
 ## [0.9.0] - 2026-05-21
