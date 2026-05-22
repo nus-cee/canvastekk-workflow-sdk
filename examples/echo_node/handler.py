@@ -16,7 +16,7 @@ from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition
 
 definition = NodeDefinition(
     name="echo",
-    version="1.0.0",
+    version="1.0.0",  # author-facing semver label; engine assigns its own version independently
     title="Echo",
     description="Receives a file, validates it, and writes it to output",
     input_schema={

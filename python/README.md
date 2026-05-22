@@ -698,7 +698,11 @@ poetry run pytest tests/test_my_node.py
 
 ### NodeDefinition
 
-Defines what a node is. **Required fields:** `name`, `version`, `title`, `description`, `input_schema`, `output_schema`. Note: `id` is auto-derived from `name` + `version` and must NOT be provided manually.
+Defines what a node is. Maps to the engine's **registry-level node type** (`WorkflowNode` in engine terminology). This is distinct from `WorkflowDefinitionNode`, which the engine uses for node instances within a workflow definition.
+
+**Required fields:** `name`, `version`, `title`, `description`, `input_schema`, `output_schema`. Note: `id` is auto-derived from `name` + `version` and must NOT be provided manually.
+
+**Versioning:** The `version` field is an **author-facing semantic version label** (e.g., `"1.0.0"`). The engine maintains its own independent versioning system (monotonically increasing integer, managed via revision chain). The engine assigns its own version on each `register_node()` call — your `version` field does not control engine versioning.
 
 ```python
 from canvastekk_workflow_sdk import NodeDefinition, RetryConfig, NodeStyles
@@ -944,6 +948,19 @@ It demonstrates:
 
 The SDK provides utilities for registering nodes with the CanvasTEKK Workflow Engine registry. These are typically used in CI/CD pipelines after deployment.
 
+### SDK vs Engine Type Mapping
+
+| SDK Type | Engine Type | Purpose |
+|----------|-------------|---------|
+| `NodeDefinition` | `WorkflowNode` | Registry-level node type (schemas, metadata, styles) |
+| — | `WorkflowDefinitionNode` | Node instance within a workflow (inputs, position, edges) |
+
+Node authors only interact with `NodeDefinition`. The engine handles `WorkflowDefinitionNode` internally.
+
+### Versioning
+
+The `NodeDefinition.version` field (semantic version string) is an **author-facing label** only. The engine assigns its own independent version (monotonically increasing integer) on each registration call. These are two separate versioning systems — the SDK version does not control engine versioning.
+
 ### `register_node()`
 
 Register a node with the workflow engine registry via `POST /api/workflows/nodes/`:
@@ -1010,7 +1027,7 @@ payload = build_registry_payload(
 )
 ```
 
-**Field mapping** (SDK → Engine API):
+**Field mapping** (SDK → Engine `RegisterNodeRequest` / `WorkflowNode`):
 
 | SDK Field | Engine API Field | Notes |
 |-----------|-----------------|-------|
@@ -1394,3 +1411,4 @@ git commit -m "feat: new endpoint with BREAKING CHANGE"   # major bump
 - [x] Auto-download of presigned URL file inputs (v0.7.0 — SDK auto-downloads file inputs before execute())
 - [x] Node definition versioning with auto-derived `id` field (v0.8.0 — `id` computed from `name` + `version`)
 - [x] Registry field mapping for new engine API (v0.9.0 — `title`→`label`, `default_retry`→`retry`, `RegisterNodeResult`, `InvokeType` validation, `tags`, `invoke_config`)
+- [x] SDK naming convention alignment with engine WorkflowNode/WorkflowDefinitionNode model (v0.10.0 — docstrings, versioning semantics, type mapping documentation)
