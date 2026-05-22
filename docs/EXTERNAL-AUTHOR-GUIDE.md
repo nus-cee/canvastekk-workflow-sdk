@@ -505,6 +505,116 @@ def test_manifest():
 
 ---
 
+## Template Variable Substitution
+
+The workflow engine automatically resolves `{{variable}}` placeholders in **string** node inputs after edge resolution.
+
+### How It Works
+
+When the engine executes a workflow, it resolves each node's inputs via edges (connecting upstream outputs to downstream inputs). After this resolution, the engine scans all **string** values for `{{key}}` patterns and substitutes them using the same node's resolved input dict.
+
+**Your node receives fully resolved strings.** You do not need to handle `{{}}` syntax in your `execute()` method — the engine handles substitution before your node runs.
+
+```
+Engine: resolve edges → resolve {{templates}} → POST /execute to your node
+```
+
+### Syntax
+
+| Pattern | Behavior |
+|---------|----------|
+| `{{variable}}` | Replaced with `str(inputs["variable"])` |
+| `{variable}` | **Literal** — single braces are not substituted |
+| `{{unknown_key}}` | Left as-is if the key is not in the node's inputs (logged at DEBUG) |
+
+**Key rules:**
+- Only `{{double_braces}}` trigger substitution — single braces `{like_this}` are literal
+- Substitution is **single-pass** (no recursive resolution — `{{foo}}` in a resolved value is not re-processed)
+- Non-string inputs (integers, booleans, arrays, objects) pass through unchanged
+- Unresolved placeholders are left as-is and logged at DEBUG level
+
+### Availability
+
+> Template substitution requires an engine version that includes [DA-1037](https://betekk.atlassian.net/browse/DA-1037). On older engines, `{{...}}` placeholders pass through as literal text.
+
+### Examples
+
+**Path construction:**
+
+Workflow definition configures the node with template inputs:
+
+```json
+{
+  "folder_path": "{{report_id}}/runs/{{run_id}}/output/zip/",
+  "report_id": 13,
+  "run_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+Your node receives the resolved string:
+
+```json
+{
+  "folder_path": "13/runs/a1b2c3d4-e5f6-7890-abcd-ef1234567890/output/zip/",
+  "report_id": 13,
+  "run_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+**URL construction:**
+
+```json
+{
+  "download_url": "https://api.example.com/reports/{{report_id}}/export?format=pdf",
+  "report_id": 42
+}
+```
+
+After substitution: `"https://api.example.com/reports/42/export?format=pdf"`
+
+### Common Variables
+
+| Variable | Source | Description |
+|----------|--------|-------------|
+| `run_id` | `__start__` node (via edges) | Workflow run identifier — always available when connected via edges |
+| `report_id` | Upstream node output | Report identifier from a preceding node |
+| `node_id` | Engine-injected | Node instance ID within the workflow |
+
+Variables must be present in the same node's resolved inputs (from edges, defaults, or overrides). The `run_id` is available when the `__start__` node connects to your node via an edge.
+
+### Design Considerations
+
+#### Input Schema Constraints
+
+Your `input_schema` constraints (`pattern`, `format`, `minLength`, `maxLength`) validate against the **resolved** value, not the template syntax. Design your constraints to match the expected resolved output:
+
+```python
+input_schema={
+    "type": "object",
+    "properties": {
+        "folder_path": {
+            "type": "string",
+            # This pattern must match the RESOLVED value, e.g. "13/runs/abc/output/"
+            # NOT the template "{{report_id}}/runs/{{run_id}}/output/"
+            "pattern": "^[a-zA-Z0-9/_-]+$",
+        },
+    },
+}
+```
+
+#### Security
+
+Template substitution is single-pass, which prevents recursive injection — if a resolved value contains `{{another_key}}`, it is **not** re-substituted. However, node authors should still validate resolved string values before using them in file paths, URLs, or shell commands, as the resolved content depends on upstream node outputs.
+
+#### Avoiding Conflicts
+
+If your node naturally produces or consumes strings containing `{{` and `}}` (e.g., LaTeX templates, Mustache/Handlebars syntax), be aware that the engine will attempt substitution on any string input containing `{{...}}`. To avoid unintended substitution:
+
+- Use single braces `{...}` instead of `{{...}}` where possible
+- Structure your workflow so conflicting string fields receive their values from non-edge sources (defaults, overrides)
+
+---
+
 ## Further Reading
 
 - [SDK Python README](../python/README.md) — full API reference
