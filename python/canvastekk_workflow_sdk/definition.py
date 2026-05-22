@@ -100,20 +100,19 @@ class NodeDefinition(BaseModel):
     - Orchestrator to validate inputs before execution
 
     Versioning:
-        The ``version`` field is an **author-facing label** (semantic version
-        string like ``"1.2.0"``). The engine maintains its own independent
-        versioning system (monotonically increasing integer, managed via
-        revision chain). When ``register_node()`` is called, the engine
-        assigns its own version — the SDK's ``version`` field does not
-        control engine versioning.
+        The ``version`` field is a semantic version string (e.g., ``"1.2.0"``)
+        that is validated against the semver pattern (X.Y.Z) at definition time.
+        The engine uses this version directly for registry storage and enforces
+        immutability: re-registering with the same version and changed data
+        is rejected — node authors must bump the version for schema changes.
     """
 
     # Identity
     name: str = Field(description="Slug for routing (e.g., 'segmentation')")
     version: str = Field(
-        description="Author-facing semantic version label (e.g., '1.2.0'). "
-        "This is independent of the engine's own versioning system, which "
-        "auto-assigns an integer version via revision chain on each registration."
+        description="Semantic version string (e.g., '1.2.0'). Must follow X.Y.Z format. "
+        "The engine uses this version directly. Re-registering with the same version "
+        "and changed data is rejected — bump the version for any schema changes."
     )
     title: str = Field(description="Human-readable title (e.g., 'Point Cloud Segmentation')")
     description: str = Field(description="What this node does")
@@ -307,7 +306,7 @@ def export_definition(
         NodeDefinition.title  -> label
         NodeDefinition.default_retry -> retry
         NodeDefinition.id (computed) -> intentionally omitted; registry derives its own identifier
-        NodeDefinition.version -> included as author-facing label; engine assigns its own version
+        NodeDefinition.version -> included as the node's semantic version; same version + changed data is rejected by the engine
 
     Args:
         definition: The SDK NodeDefinition to export.

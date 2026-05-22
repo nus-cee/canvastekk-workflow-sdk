@@ -135,7 +135,7 @@ The SDK provides registry-level node definition tools. In the engine's terminolo
 
 Node authors define `NodeDefinition`. The engine handles `WorkflowDefinitionNode` internally when building workflow definitions.
 
-**Versioning:** `NodeDefinition.version` is the node author's own semantic version label. The engine has a separate, independent versioning system (monotonically increasing integer via revision chain). The SDK version field does not control engine versioning.
+**Versioning:** `NodeDefinition.version` is the node's semantic version string (e.g., `"1.0.0"`). The engine uses this version directly and enforces immutability — re-registering with the same version and changed data is rejected. Bump the version for any schema or metadata changes.
 
 Project structure:
 

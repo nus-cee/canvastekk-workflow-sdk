@@ -37,6 +37,15 @@ class RegisterNodeResult(BaseModel):
 
     Supports dict-like access (``result["name"]``) for backward compatibility
     by delegating to the ``node`` field.
+
+    Attributes:
+        node: Registered node definition dict from the engine.
+        action: Registration outcome — ``"created"`` (new node),
+            ``"updated"`` (new version of existing node), or ``"unchanged"``
+            (same version, same data, idempotent no-op).
+        revision_id: Engine revision identifier for this registration.
+        previous_version: Previous version string if this was an update.
+        changes: List of changed field names if this was an update.
     """
 
     node: dict[str, Any]
@@ -76,9 +85,10 @@ def build_registry_payload(
     definition).
 
     Versioning note:
-        The ``version`` field in the payload is the node author's semantic
-        version label. The engine assigns its own independent version
-        (monotonically increasing integer) on each registration call.
+        The ``version`` field in the payload is the node's semantic version
+        (e.g., ``"1.2.0"``). The engine stores and enforces this version —
+        re-registering with the same version and changed data is rejected.
+        Node authors must bump the version for any schema changes.
 
     Args:
         definition: The SDK NodeDefinition to convert.
@@ -166,10 +176,10 @@ def register_node(
     represents a node instance within a specific workflow definition.
 
     Versioning:
-        The engine assigns its own independent version (monotonically
-        increasing integer) on each registration call, regardless of the
-        SDK's ``NodeDefinition.version`` field (which is the author's
-        semantic version label).
+        The engine uses the semantic version string from ``NodeDefinition.version``
+        directly. Versions are immutable: re-registering with the same version
+        and changed data is rejected (HTTP 409). Node authors must bump the
+        version for any schema or metadata changes.
 
     Args:
         node: The BaseNode instance to register.

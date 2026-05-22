@@ -100,9 +100,9 @@ The `id` field is automatically derived from `name` + `version` as `{name}-v{ver
 
 **Requirements:**
 - `name` must be a valid slug: lowercase alphanumeric characters and hyphens only
-- `version` must follow semantic versioning (e.g., `1.0.0`, `2.3.1`) — this is an **author-facing label** for your own tracking
+- `version` must follow semantic versioning (e.g., `1.0.0`, `2.3.1`) — the engine uses this version directly for registry storage
 
-> **Note on engine versioning:** The engine maintains its own independent versioning system (monotonically increasing integer). Your `NodeDefinition.version` is your own semantic version label — it does **not** control the engine's version assignment. The engine assigns a new version automatically each time `register_node()` is called with changed content.
+> **Note on versioning:** The engine uses your `NodeDefinition.version` semantic version string directly. Versions are **immutable** — re-registering with the same version and changed data is rejected. You must bump the version for any schema or metadata changes.
 
 ### SDK Types and Engine Terminology
 
@@ -424,7 +424,7 @@ When calling the registry API, you may encounter these errors:
 | **401** | Unauthorized | Missing or invalid API key / service token | Check your `api_key` or `service_token` value. Ensure the header is correct (`X-API-Key` or `X-Service-Token`). |
 | **403** | Forbidden | Wrong owner — the node is registered under a different owner | Contact the platform team to transfer ownership, or use a different node ID. |
 | **404** | Not Found | Node not found in registry (GET/PUT/DELETE) or registry endpoint doesn't exist | Verify the `registry_url` and node ID. |
-| **409** | Conflict | Node already exists with a different owner | Use a unique node ID or contact the platform team. |
+| **409** | Conflict | Node already exists with a different owner, **or** same version registered with different content (immutability violation) | Use a unique node ID, or **bump your version** if you changed the schema or metadata. |
 | **422** | Validation Error | Invalid manifest payload | Validate locally first: `python -m canvastekk_workflow_sdk validate handler:definition` |
 | **500** | Internal Server Error | Engine-side failure | Retry after a few seconds. Contact the platform team if persistent. |
 
@@ -448,6 +448,7 @@ except RegistrationError as e:
         print("Forbidden: this node belongs to another owner")
     elif e.status_code == 409:
         print("Conflict: node already registered with different owner")
+        print("  OR: same version with changed data — bump your version to resolve")
     else:
         print(f"Registration failed ({e.status_code}): {e}")
 ```
