@@ -1464,4 +1464,4 @@ git commit -m "feat: new endpoint with BREAKING CHANGE"   # major bump
 - [x] Node definition versioning with auto-derived `id` field (v0.8.0 — `id` computed from `name` + `version`)
 - [x] Registry field mapping for new engine API (v0.9.0 — `title`→`label`, `default_retry`→`retry`, `RegisterNodeResult`, `InvokeType` validation, `tags`, `invoke_config`)
 - [x] SDK naming convention alignment with engine WorkflowNode/WorkflowDefinitionNode model (v0.10.0 — docstrings, versioning semantics, type mapping documentation)
-- [ ] Template variable substitution documentation for node authors (DA-1038 — `{{variable}}` syntax, schema constraints, security notes)
+- [x] Template variable substitution documentation for node authors (DA-1038 — `{{variable}}` syntax, schema constraints, security notes)
