@@ -124,16 +124,53 @@ All commands (`poetry run pytest`, `poetry run ruff check`, etc.) run from `pyth
 
 See [`python/README.md`](./python/) for full documentation.
 
+## Workflow Builder & Local Runner
+
+Build, validate, and test-run workflow DAGs locally without the engine:
+
+```python
+from canvastekk_workflow_sdk import WorkflowBuilder, WorkflowRunner
+from canvastekk_workflow_sdk.workflow.executor import InProcessExecutor
+
+# Build a workflow
+spec = (
+    WorkflowBuilder("my-pipeline")
+    .add_start("start", outputs=["point_cloud"])
+    .add_node("segment", slug="segmentation-v1.0.0", inputs={"method": "dbscan"})
+    .add_end("end")
+    .connect("start", "segment", from_output="point_cloud", to_input="input_file")
+    .connect("segment", "end", from_output="instances", to_input="result")
+    .build()  # validates the DAG
+)
+
+# Test run locally with BaseNode instances
+executor = InProcessExecutor()
+executor.register("segmentation-v1.0.0", MySegmentNode())
+
+runner = WorkflowRunner(executor)
+result = runner.run(spec, inputs={"point_cloud": "/data/scan.las"})
+print(result.status)          # "completed" or "failed"
+print(result.final_outputs)   # {"result": ...}
+
+# Export for engine
+spec.model_dump(mode="json")  # POSTable to /api/workflows/definitions
+```
+
+See [`python/README.md`](./python/) for the full workflow builder guide.
+
 ## Architecture
 
-The SDK provides registry-level node definition tools. In the engine's terminology:
+The SDK provides registry-level node definition tools and a local workflow builder. In the engine's terminology:
 
 | SDK Type | Engine Type | Purpose |
 |----------|-------------|---------|
 | `NodeDefinition` | `WorkflowNode` | Registry-level node type (schemas, metadata, styles, invocation config) |
-| — | `WorkflowDefinitionNode` | Node instance within a workflow definition (inputs, position, edges) |
+| `workflow.WorkflowNode` | `WorkflowDefinitionNode` | Node instance within a workflow definition (inputs, position, edges) |
+| `workflow.WorkflowSpec` | `WorkflowSpec` | Complete workflow definition (nodes + edges as a DAG) |
 
 Node authors define `NodeDefinition`. The engine handles `WorkflowDefinitionNode` internally when building workflow definitions.
+
+The SDK's `workflow` module lets end users build, validate, and test-run complete workflow DAGs locally without the engine. `WorkflowSpec.model_dump(mode="json")` produces JSON directly POSTable to the engine's `/api/workflows/definitions` endpoint.
 
 **Versioning:** `NodeDefinition.version` is the node's semantic version string (e.g., `"1.0.0"`). The engine uses this version directly and enforces immutability — re-registering with the same version and changed data is rejected. Bump the version for any schema or metadata changes.
 

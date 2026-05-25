@@ -251,6 +251,8 @@ The SDK provides structured exceptions. When raised inside `execute()`, they pro
 | `NodeTimeoutError` | `TIMEOUT` | 408 | Execution exceeded time limit |
 | `NodeIOError` | `IO_ERROR` | 500 | File read/write failure |
 | `NodeConfigurationError` | `CONFIGURATION_ERROR` | 500 | Invalid node configuration |
+| `WorkflowValidationError` | `WORKFLOW_VALIDATION_ERROR` | 422 | Workflow spec validation failure (cycle, orphan, missing START/END) |
+| `WorkflowExecutionError` | `WORKFLOW_EXECUTION_ERROR` | 500 | Local workflow execution failure |
 
 Note: When raised inside `execute()`, the SDK catches them and returns `status: "fail"` with HTTP 200. The structured error codes appear in the `error_code` field. When exceptions escape to the FastAPI exception handler, they produce the HTTP status codes above.
 
@@ -1005,9 +1007,12 @@ The SDK provides utilities for registering nodes with the CanvasTEKK Workflow En
 | SDK Type | Engine Type | Purpose |
 |----------|-------------|---------|
 | `NodeDefinition` | `WorkflowNode` | Registry-level node type (schemas, metadata, styles) |
-| — | `WorkflowDefinitionNode` | Node instance within a workflow (inputs, position, edges) |
+| `workflow.WorkflowNode` | `WorkflowDefinitionNode` | Node instance within a workflow (inputs, position, edges) |
+| `workflow.WorkflowSpec` | `WorkflowSpec` | Complete workflow definition (nodes + edges as a DAG) |
 
 Node authors only interact with `NodeDefinition`. The engine handles `WorkflowDefinitionNode` internally.
+
+The SDK's `workflow` module provides a local equivalent: `WorkflowBuilder` creates `WorkflowSpec` objects that serialize to engine-compatible JSON, and `WorkflowRunner` executes them locally.
 
 ### Versioning
 
@@ -1127,6 +1132,211 @@ try:
     result = register_node(node, registry_url=url, service_token="svs_xxx")
 except RegistrationError as e:
     print(f"Status: {e.status_code}, Body: {e.body}")
+```
+
+---
+
+## Workflow Builder & Local Runner
+
+Build, validate, and test-run workflow DAGs locally — without the engine, Temporal, S3, or distributed orchestration.
+
+### Intentional Differences from Engine
+
+| Feature | Engine | SDK Runner |
+|---------|--------|------------|
+| Orchestration | Temporal (distributed) | In-process (BFS levels, asyncio) |
+| Node execution | HTTP calls to deployed services | Direct `.execute()` or HTTP calls |
+| File handling | S3 presigned URLs | Local file paths (passthrough) |
+| Credentials | Encrypted credential store | Not needed locally |
+| Durability | Workflow state persisted | Ephemeral, in-memory |
+| Callbacks | Async HTTP callbacks | Synchronous execution |
+
+### Quick Start
+
+```python
+from canvastekk_workflow_sdk import WorkflowBuilder, WorkflowRunner
+from canvastekk_workflow_sdk.workflow.executor import InProcessExecutor
+
+# Build a workflow
+spec = (
+    WorkflowBuilder("my-pipeline")
+    .add_start("start", outputs=["point_cloud"])
+    .add_node("segment", slug="segmentation-v1.0.0", inputs={"method": "dbscan"})
+    .add_node("measure", slug="measurement-v1.0.0")
+    .add_end("end")
+    .connect("start", "segment", from_output="point_cloud", to_input="input_file")
+    .connect("segment", "measure", from_output="instances", to_input="instance_set")
+    .connect("measure", "end", from_output="measurements", to_input="result")
+    .build()  # validates the DAG
+)
+
+# Test run locally with BaseNode instances
+executor = InProcessExecutor()
+executor.register("segmentation-v1.0.0", MySegmentNode())
+executor.register("measurement-v1.0.0", MyMeasurementNode())
+
+runner = WorkflowRunner(executor)
+result = runner.run(spec, inputs={"point_cloud": "/data/scan.las"})
+
+print(result.status)          # "completed" or "failed"
+print(result.final_outputs)   # {"result": ...}
+print(result.duration_ms)     # total execution time
+
+# Export for engine — produces JSON POSTable to /api/workflows/definitions
+import json
+payload = {"name": "my-pipeline", "spec": spec.model_dump(mode="json")}
+```
+
+### WorkflowBuilder
+
+Fluent API for constructing workflow definitions. All methods return `self` for chaining (except `build()`).
+
+#### `add_start(node_id="start", *, outputs=None, config_schema=None)`
+
+Add a START node (workflow entry point). Exactly one allowed.
+
+```python
+builder.add_start("start", outputs=["point_cloud", "metadata"])
+```
+
+If `outputs` is provided (list of field names), sets `config_schema` with string properties for each field. These become the START node's output fields that downstream nodes can connect to.
+
+#### `add_end(node_id="end")`
+
+Add an END node (workflow terminal). Multiple allowed.
+
+```python
+builder.add_end("end")
+```
+
+#### `add_node(node_id, *, slug, name=None, inputs=None, version=None)`
+
+Add a user node with a registry slug reference. Slug `"__start__"` and `"__end__"` are reserved.
+
+```python
+builder.add_node("segment", slug="segmentation-v1.0.0", inputs={"method": "dbscan"}, version="1.0.0")
+```
+
+#### `connect(from_node, to_node, *, from_output="", to_input="", edge_type=EdgeType.DEFAULT, resolution_strategy=ResolutionStrategy.AUTO, condition=None)`
+
+Add an edge connecting two nodes. Validates that both node IDs exist.
+
+```python
+builder.connect("start", "segment", from_output="point_cloud", to_input="input_file")
+```
+
+#### `build(*, validate=True)`
+
+Construct the `WorkflowSpec`. If `validate=True` (default), validates the graph and raises `WorkflowValidationError` on failure.
+
+### NodeExecutor Strategy
+
+The runner accepts a `NodeExecutor` via constructor — choose how nodes execute:
+
+#### `InProcessExecutor` — Direct Execution
+
+Runs `BaseNode.execute()` directly via `asyncio.to_thread()` (non-blocking):
+
+```python
+from canvastekk_workflow_sdk.workflow.executor import InProcessExecutor
+
+executor = InProcessExecutor()
+executor.register("segmentation-v1.0.0", MySegmentNode())
+executor.register("measurement-v1.0.0", MyMeasurementNode())
+
+runner = WorkflowRunner(executor)
+```
+
+#### `HttpExecutor` — HTTP Calls
+
+Calls node `/execute` endpoints via `httpx`. Posts `NodeExecutionRequest`-compatible payloads:
+
+```python
+from canvastekk_workflow_sdk.workflow.executor import HttpExecutor
+
+executor = HttpExecutor()
+executor.register_url("segmentation-v1.0.0", "http://localhost:8001")
+executor.register_url("measurement-v1.0.0", "http://localhost:8002")
+
+runner = WorkflowRunner(executor)
+```
+
+### WorkflowRunner
+
+```python
+from canvastekk_workflow_sdk import WorkflowRunner
+
+runner = WorkflowRunner(executor, error_policy=ErrorPolicy.FAIL_FAST)
+result = runner.run(spec, inputs={"point_cloud": "/data/scan.las"})
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `executor` | `NodeExecutor` | required | Execution strategy (InProcess or HTTP) |
+| `error_policy` | `ErrorPolicy` | `FAIL_FAST` | `FAIL_FAST` stops on first error; `CONTINUE` skips downstream of failed nodes |
+
+### WorkflowRunResult
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | `"completed" \| "failed"` | Overall workflow status |
+| `final_outputs` | `dict` | Outputs collected from END nodes |
+| `node_results` | `list[NodeResult]` | Per-node execution results |
+| `duration_ms` | `int` | Total execution time |
+
+### NodeResult
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `node_id` | `str` | Node instance ID |
+| `slug` | `str` | Node type slug |
+| `status` | `"completed" \| "failed" \| "skipped"` | Node execution status |
+| `outputs` | `dict \| None` | Output values (if completed) |
+| `duration_ms` | `int` | Execution time |
+| `error` | `str \| None` | Error message (if failed) |
+| `skipped_reason` | `str \| None` | Why skipped (e.g. `"upstream_failed"`) |
+
+### Graph Validation
+
+The builder validates automatically on `build()`. Checks:
+
+- Exactly 1 `__start__` node, at least 1 `__end__` node
+- START has no incoming edges, END has no outgoing edges
+- No cycles (Kahn's algorithm)
+- No orphan nodes (unreachable from START)
+- No dead-end nodes (no path to any END)
+- All edge references point to existing node IDs
+- No duplicate node IDs
+
+### Edge Types
+
+Matching engine routing semantics:
+
+| Type | When it fires |
+|------|--------------|
+| `DEFAULT` | Always fires on successful execution |
+| `SUCCESS` | Fires only on success result |
+| `FAILURE` | Fires only on failure result |
+| `CONDITIONAL` | Fires based on CEL expression evaluation |
+
+### Resolution Strategies
+
+How `from_output` is resolved against source node outputs:
+
+| Strategy | Behavior |
+|----------|----------|
+| `AUTO` | Flat key lookup first; dot-path traversal as fallback |
+| `FLAT` | Treat `from_output` as a literal key name |
+| `DOT_PATH` | Always walk dot-path segments (e.g. `"data.url"` → `outputs["data"]["url"]`) |
+
+### Engine Compatibility
+
+`WorkflowSpec.model_dump(mode="json")` produces JSON compatible with the engine's `SaveWorkflowRequest.spec`:
+
+```python
+spec_json = spec.model_dump(mode="json")
+payload = {"name": "my-pipeline", "spec": spec_json}
+# POST payload to https://engine.example.com/api/workflows/definitions
 ```
 
 ---
@@ -1465,3 +1675,4 @@ git commit -m "feat: new endpoint with BREAKING CHANGE"   # major bump
 - [x] Registry field mapping for new engine API (v0.9.0 — `title`→`label`, `default_retry`→`retry`, `RegisterNodeResult`, `InvokeType` validation, `tags`, `invoke_config`)
 - [x] SDK naming convention alignment with engine WorkflowNode/WorkflowDefinitionNode model (v0.10.0 — docstrings, versioning semantics, type mapping documentation)
 - [x] Template variable substitution documentation for node authors (DA-1038 — `{{variable}}` syntax, schema constraints, security notes)
+- [x] Workflow Builder & Local Runner (DA-1087 — `WorkflowBuilder`, `WorkflowRunner`, `InProcessExecutor`, `HttpExecutor`, graph validation, engine-compatible JSON export)

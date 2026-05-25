@@ -11,11 +11,25 @@ The repo has a layered documentation architecture. These files must be kept in s
 | File | Purpose | Audience |
 |------|---------|----------|
 | `docs/EXTERNAL-AUTHOR-GUIDE.md` | **Primary external-facing guide** — build, deploy, and register nodes end-to-end. This is the single source of truth for third-party node authors. Any change to the node creation workflow, registration API, or CI/CD patterns must be reflected here. | External authors |
-| `python/README.md` | Full Python SDK API reference | SDK users |
+| `python/README.md` | Full Python SDK API reference (including workflow builder) | SDK users |
 | `README.md` | Repo overview, features, architecture | Everyone |
 | `examples/echo_node/` | Canonical reference implementation | All developers |
 
-When updating SDK APIs (especially `register_node()`, `BaseNode`, `NodeDefinition`, or auth), always check if `docs/EXTERNAL-AUTHOR-GUIDE.md` needs corresponding updates.
+When updating SDK APIs (especially `register_node()`, `BaseNode`, `NodeDefinition`, `WorkflowBuilder`, `WorkflowRunner`, or auth), always check if `docs/EXTERNAL-AUTHOR-GUIDE.md` needs corresponding updates.
+
+### Workflow Builder & Local Runner
+
+The SDK includes a `workflow` package for building, validating, and test-running workflow DAGs locally. Key classes:
+
+| Class | Purpose |
+|-------|---------|
+| `WorkflowBuilder` | Fluent API for building workflow definitions with `add_start()`, `add_end()`, `add_node()`, `connect()`, `build()` |
+| `WorkflowRunner` | Local executor — accepts a `NodeExecutor` strategy (in-process or HTTP) |
+| `InProcessExecutor` | Runs `BaseNode.execute()` directly via `asyncio.to_thread()` |
+| `HttpExecutor` | Calls node `/execute` endpoints via httpx |
+| `WorkflowSpec` | Engine-compatible Pydantic model — `model_dump(mode="json")` is POSTable to `/api/workflows/definitions` |
+
+This is **intentionally local-only** — no Temporal, no S3, no distributed orchestration. For the full guide, see `python/README.md` → "Workflow Builder & Local Runner" section.
 
 ### Skill Routing
 
@@ -26,6 +40,7 @@ When updating SDK APIs (especially `register_node()`, `BaseNode`, `NodeDefinitio
 | "Create a point cloud segmentation node" | `canvastekk-node-builder` + `canvastekk-node-patterns` | Load both — builder for workflow, patterns for domain example |
 | "Add auth/middleware/webhooks to my node" | `canvastekk-node-patterns` | Load for advanced integration patterns |
 | "Review my node" / "Validate my handler" | `canvastekk-node-builder` | Load for the validation checklist |
+| "Build a workflow" / "Test run a workflow" / "WorkflowBuilder" / "WorkflowRunner" | No skill needed — use SDK docs directly | The `workflow` package is self-documenting |
 
 ### Node Creation Conventions
 

@@ -120,6 +120,50 @@ class NodeConfigurationError(NodeExecutionError):
         )
 
 
+class WorkflowExecutionError(NodeExecutionError):
+    """Raised when local workflow execution fails."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        node_id: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        merged_details: dict[str, Any] = details or {}
+        if node_id:
+            merged_details["node_id"] = node_id
+        super().__init__(
+            message,
+            error_code="WORKFLOW_EXECUTION_ERROR",
+            details=merged_details,
+        )
+        self.node_id = node_id
+
+
+class WorkflowValidationError(NodeExecutionError):
+    """Raised when workflow spec validation fails."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        errors: list[str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            error_code="WORKFLOW_VALIDATION_ERROR",
+            details=details or {},
+        )
+        self.errors = errors or []
+
+    def to_dict(self) -> dict[str, Any]:
+        result = super().to_dict()
+        result["errors"] = self.errors
+        return result
+
+
 class NodeOutputValidationError(NodeExecutionError):
     """Raised when output validation against JSON Schema fails."""
 
@@ -155,6 +199,8 @@ ERROR_CODE_TO_HTTP_STATUS: dict[str, int] = {
     "OUTPUT_VALIDATION_ERROR": 422,
     "IO_ERROR": 500,
     "CONFIGURATION_ERROR": 500,
+    "WORKFLOW_EXECUTION_ERROR": 500,
+    "WORKFLOW_VALIDATION_ERROR": 422,
 }
 
 
