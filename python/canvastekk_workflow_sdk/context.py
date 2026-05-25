@@ -33,21 +33,27 @@ class ExecutionContext:
 
     def __init__(
         self,
-        request: NodeExecutionRequest,
+        request: NodeExecutionRequest | None = None,
         output_dir: Path | None = None,
+        *,
+        run_id: str | None = None,
+        node_id: str | None = None,
     ) -> None:
         self._request = request
+        resolved_run_id = run_id or (request.run_id if request else "local")
+        resolved_node_id = node_id or (request.node_id if request else "unknown")
+
         if output_dir is not None:
             self._output_dir = output_dir
         else:
             base_dir = os.environ.get("CANVASTEKK_OUTPUT_DIR")
             if base_dir:
-                self._output_dir = Path(base_dir) / request.run_id / request.node_id
+                self._output_dir = Path(base_dir) / resolved_run_id / resolved_node_id
             else:
-                self._output_dir = Path("/tmp") / request.run_id / request.node_id
+                self._output_dir = Path("/tmp") / resolved_run_id / resolved_node_id
         self._output_dir.mkdir(parents=True, exist_ok=True)
 
-        self._logger = get_node_logger(request.node_id)
+        self._logger = get_node_logger(resolved_node_id)
 
         self._token_usage: dict[str, int] = {}
         self._metadata: dict[str, Any] = {}
@@ -56,12 +62,16 @@ class ExecutionContext:
     @property
     def run_id(self) -> str:
         """Workflow run identifier."""
-        return self._request.run_id
+        if self._request is not None:
+            return self._request.run_id
+        return self._output_dir.parent.name
 
     @property
     def node_id(self) -> str:
         """Node instance ID in workflow."""
-        return self._request.node_id
+        if self._request is not None:
+            return self._request.node_id
+        return self._output_dir.name
 
     @property
     def output_dir(self) -> Path:

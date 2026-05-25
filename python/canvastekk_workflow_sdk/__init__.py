@@ -62,6 +62,8 @@ from canvastekk_workflow_sdk.exceptions import (
     NodeOutputValidationError,
     NodeTimeoutError,
     NodeValidationError,
+    WorkflowExecutionError,
+    WorkflowValidationError,
 )
 from canvastekk_workflow_sdk.logging import StructuredJsonFormatter, configure_logging, get_node_logger
 from canvastekk_workflow_sdk.middleware import LoggingMiddleware, NodeMiddleware, SDKVersionMiddleware, TimingMiddleware
@@ -76,6 +78,22 @@ from canvastekk_workflow_sdk.request import NodeExecutionRequest
 from canvastekk_workflow_sdk.response import HealthResponse, NodeExecutionResponse
 from canvastekk_workflow_sdk.router import create_multi_node_app
 from canvastekk_workflow_sdk.uploads import OutputUploader, S3PresignedUploader, get_default_uploader
+from canvastekk_workflow_sdk.workflow import (
+    EdgeType,
+    HttpExecutor,
+    InProcessExecutor,
+    NodeExecutor,
+    NodeResult,
+    ResolutionStrategy,
+    ValidationResult,
+    WorkflowBuilder,
+    WorkflowEdge,
+    WorkflowNode,
+    WorkflowRunner,
+    WorkflowRunResult,
+    WorkflowSpec,
+    validate,
+)
 
 __all__ = [
     "BaseContract",
@@ -103,10 +121,19 @@ __all__ = [
     "NodeTimeoutError",
     "NodeValidationError",
     "NodeAuth",
+    "NodeExecutor",
+    "NodeOutputValidationError",
+    "NodeResult",
+    "NodeStyles",
+    "NodeExecutionRequest",
+    "NodeExecutionResponse",
+    "NodeTimeoutError",
+    "NodeValidationError",
     "OutputUploader",
     "Plane",
     "PlaneSet",
     "Point3D",
+    "ResolutionStrategy",
     "RetryConfig",
     "RegistrationError",
     "RegisterNodeResult",
@@ -114,6 +141,15 @@ __all__ = [
     "StructuredJsonFormatter",
     "S3PresignedUploader",
     "TimingMiddleware",
+    "ValidationResult",
+    "WorkflowBuilder",
+    "WorkflowEdge",
+    "WorkflowExecutionError",
+    "WorkflowNode",
+    "WorkflowRunResult",
+    "WorkflowRunner",
+    "WorkflowSpec",
+    "WorkflowValidationError",
     "create_multi_node_app",
     "create_node_app",
     "configure_logging",
@@ -122,6 +158,10 @@ __all__ = [
     "get_node_logger",
     "register_node",
     "build_registry_payload",
+    "validate",
+    "EdgeType",
+    "HttpExecutor",
+    "InProcessExecutor",
 ]
 
 __version__ = "0.11.0"
