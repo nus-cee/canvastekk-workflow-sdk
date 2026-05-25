@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.0] - 2026-05-25
+
+### Features
+
+- Add workflow builder and local runner (DA-1087) (#33)
+
+
 ## [0.11.0] - 2026-05-22
 
 ### Features
 
 - **sdk**: Align SDK docs with engine semver versioning [DA-1041] (#32)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.11.0
 
 
 ## [0.10.1] - 2026-05-22
