@@ -77,6 +77,7 @@ from canvastekk_workflow_sdk.registry import (
 from canvastekk_workflow_sdk.request import NodeExecutionRequest
 from canvastekk_workflow_sdk.response import HealthResponse, NodeExecutionResponse
 from canvastekk_workflow_sdk.router import create_multi_node_app
+from canvastekk_workflow_sdk.testing import LocalFileServer, serve_files
 from canvastekk_workflow_sdk.uploads import OutputUploader, S3PresignedUploader, get_default_uploader
 from canvastekk_workflow_sdk.workflow import (
     EdgeType,
@@ -162,6 +163,8 @@ __all__ = [
     "EdgeType",
     "HttpExecutor",
     "InProcessExecutor",
+    "LocalFileServer",
+    "serve_files",
 ]
 
 __version__ = "0.12.0"

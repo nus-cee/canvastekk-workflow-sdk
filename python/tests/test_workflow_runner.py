@@ -1,5 +1,8 @@
 """Tests for workflow runner, executor, resolver, and level computation."""
 
+import tempfile
+from pathlib import Path
+
 import pytest
 
 from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition
@@ -449,3 +452,270 @@ class FailingNode(BaseNode):
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
         raise ValueError("Intentional failure")
+
+
+class FileWriterNode(BaseNode):
+    definition = NodeDefinition(
+        name="file-writer",
+        version="1.0.0",
+        title="File Writer",
+        description="Writes a file to output_dir",
+        input_schema={"type": "object"},
+        output_schema={
+            "type": "object",
+            "properties": {"file_path": {"type": "string"}},
+        },
+    )
+
+    def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+        path = context.output_path("data.txt")
+        path.write_text("hello from A")
+        return {"file_path": str(path)}
+
+
+class FileReaderNode(BaseNode):
+    definition = NodeDefinition(
+        name="file-reader",
+        version="1.0.0",
+        title="File Reader",
+        description="Reads a file from file_path input",
+        input_schema={
+            "type": "object",
+            "properties": {"file_path": {"type": "string"}},
+        },
+        output_schema={
+            "type": "object",
+            "properties": {"content": {"type": "string"}},
+        },
+    )
+
+    def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+        content = Path(inputs["file_path"]).read_text()
+        return {"content": content}
+
+
+class OutputDirCaptureNode(BaseNode):
+    definition = NodeDefinition(
+        name="dir-capture",
+        version="1.0.0",
+        title="Dir Capture",
+        description="Captures output_dir path in outputs",
+        input_schema={"type": "object"},
+        output_schema={
+            "type": "object",
+            "properties": {"captured_dir": {"type": "string"}},
+        },
+    )
+
+    def __init__(self, capture_list: list[str] | None = None) -> None:
+        super().__init__()
+        self._capture_list = capture_list
+
+    def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+        dir_str = str(context.output_dir)
+        if self._capture_list is not None:
+            self._capture_list.append(dir_str)
+        return {"captured_dir": dir_str}
+
+
+class TestWorkflowRunnerOutputDir:
+    def test_file_passing_between_nodes(self) -> None:
+        spec = WorkflowSpec(
+            nodes=[
+                WorkflowNode(id="start", slug="__start__"),
+                WorkflowNode(id="writer", slug="file-writer-v1.0.0"),
+                WorkflowNode(id="reader", slug="file-reader-v1.0.0"),
+                WorkflowNode(id="end", slug="__end__"),
+            ],
+            edges=[
+                WorkflowEdge(from_node="start", to_node="writer"),
+                WorkflowEdge(
+                    from_node="writer",
+                    to_node="reader",
+                    from_output="file_path",
+                    to_input="file_path",
+                ),
+                WorkflowEdge(
+                    from_node="reader",
+                    to_node="end",
+                    from_output="content",
+                    to_input="result",
+                ),
+            ],
+        )
+
+        executor = InProcessExecutor()
+        executor.register("file-writer-v1.0.0", FileWriterNode())
+        executor.register("file-reader-v1.0.0", FileReaderNode())
+        runner = WorkflowRunner(executor)
+
+        result = runner.run(spec, inputs={})
+
+        assert result.status == "completed"
+        assert result.final_outputs["result"] == "hello from A"
+
+    def test_user_supplied_output_dir_not_cleaned_up(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "my_outputs"
+
+            spec = WorkflowSpec(
+                nodes=[
+                    WorkflowNode(id="start", slug="__start__"),
+                    WorkflowNode(id="echo", slug="echo-v1.0.0", inputs={"message": "hi"}),
+                    WorkflowNode(id="end", slug="__end__"),
+                ],
+                edges=[
+                    WorkflowEdge(from_node="start", to_node="echo"),
+                    WorkflowEdge(
+                        from_node="echo",
+                        to_node="end",
+                        from_output="message",
+                        to_input="result",
+                    ),
+                ],
+            )
+
+            executor = InProcessExecutor()
+            executor.register("echo-v1.0.0", EchoNode())
+            runner = WorkflowRunner(executor, output_dir=output_dir)
+
+            result = runner.run(spec, inputs={})
+
+            assert result.status == "completed"
+            assert output_dir.exists()
+            assert result.output_dir == output_dir
+
+    def test_auto_created_temp_dir_cleaned_up(self) -> None:
+        captured_dir: list[str] = []
+
+        spec = WorkflowSpec(
+            nodes=[
+                WorkflowNode(id="start", slug="__start__"),
+                WorkflowNode(id="cap", slug="dir-capture-v1.0.0"),
+                WorkflowNode(id="end", slug="__end__"),
+            ],
+            edges=[
+                WorkflowEdge(from_node="start", to_node="cap"),
+                WorkflowEdge(from_node="cap", to_node="end"),
+            ],
+        )
+
+        executor = InProcessExecutor()
+        executor.register("dir-capture-v1.0.0", OutputDirCaptureNode(captured_dir))
+        runner = WorkflowRunner(executor)
+
+        result = runner.run(spec, inputs={})
+
+        assert result.status == "completed"
+        assert captured_dir
+        assert not Path(captured_dir[0]).exists()
+        assert result.output_dir is None
+
+    def test_cleanup_false_preserves_temp_dir(self) -> None:
+        captured_dir: list[str] = []
+
+        spec = WorkflowSpec(
+            nodes=[
+                WorkflowNode(id="start", slug="__start__"),
+                WorkflowNode(id="cap", slug="dir-capture-v1.0.0"),
+                WorkflowNode(id="end", slug="__end__"),
+            ],
+            edges=[
+                WorkflowEdge(from_node="start", to_node="cap"),
+                WorkflowEdge(from_node="cap", to_node="end"),
+            ],
+        )
+
+        executor = InProcessExecutor()
+        executor.register("dir-capture-v1.0.0", OutputDirCaptureNode(captured_dir))
+        runner = WorkflowRunner(executor, cleanup=False)
+
+        result = runner.run(spec, inputs={})
+
+        assert result.status == "completed"
+        assert captured_dir
+        assert Path(captured_dir[0]).exists()
+        assert result.output_dir == Path(captured_dir[0])
+
+    def test_auto_temp_dir_cleaned_up_on_exception(self) -> None:
+        captured_dir: list[str] = []
+
+        spec = WorkflowSpec(
+            nodes=[
+                WorkflowNode(id="start", slug="__start__"),
+                WorkflowNode(id="cap", slug="dir-capture-v1.0.0"),
+                WorkflowNode(id="fail", slug="failing-v1.0.0"),
+                WorkflowNode(id="end", slug="__end__"),
+            ],
+            edges=[
+                WorkflowEdge(from_node="start", to_node="cap"),
+                WorkflowEdge(from_node="cap", to_node="fail"),
+                WorkflowEdge(from_node="fail", to_node="end"),
+            ],
+        )
+
+        executor = InProcessExecutor()
+        executor.register("dir-capture-v1.0.0", OutputDirCaptureNode(captured_dir))
+        executor.register("failing-v1.0.0", FailingNode())
+        runner = WorkflowRunner(executor)
+
+        result = runner.run(spec, inputs={})
+
+        assert result.status == "failed"
+        assert captured_dir
+        assert not Path(captured_dir[0]).exists()
+
+    def test_result_exposes_output_dir_when_not_cleaned(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "outputs"
+
+            spec = WorkflowSpec(
+                nodes=[
+                    WorkflowNode(id="start", slug="__start__"),
+                    WorkflowNode(id="echo", slug="echo-v1.0.0", inputs={"message": "x"}),
+                    WorkflowNode(id="end", slug="__end__"),
+                ],
+                edges=[
+                    WorkflowEdge(from_node="start", to_node="echo"),
+                    WorkflowEdge(
+                        from_node="echo",
+                        to_node="end",
+                        from_output="message",
+                        to_input="result",
+                    ),
+                ],
+            )
+
+            executor = InProcessExecutor()
+            executor.register("echo-v1.0.0", EchoNode())
+            runner = WorkflowRunner(executor, output_dir=output_dir)
+
+            result = runner.run(spec, inputs={})
+
+            assert result.output_dir == output_dir
+
+    def test_result_output_dir_none_when_auto_cleaned(self) -> None:
+        spec = WorkflowSpec(
+            nodes=[
+                WorkflowNode(id="start", slug="__start__"),
+                WorkflowNode(id="echo", slug="echo-v1.0.0", inputs={"message": "x"}),
+                WorkflowNode(id="end", slug="__end__"),
+            ],
+            edges=[
+                WorkflowEdge(from_node="start", to_node="echo"),
+                WorkflowEdge(
+                    from_node="echo",
+                    to_node="end",
+                    from_output="message",
+                    to_input="result",
+                ),
+            ],
+        )
+
+        executor = InProcessExecutor()
+        executor.register("echo-v1.0.0", EchoNode())
+        runner = WorkflowRunner(executor)
+
+        result = runner.run(spec, inputs={})
+
+        assert result.output_dir is None
