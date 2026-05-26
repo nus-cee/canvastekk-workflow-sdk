@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.0] - 2026-05-26
+
+### Features
+
+- **sdk**: Add WorkflowRunner output_dir support and LocalFileServer test utility (DA-1102) (#34)
+
+
 ## [0.12.0] - 2026-05-25
 
 ### Features
 
 - Add workflow builder and local runner (DA-1087) (#33)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.12.0
 
 
 ## [0.11.0] - 2026-05-22
