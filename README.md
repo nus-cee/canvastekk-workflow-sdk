@@ -81,6 +81,24 @@ def execute(self, inputs, context):
     data = cloud_path.read_bytes()
 ```
 
+### Test Utilities (`LocalFileServer`)
+
+Test the full presigned URL download pipeline without S3 or mocking:
+
+```python
+from canvastekk_workflow_sdk import LocalFileServer, NodeExecutionRequest
+
+with LocalFileServer(tmp_path) as server:
+    url = server.url_for("scan.las")
+    response = MyNode().run(NodeExecutionRequest(
+        run_id="test", node_id="n1",
+        inputs={"input_file": url},
+    ))
+    assert response.status == "pass"
+```
+
+The SDK's auto-download only triggers on `http://`/`https://` values — a plain local path bypasses the pipeline. `LocalFileServer` serves real HTTP so the full download → validate → execute path runs end-to-end.
+
 ### CLI Manifest Validation
 
 Offline validation without starting the server:
@@ -151,6 +169,7 @@ runner = WorkflowRunner(executor)
 result = runner.run(spec, inputs={"point_cloud": "/data/scan.las"})
 print(result.status)          # "completed" or "failed"
 print(result.final_outputs)   # {"result": ...}
+print(result.output_dir)      # Path or None (auto-cleaned temp dir)
 
 # Export for engine
 spec.model_dump(mode="json")  # POSTable to /api/workflows/definitions
@@ -357,6 +376,18 @@ Key decisions recorded as the SDK evolves. See [`PLANS/PLAN-DA-894.md`](./PLANS/
 | `context.downloads_dir` as lazy temp directory | Only created when file inputs are present; cleaned up with tempdir |
 | Field-prefixed filenames (`{field}_{name}`) | Prevents filename collisions when multiple file inputs are present |
 | Partial download cleanup on failure | Downloaded files removed if download or validation fails |
+
+### v0.13.0 — WorkflowRunner output_dir (DA-1102)
+
+| Decision | Rationale |
+|----------|-----------|
+| Shared `output_dir` per run (not per-node) | Enables file passing between nodes in multi-step pipelines — node A writes, node B reads from the same directory |
+| `output_dir: Path | None = None` parameter | Default creates a temp dir transparently; existing tests unaffected. User-supplied dirs are never cleaned up |
+| `cleanup: bool = True` parameter | Auto-created temp dirs are removed after the run. `cleanup=False` preserves intermediate outputs for debugging |
+| `WorkflowRunResult.output_dir` field | Exposes the output directory path on the result (set to `None` if auto-cleaned) |
+| `finally`-style cleanup | Temp dirs cleaned up even when nodes raise exceptions, preventing leaks |
+| `LocalFileServer` test utility | Serves local files over HTTP so the full presigned URL download pipeline can be tested without S3 or mocking |
+| `HttpExecutor` limitation documented | Shared `output_dir` only effective with `InProcessExecutor` — remote nodes don't share the local filesystem |
 
 ## Repository
 

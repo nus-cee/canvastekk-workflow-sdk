@@ -24,10 +24,11 @@ The SDK includes a `workflow` package for building, validating, and test-running
 | Class | Purpose |
 |-------|---------|
 | `WorkflowBuilder` | Fluent API for building workflow definitions with `add_start()`, `add_end()`, `add_node()`, `connect()`, `build()` |
-| `WorkflowRunner` | Local executor — accepts a `NodeExecutor` strategy (in-process or HTTP) |
+| `WorkflowRunner` | Local executor — accepts a `NodeExecutor` strategy (in-process or HTTP). Supports `output_dir` for shared file passing between nodes and `cleanup` for temp dir management |
 | `InProcessExecutor` | Runs `BaseNode.execute()` directly via `asyncio.to_thread()` |
 | `HttpExecutor` | Calls node `/execute` endpoints via httpx |
 | `WorkflowSpec` | Engine-compatible Pydantic model — `model_dump(mode="json")` is POSTable to `/api/workflows/definitions` |
+| `LocalFileServer` | Test utility — serves local files over HTTP to simulate presigned URL downloads without S3 or mocking |
 
 This is **intentionally local-only** — no Temporal, no S3, no distributed orchestration. For the full guide, see `python/README.md` → "Workflow Builder & Local Runner" section.
 
@@ -41,6 +42,7 @@ This is **intentionally local-only** — no Temporal, no S3, no distributed orch
 | "Add auth/middleware/webhooks to my node" | `canvastekk-node-patterns` | Load for advanced integration patterns |
 | "Review my node" / "Validate my handler" | `canvastekk-node-builder` | Load for the validation checklist |
 | "Build a workflow" / "Test run a workflow" / "WorkflowBuilder" / "WorkflowRunner" | No skill needed — use SDK docs directly | The `workflow` package is self-documenting |
+| "Test file download" / "Test presigned URL" / "LocalFileServer" | No skill needed — use SDK docs directly | `LocalFileServer` is in `canvastekk_workflow_sdk.testing` |
 
 ### Node Creation Conventions
 

@@ -616,6 +616,64 @@ If your node naturally produces or consumes strings containing `{{` and `}}` (e.
 
 ---
 
+## Testing
+
+### Testing File Download with `LocalFileServer`
+
+The SDK's auto-download pipeline only triggers on `http://`/`https://` URLs — passing a plain local path bypasses the download entirely. To test the full presigned URL download pipeline end-to-end, use `LocalFileServer`:
+
+```python
+from canvastekk_workflow_sdk import LocalFileServer, NodeExecutionRequest
+
+def test_downloads_and_processes_file(tmp_path):
+    # Create a test file
+    (tmp_path / "scan.las").write_bytes(b"fake las data")
+
+    # Serve it over HTTP (simulates a presigned URL)
+    with LocalFileServer(tmp_path) as server:
+        url = server.url_for("scan.las")
+
+        response = MyNode().run(NodeExecutionRequest(
+            run_id="test",
+            node_id="n1",
+            inputs={"point_cloud": url},
+        ))
+
+    assert response.status == "pass"
+```
+
+This exercises the complete download → validate → execute path without S3, mocking, or external services.
+
+### Testing with the Local Workflow Runner
+
+Use `WorkflowRunner` with `InProcessExecutor` to test multi-node pipelines:
+
+```python
+from canvastekk_workflow_sdk import WorkflowRunner, WorkflowBuilder
+from canvastekk_workflow_sdk.workflow.executor import InProcessExecutor
+
+executor = InProcessExecutor()
+executor.register("my-node-v1.0.0", MyNode())
+
+# With a shared output_dir — node A writes, node B reads
+runner = WorkflowRunner(executor)
+result = runner.run(spec, inputs={"input_file": "/data/scan.las"})
+
+# With user-supplied output_dir — preserved after run
+import tempfile
+with tempfile.TemporaryDirectory() as tmp:
+    runner = WorkflowRunner(executor, output_dir=tmp)
+    result = runner.run(spec, inputs={"input_file": "/data/scan.las"})
+    assert result.output_dir == tmp  # still exists
+
+# Default behavior — auto-created temp dir is cleaned up
+runner = WorkflowRunner(executor)
+result = runner.run(spec)
+assert result.output_dir is None  # cleaned up
+```
+
+---
+
 ## Further Reading
 
 - [SDK Python README](../python/README.md) — full API reference
