@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.0] - 2026-05-28
+
+### Features
+
+- **typescript**: Add TypeScript SDK with full feature parity (DA-1148) (#36)
+
+
 ## [0.13.0] - 2026-05-26
 
 ### Features
 
 - **sdk**: Add WorkflowRunner output_dir support and LocalFileServer test utility (DA-1102) (#34)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.13.0
 
 
 ## [0.12.0] - 2026-05-25

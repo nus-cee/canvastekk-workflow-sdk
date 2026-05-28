@@ -1,6 +1,6 @@
 {
   "name": "canvastekk-workflow-sdk",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -12,8 +12,12 @@
       "require": "./dist/index.cjs"
     }
   },
-  "engines": { "node": ">=24.0.0" },
-  "files": ["dist"],
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
@@ -42,6 +46,8 @@
     "eslint": "^9",
     "typescript-eslint": "^8"
   },
-  "publishConfig": { "registry": "https://npm.pkg.github.com/@nus-cee" },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/@nus-cee"
+  },
   "license": "Apache-2.0"
 }
