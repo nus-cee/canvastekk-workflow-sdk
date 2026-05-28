@@ -1,0 +1,47 @@
+{
+  "name": "canvastekk-workflow-sdk",
+  "version": "0.13.0",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "engines": { "node": ">=24.0.0" },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/ tests/",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "express": "^4.21",
+    "zod": "^3.25",
+    "ajv": "^8"
+  },
+  "optionalDependencies": {
+    "jsonwebtoken": "^9"
+  },
+  "devDependencies": {
+    "typescript": "^5.8",
+    "tsup": "^8",
+    "vitest": "^3",
+    "@types/express": "^5",
+    "@types/node": "^24",
+    "@types/jsonwebtoken": "^9",
+    "supertest": "^7",
+    "@types/supertest": "^6",
+    "eslint": "^9",
+    "typescript-eslint": "^8"
+  },
+  "publishConfig": { "registry": "https://npm.pkg.github.com/@nus-cee" },
+  "license": "Apache-2.0"
+}
