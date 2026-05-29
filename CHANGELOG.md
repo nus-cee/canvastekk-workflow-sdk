@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.1] - 2026-05-29
+
+### Documentation
+
+- **DA-1162**: Add docstrings/JSDoc coverage + fix exception handling (#37)
+
+
 ## [0.14.0] - 2026-05-28
 
 ### Features
 
 - **typescript**: Add TypeScript SDK with full feature parity (DA-1148) (#36)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.14.0
 
 
 ## [0.13.0] - 2026-05-26
