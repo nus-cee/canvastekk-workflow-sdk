@@ -23,10 +23,25 @@ import type { CreateNodeAppOptions } from "./app.js";
 
 const ajv = new Ajv({ strict: false });
 
+/**
+ * Sanitizes a filename by extracting only the base name, preventing path traversal.
+ * @param rawName - Raw filename that may contain directory components
+ * @returns Safe basename with no directory separators
+ */
 function sanitizeFilename(rawName: string): string {
   return basename(rawName);
 }
 
+/**
+ * Extracts a filename from a URL or Content-Disposition header.
+ *
+ * Tries Content-Disposition first, falls back to URL pathname,
+ * then defaults to "download".
+ *
+ * @param url - Download URL
+ * @param contentDisposition - Optional Content-Disposition header value
+ * @returns Extracted filename (sanitized)
+ */
 function extractFilename(url: string, contentDisposition?: string | null): string {
   if (contentDisposition) {
     for (const part of contentDisposition.split(";")) {
@@ -52,11 +67,28 @@ function extractFilename(url: string, contentDisposition?: string | null): strin
   return "download";
 }
 
+/**
+ * Compiles a JSON Schema into an Ajv validation function.
+ *
+ * Returns null for trivial schemas (`{"type":"object"}`) to skip unnecessary validation.
+ * Compiled validators are cached by Ajv internally.
+ *
+ * @param schema - JSON Schema object
+ * @returns Validation function, or null for trivial schemas
+ */
 function compileSchema(schema: Record<string, unknown>): ValidateFunction | null {
   if (!schema || JSON.stringify(schema) === '{"type":"object"}') return null;
   return ajv.compile(schema);
 }
 
+/**
+ * Formats Ajv validation errors into a structured, sorted array.
+ *
+ * Errors are sorted by instance path for deterministic output.
+ *
+ * @param errors - Raw Ajv error objects
+ * @returns Array of { path, message, validator } objects
+ */
 function formatAjvErrors(errors: import("ajv").ErrorObject[]): Record<string, unknown>[] {
   return errors
     .sort((a, b) => {
@@ -71,6 +103,35 @@ function formatAjvErrors(errors: import("ajv").ErrorObject[]): Record<string, un
     }));
 }
 
+/**
+ * Abstract base class for all CanvasTEKK workflow nodes.
+ *
+ * Subclasses must:
+ * 1. Define a `definition` class attribute with a valid NodeDefinition
+ * 2. Implement the `execute()` method
+ *
+ * The SDK validates the definition at construction time and auto-downloads
+ * file inputs before calling `execute()`. Output validation runs after
+ * `execute()` returns.
+ *
+ * @example
+ * ```typescript
+ * class EchoNode extends BaseNode {
+ *   definition = {
+ *     name: "echo",
+ *     version: "1.0.0",
+ *     title: "Echo Node",
+ *     description: "Passes inputs through unchanged",
+ *     input_schema: { type: "object", properties: { data: { type: "string" } } },
+ *     output_schema: { type: "object", properties: { data: { type: "string" } } },
+ *   };
+ *
+ *   execute(inputs: Record<string, unknown>, context: ExecutionContext) {
+ *     return inputs;
+ *   }
+ * }
+ * ```
+ */
 export abstract class BaseNode {
   abstract definition: NodeDefinition;
 

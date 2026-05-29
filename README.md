@@ -7,7 +7,7 @@ Multi-language SDK for building CanvasTEKK Workflow Engine nodes. Each language 
 | Language | Status | Package | Directory |
 |----------|--------|---------|-----------|
 | Python | Available | `canvastekk-workflow-sdk` | [`python/`](./python/) |
-| TypeScript | Planned | — | `typescript/` |
+| TypeScript | Available | `@nus-cee/canvastekk-workflow-sdk` | [`typescript/`](./typescript/) |
 
 ## Features
 
@@ -142,6 +142,26 @@ All commands (`poetry run pytest`, `poetry run ruff check`, etc.) run from `pyth
 
 See [`python/README.md`](./python/) for full documentation.
 
+### TypeScript
+
+**Install from GitHub Packages:**
+
+```bash
+npm install @nus-cee/canvastekk-workflow-sdk \
+  --registry https://npm.pkg.github.com/nus-cee
+```
+
+**Develop locally:**
+
+```bash
+cd typescript/
+npm install
+```
+
+All commands (`npx vitest run`, `npx tsc --noEmit`, `npx tsup`, etc.) run from `typescript/`.
+
+See [`typescript/README.md`](./typescript/) for full documentation.
+
 ## Workflow Builder & Local Runner
 
 Build, validate, and test-run workflow DAGs locally without the engine:
@@ -198,6 +218,7 @@ Project structure:
 | Directory | Purpose |
 |-----------|---------|
 | `python/` | Python SDK source, tests, and package config |
+| `typescript/` | TypeScript SDK source, tests, and package config |
 | `docs/` | External-facing documentation |
 | `examples/` | Reference node implementations and deployment templates |
 | `PLANS/` | Implementation plan files per ticket |

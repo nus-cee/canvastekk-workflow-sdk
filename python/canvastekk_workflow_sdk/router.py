@@ -80,6 +80,11 @@ def create_multi_node_app(
 
     @app.get("/health")
     async def root_health() -> dict[str, Any]:
+        """Root health endpoint for the multi-node application.
+
+        Returns:
+            Dict with ``status`` and list of mounted node prefixes.
+        """
         return {"status": "healthy", "nodes": list(nodes.keys())}
 
     return app

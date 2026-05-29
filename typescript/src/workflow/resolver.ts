@@ -31,6 +31,18 @@ export function resolveInputs(
   return resolved;
 }
 
+/**
+ * Resolves a single output value from upstream outputs using the specified strategy.
+ *
+ * - `"flat"` — Direct key lookup
+ * - `"dot_path"` — Nested object traversal (e.g. "a.b.c")
+ * - `"auto"` — Tries flat first, falls back to dot_path
+ *
+ * @param sourceOutputs - Outputs from the upstream node
+ * @param fromOutput - Output field name or dot-path
+ * @param strategy - Resolution strategy
+ * @returns Resolved value
+ */
 function resolveOutput(
   sourceOutputs: Record<string, unknown>,
   fromOutput: string,
@@ -56,6 +68,14 @@ function resolveOutput(
   throw new Error(`Cannot resolve from_output '${fromOutput}' with AUTO strategy`);
 }
 
+/**
+ * Traverses a nested object using a dot-separated path (e.g., "a.b.c").
+ *
+ * @param data - Root object to traverse
+ * @param path - Dot-separated path string
+ * @returns Value at the path
+ * @throws {Error} If path is invalid or a segment is not found
+ */
 function walkDotPath(data: Record<string, unknown>, path: string): unknown {
   let current: unknown = data;
   for (const segment of path.split(".")) {

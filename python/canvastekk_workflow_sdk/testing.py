@@ -120,10 +120,12 @@ class LocalFileServer:
                 self._thread = None
 
     def __enter__(self) -> LocalFileServer:
+        """Start the server and return self for context manager usage."""
         self.start()
         return self
 
     def __exit__(self, *args) -> None:
+        """Stop the server on context manager exit."""
         self.stop()
 
 

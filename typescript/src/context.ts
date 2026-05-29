@@ -3,6 +3,18 @@ import { join } from "node:path";
 import type { NodeExecutionRequest } from "./request.js";
 import { getNodeLogger, type SdkLogger } from "./logging.js";
 
+/**
+ * Context provided to node execute() method.
+ *
+ * Provides access to:
+ * - Run and node identifiers (`runId`, `nodeId`)
+ * - Output directory for writing result files (`outputDir`, `outputPath()`)
+ * - Downloads directory for auto-downloaded file inputs (`downloadsDir`)
+ * - Metadata dict for download tracking (`metadata`)
+ * - Logger with run/node context (`logger`)
+ * - Progress reporting for long-running operations (`reportProgress()`)
+ * - Token usage tracking for LLM-based nodes (`recordTokenUsage()`)
+ */
 export class ExecutionContext {
   private _request: NodeExecutionRequest | null;
   private _outputDir: string;

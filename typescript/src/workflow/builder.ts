@@ -19,7 +19,12 @@ export class WorkflowBuilder {
     this._name = name ?? null;
   }
 
-  private checkDuplicate(nodeId: string): void {
+  /**
+ * Validates that a node ID is not already used in the workflow.
+ * @param nodeId - Node ID to check
+ * @throws {Error} If the node ID is a duplicate
+ */
+private checkDuplicate(nodeId: string): void {
     if (this._nodeIds.has(nodeId)) {
       throw new Error(`Duplicate node ID: '${nodeId}'`);
     }

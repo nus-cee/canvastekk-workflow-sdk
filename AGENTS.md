@@ -12,8 +12,9 @@ The repo has a layered documentation architecture. These files must be kept in s
 |------|---------|----------|
 | `docs/EXTERNAL-AUTHOR-GUIDE.md` | **Primary external-facing guide** — build, deploy, and register nodes end-to-end. This is the single source of truth for third-party node authors. Any change to the node creation workflow, registration API, or CI/CD patterns must be reflected here. | External authors |
 | `python/README.md` | Full Python SDK API reference (including workflow builder) | SDK users |
+| `typescript/README.md` | Full TypeScript SDK API reference (including workflow builder) | SDK users |
 | `README.md` | Repo overview, features, architecture | Everyone |
-| `examples/echo_node/` | Canonical reference implementation | All developers |
+| `examples/echo_node/` | Canonical Python reference implementation | All developers |
 
 When updating SDK APIs (especially `register_node()`, `BaseNode`, `NodeDefinition`, `WorkflowBuilder`, `WorkflowRunner`, or auth), always check if `docs/EXTERNAL-AUTHOR-GUIDE.md` needs corresponding updates.
 
@@ -25,12 +26,12 @@ The SDK includes a `workflow` package for building, validating, and test-running
 |-------|---------|
 | `WorkflowBuilder` | Fluent API for building workflow definitions with `add_start()`, `add_end()`, `add_node()`, `connect()`, `build()` |
 | `WorkflowRunner` | Local executor — accepts a `NodeExecutor` strategy (in-process or HTTP). Supports `output_dir` for shared file passing between nodes and `cleanup` for temp dir management |
-| `InProcessExecutor` | Runs `BaseNode.execute()` directly via `asyncio.to_thread()` |
-| `HttpExecutor` | Calls node `/execute` endpoints via httpx |
-| `WorkflowSpec` | Engine-compatible Pydantic model — `model_dump(mode="json")` is POSTable to `/api/workflows/definitions` |
+| `InProcessExecutor` | **Python:** runs `BaseNode.execute()` directly via `asyncio.to_thread()`. **TypeScript:** runs via `await node.execute()` directly |
+| `HttpExecutor` | **Python:** calls node `/execute` endpoints via httpx. **TypeScript:** calls via `fetch` |
+| `WorkflowSpec` | Engine-compatible model — Python: `model_dump(mode="json")`, TypeScript: `JSON.stringify()`. POSTable to `/api/workflows/definitions` |
 | `LocalFileServer` | Test utility — serves local files over HTTP to simulate presigned URL downloads without S3 or mocking |
 
-This is **intentionally local-only** — no Temporal, no S3, no distributed orchestration. For the full guide, see `python/README.md` → "Workflow Builder & Local Runner" section.
+This is **intentionally local-only** — no Temporal, no S3, no distributed orchestration. For the full guide, see `python/README.md` or `typescript/README.md` → "Workflow Builder & Local Runner" section.
 
 ### Skill Routing
 
@@ -60,9 +61,17 @@ When creating CanvasTEKK workflow nodes, always follow these rules:
 
 ### SDK Development
 
-When working on the SDK itself (the `python/` directory):
+When working on the Python SDK (`python/` directory):
 
 - Run `poetry run ruff check canvastekk_workflow_sdk/ tests/` before committing
 - Run `poetry run pytest -v` to verify all tests pass
 - The echo node at `examples/echo_node/` is the canonical reference implementation
 - SDK version is in `python/canvastekk_workflow_sdk/__init__.py` and `python/pyproject.toml`
+
+When working on the TypeScript SDK (`typescript/` directory):
+
+- Run `npx tsc --noEmit` for type checking
+- Run `npx vitest run` to verify all tests pass
+- Run `npx tsup` to build (ESM + CJS + `.d.ts`)
+- SDK version is in `typescript/src/version.ts` and `typescript/package.json`
+- Wire-format types use `snake_case` (for Python engine compatibility); internal types use `camelCase`

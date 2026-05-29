@@ -1,6 +1,12 @@
 import { timingSafeEqual } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 
+/**
+ * Checks if dev mode is enabled via CANVASTEKK_DEV_MODE env var.
+ *
+ * ⚠️ **WARNING**: Dev mode bypasses ALL authentication. Never enable in production.
+ * @returns True if dev mode is active
+ */
 function isDevMode(): boolean {
   return ["true", "1", "yes"].includes(
     (process.env.CANVASTEKK_DEV_MODE ?? "").toLowerCase(),
@@ -20,6 +26,12 @@ export type AuthMiddleware = (
   next: NextFunction,
 ) => void;
 
+/**
+ * Sends a 401 Unauthorized JSON response.
+ *
+ * @param res - Express response object
+ * @param detail - Error detail message
+ */
 function unauthorized(res: Response, detail: string): void {
   res.status(401).json({ detail });
 }

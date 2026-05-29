@@ -15,6 +15,18 @@ export interface CreateNodeAppOptions {
   extraRoutes?: express.Router[];
 }
 
+/**
+ * Creates an Express application for a single CanvasTEKK node.
+ *
+ * Registers 8 endpoints: POST /execute, GET /health, GET /manifest,
+ * GET /definition (redirect), POST /hook, GET /metrics, GET /live, GET /ready.
+ * Includes JSON body parsing, SDK version header, error handling, and
+ * startup/shutdown lifecycle hooks.
+ *
+ * @param node - BaseNode instance to serve
+ * @param opts - Optional configuration for dependencies and extra routes
+ * @returns Configured Express application
+ */
 export function createNodeApp(
   node: BaseNode,
   opts: CreateNodeAppOptions = {},
@@ -36,6 +48,7 @@ export function createNodeApp(
 
   const router = express.Router();
 
+  /** POST /execute — Runs the node with the provided inputs. Validates request, enforces timeout, uploads file outputs if output_upload_url is provided. */
   router.post("/execute", async (req: Request, res: Response, next: NextFunction) => {
     let body: unknown;
     try {
@@ -89,6 +102,7 @@ export function createNodeApp(
     }
   });
 
+  /** GET /health — Returns node health status. Aggregates healthCheck() results into healthy/degraded/unhealthy status. */
   router.get("/health", (_req: Request, res: Response) => {
     const checks = node.healthCheck();
     let status: "healthy" | "unhealthy" | "degraded";
@@ -113,6 +127,7 @@ export function createNodeApp(
     res.json(resp);
   });
 
+  /** GET /manifest — Returns the node definition with auto-injected sdk_version and mode fields. */
   router.get("/manifest", (_req: Request, res: Response) => {
     const def = node.nodeDefinition;
     const content: Record<string, unknown> = { ...def };
@@ -133,10 +148,12 @@ export function createNodeApp(
     res.json(content);
   });
 
+  /** GET /definition — Redirects to /manifest (deprecated endpoint). */
   router.get("/definition", (_req: Request, res: Response) => {
     res.redirect(301, "/manifest");
   });
 
+  /** POST /hook — Handles lifecycle hook payloads. Returns 501 if the node does not implement hooks. */
   router.post("/hook", async (req: Request, res: Response) => {
     const result = node.hook(req.body as Record<string, unknown>);
     if (result === null) {
@@ -146,14 +163,17 @@ export function createNodeApp(
     res.json(result);
   });
 
+  /** GET /metrics — Returns execution metrics summary (total runs, pass/fail counts, durations). */
   router.get("/metrics", (_req: Request, res: Response) => {
     res.json(node.metricsCollector.getSummary());
   });
 
+  /** GET /live — Kubernetes liveness probe. Returns 200 if the process is alive. */
   router.get("/live", (_req: Request, res: Response) => {
     res.json({ status: "alive" });
   });
 
+  /** GET /ready — Kubernetes readiness probe. Returns 200 if healthy, 503 if not ready. */
   router.get("/ready", (_req: Request, res: Response) => {
     const checks = node.healthCheck();
     const def = node.nodeDefinition;
@@ -204,6 +224,16 @@ export function createNodeApp(
   return app;
 }
 
+/**
+ * Creates an Express application hosting multiple nodes under URL prefixes.
+ *
+ * Each key in `nodes` becomes a URL prefix with its own set of node endpoints.
+ * For example, `{ "segment": nodeA }` creates `POST /segment/execute`, etc.
+ *
+ * @param nodes - Mapping of URL prefix to BaseNode instance
+ * @param opts - Optional configuration for dependencies and extra routes
+ * @returns Configured Express application with all node endpoints mounted
+ */
 export function createMultiNodeApp(
   nodes: Record<string, BaseNode>,
   opts: CreateNodeAppOptions = {},
