@@ -99,7 +99,11 @@ class LocalFileServer:
                 return
 
             handler = _make_handler(self._directory)
-            self._server = http.server.HTTPServer((self._host, self._port), handler)
+            try:
+                self._server = http.server.HTTPServer((self._host, self._port), handler)
+            except OSError:
+                self._server = None
+                raise
             self._actual_port = self._server.server_address[1]
             self._thread = threading.Thread(
                 target=self._server.serve_forever,
