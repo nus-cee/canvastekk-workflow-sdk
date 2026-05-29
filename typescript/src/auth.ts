@@ -1,6 +1,12 @@
 import { timingSafeEqual } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 
+/**
+ * Checks if dev mode is enabled via CANVASTEKK_DEV_MODE env var.
+ *
+ * ⚠️ **WARNING**: Dev mode bypasses ALL authentication. Never enable in production.
+ * @returns True if dev mode is active
+ */
 function isDevMode(): boolean {
   return ["true", "1", "yes"].includes(
     (process.env.CANVASTEKK_DEV_MODE ?? "").toLowerCase(),
@@ -20,6 +26,12 @@ export type AuthMiddleware = (
   next: NextFunction,
 ) => void;
 
+/**
+ * Sends a 401 Unauthorized JSON response.
+ *
+ * @param res - Express response object
+ * @param detail - Error detail message
+ */
 function unauthorized(res: Response, detail: string): void {
   res.status(401).json({ detail });
 }
@@ -144,8 +156,19 @@ export class NodeAuth {
         throw new Error("Keycloak server URL and realm must be configured");
       }
       const jwksUrl = `${serverUrl.replace(/\/$/, "")}/realms/${realm}/protocol/openid-connect/certs`;
-      const resp = await fetch(jwksUrl, { signal: AbortSignal.timeout(10_000) });
-      if (!resp.ok) throw new Error(`Failed to fetch JWKS: HTTP ${resp.status}`);
+      let resp: globalThis.Response;
+      try {
+        resp = await fetch(jwksUrl, { signal: AbortSignal.timeout(10_000) });
+      } catch {
+        const err = new Error("Failed to connect to Keycloak JWKS endpoint");
+        err.name = "JwksNetworkError";
+        throw err;
+      }
+      if (!resp.ok) {
+        const err = new Error(`Failed to fetch JWKS: HTTP ${resp.status}`);
+        err.name = "JwksNetworkError";
+        throw err;
+      }
       const data = await resp.json() as { keys?: Array<{ kid?: string; x5c?: string[]; n?: string; e?: string; kty?: string }> };
       const map = new Map<string, string>();
       if (data.keys) {
@@ -203,7 +226,11 @@ export class NodeAuth {
         next();
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        unauthorized(res, `Invalid token: ${msg}`);
+        if (err instanceof Error && err.name === "JwksNetworkError") {
+          res.status(503).json({ detail: `Keycloak unavailable: ${msg}` });
+        } else {
+          unauthorized(res, `Invalid token: ${msg}`);
+        }
       }
     };
   }

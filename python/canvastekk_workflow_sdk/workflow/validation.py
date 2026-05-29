@@ -69,6 +69,12 @@ def validate(spec: WorkflowSpec) -> ValidationResult:
 
 
 def _check_node_ids(nodes: list[WorkflowNode], result: ValidationResult) -> None:
+    """Validate that all nodes have unique, non-empty string IDs.
+
+    Args:
+        nodes: List of workflow nodes.
+        result: ValidationResult to accumulate errors.
+    """
     seen: set[str] = set()
     for node in nodes:
         if not node.id or not isinstance(node.id, str):
@@ -87,6 +93,13 @@ def _check_edge_references(
     node_ids: set[str],
     result: ValidationResult,
 ) -> None:
+    """Validate that all edges reference existing nodes and have unique IDs.
+
+    Args:
+        edges: List of workflow edges.
+        node_ids: Set of valid node IDs.
+        result: ValidationResult to accumulate errors.
+    """
     edge_ids: set[str] = set()
     for edge in edges:
         if edge.id and edge.id in edge_ids:
@@ -113,6 +126,17 @@ def _check_start_end(
     node_map: dict[str, WorkflowNode],
     result: ValidationResult,
 ) -> None:
+    """Validate START/END constraints.
+
+    Requires exactly 1 __start__ node and >= 1 __end__ node.
+    Start nodes must have in_degree=0, end nodes must have out_degree=0.
+
+    Args:
+        nodes: List of workflow nodes.
+        edges: List of workflow edges.
+        node_map: Mapping of node ID to node.
+        result: ValidationResult to accumulate errors.
+    """
     start_nodes = [n for n in nodes if n.slug == "__start__"]
     end_nodes = [n for n in nodes if n.slug == "__end__"]
 
@@ -162,6 +186,15 @@ def _check_cycles(
     edges: list[WorkflowEdge],
     result: ValidationResult,
 ) -> None:
+    """Detect cycles using Kahn's algorithm (topological sort).
+
+    If not all nodes are processed, the remaining nodes form a cycle.
+
+    Args:
+        nodes: List of workflow nodes.
+        edges: List of workflow edges.
+        result: ValidationResult to accumulate errors.
+    """
     node_ids = {n.id for n in nodes}
     adj: dict[str, list[str]] = defaultdict(list)
     in_degree: dict[str, int] = {nid: 0 for nid in node_ids}
@@ -193,6 +226,17 @@ def _check_connectivity(
     node_map: dict[str, WorkflowNode],
     result: ValidationResult,
 ) -> None:
+    """Check graph connectivity using BFS.
+
+    Identifies orphan nodes (unreachable from __start__) and dead-end
+    nodes (no path to any __end__ node).
+
+    Args:
+        nodes: List of workflow nodes.
+        edges: List of workflow edges.
+        node_map: Mapping of node ID to node.
+        result: ValidationResult to accumulate errors.
+    """
     start_nodes = [n for n in nodes if n.slug == "__start__"]
     if not start_nodes:
         return
@@ -228,6 +272,15 @@ def _check_connectivity(
 
 
 def _bfs(start: str, adj: dict[str, list[str]]) -> set[str]:
+    """Breadth-first search from a single start node.
+
+    Args:
+        start: Start node ID.
+        adj: Adjacency list mapping node ID to neighbor IDs.
+
+    Returns:
+        Set of reachable node IDs.
+    """
     visited: set[str] = set()
     queue = deque([start])
     visited.add(start)
@@ -241,6 +294,15 @@ def _bfs(start: str, adj: dict[str, list[str]]) -> set[str]:
 
 
 def _bfs_multi(starts: set[str], adj: dict[str, list[str]]) -> set[str]:
+    """Breadth-first search from multiple start nodes.
+
+    Args:
+        starts: Set of start node IDs.
+        adj: Adjacency list mapping node ID to neighbor IDs.
+
+    Returns:
+        Set of reachable node IDs.
+    """
     visited: set[str] = set()
     queue = deque(starts)
     visited.update(starts)

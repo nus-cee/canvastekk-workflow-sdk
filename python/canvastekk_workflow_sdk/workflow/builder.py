@@ -216,6 +216,11 @@ class WorkflowBuilder:
         )
 
         if validate:
-            validate_graph(spec)
+            result = validate_graph(spec)
+            if not result.is_valid:
+                from canvastekk_workflow_sdk.exceptions import WorkflowValidationError
+                raise WorkflowValidationError(
+                    f"Workflow validation failed: {'; '.join(result.errors)}"
+                )
 
         return spec

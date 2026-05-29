@@ -94,6 +94,7 @@ interface LoggerConfig {
 
 const loggers = new Map<string, LoggerConfig>();
 
+/** Reads CANVASTEKK_LOG_LEVEL from env, defaulting to "info". Maps WARNING→warn, CRITICAL→fatal. */
 function getEnvLogLevel(): LogLevel {
   const raw = (process.env.CANVASTEKK_LOG_LEVEL ?? "INFO").toUpperCase();
   const map: Record<string, LogLevel> = {
@@ -107,6 +108,7 @@ function getEnvLogLevel(): LogLevel {
   return map[raw] ?? "info";
 }
 
+/** Reads CANVASTEKK_LOG_FORMAT from env, defaulting to "json". */
 function getEnvLogFormat(): string {
   return (process.env.CANVASTEKK_LOG_FORMAT ?? "json").toLowerCase();
 }
@@ -125,6 +127,16 @@ export function configureLogging(opts?: { level?: LogLevel; format?: string }): 
   loggers.set("node.", { name: "node.", formatter, minLevel });
 }
 
+/**
+ * Writes a log entry if the level meets the minimum threshold.
+ *
+ * Errors and above go to stderr; everything else goes to stdout.
+ *
+ * @param config - Logger configuration with formatter and min level
+ * @param level - Log level for this entry
+ * @param message - Log message
+ * @param extra - Additional structured data to include
+ */
 function writeLog(
   config: LoggerConfig,
   level: LogLevel,
@@ -148,6 +160,15 @@ function writeLog(
   }
 }
 
+/**
+ * Gets or creates a logger config for the given name.
+ *
+ * Inherits formatter and min level from the parent config
+ * (either "node.*" or "canvastekk_workflow_sdk").
+ *
+ * @param name - Logger name (e.g., "node.my-node")
+ * @returns Logger configuration
+ */
 function getOrCreateConfig(name: string): LoggerConfig {
   let config = loggers.get(name);
   if (!config) {

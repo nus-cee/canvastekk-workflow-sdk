@@ -1,7 +1,12 @@
 import type { WorkflowSpec } from "./models.js";
 
 /**
- * Result of workflow validation.
+ * Result of workflow DAG validation.
+ *
+ * @property isValid - True if no validation errors were found
+ * @property errors - List of validation error messages
+ * @property orphans - Node IDs unreachable from __start__
+ * @property deadEnds - Node IDs with no path to any __end__
  */
 export interface ValidationResult {
   isValid: boolean;
@@ -34,6 +39,11 @@ export function validate(spec: WorkflowSpec): ValidationResult {
   return result;
 }
 
+/**
+ * Validates that all nodes have unique, non-empty string IDs.
+ * @param nodes - Workflow nodes to validate
+ * @param result - Validation result to accumulate errors
+ */
 function checkNodeIds(nodes: WorkflowSpec["nodes"], result: ValidationResult): void {
   const seen = new Set<string>();
   for (const node of nodes) {
@@ -51,6 +61,12 @@ function checkNodeIds(nodes: WorkflowSpec["nodes"], result: ValidationResult): v
   }
 }
 
+/**
+ * Validates that all edges reference existing nodes and have unique IDs.
+ * @param edges - Workflow edges to validate
+ * @param nodeIds - Set of valid node IDs
+ * @param result - Validation result to accumulate errors
+ */
 function checkEdgeReferences(edges: WorkflowSpec["edges"], nodeIds: Set<string>, result: ValidationResult): void {
   const edgeIds = new Set<string>();
   for (const edge of edges) {
@@ -72,6 +88,16 @@ function checkEdgeReferences(edges: WorkflowSpec["edges"], nodeIds: Set<string>,
   }
 }
 
+/**
+ * Validates START/END constraints: exactly 1 start, >= 1 end, degree rules.
+ *
+ * Start nodes must have in_degree=0, end nodes must have out_degree=0.
+ *
+ * @param nodes - Workflow nodes
+ * @param edges - Workflow edges
+ * @param nodeMap - Node ID to node mapping
+ * @param result - Validation result to accumulate errors
+ */
 function checkStartEnd(
   nodes: WorkflowSpec["nodes"],
   edges: WorkflowSpec["edges"],
@@ -123,6 +149,15 @@ function checkStartEnd(
   }
 }
 
+/**
+ * Detects cycles using Kahn's algorithm (topological sort).
+ *
+ * If not all nodes are processed, the remaining nodes form a cycle.
+ *
+ * @param nodes - Workflow nodes
+ * @param edges - Workflow edges
+ * @param result - Validation result to accumulate errors
+ */
 function checkCycles(nodes: WorkflowSpec["nodes"], edges: WorkflowSpec["edges"], result: ValidationResult): void {
   const nodeIds = new Set(nodes.map((n) => n.id));
   const adj = new Map<string, string[]>();
@@ -158,6 +193,16 @@ function checkCycles(nodes: WorkflowSpec["nodes"], edges: WorkflowSpec["edges"],
   }
 }
 
+/**
+ * Checks graph connectivity using BFS from start and reverse BFS to end.
+ *
+ * Identifies orphan nodes (unreachable from start) and dead-end nodes
+ * (no path to any end node).
+ *
+ * @param nodes - Workflow nodes
+ * @param edges - Workflow edges
+ * @param result - Validation result to accumulate errors
+ */
 function checkConnectivity(nodes: WorkflowSpec["nodes"], edges: WorkflowSpec["edges"], result: ValidationResult): void {
   const startNodes = nodes.filter((n) => n.slug === "__start__");
   if (startNodes.length === 0) return;
@@ -195,6 +240,12 @@ function checkConnectivity(nodes: WorkflowSpec["nodes"], edges: WorkflowSpec["ed
   }
 }
 
+/**
+ * Breadth-first search from a single start node.
+ * @param start - Start node ID
+ * @param adj - Adjacency list (node ID → neighbor IDs)
+ * @returns Set of reachable node IDs
+ */
 function bfs(start: string, adj: Map<string, string[]>): Set<string> {
   const visited = new Set<string>();
   const queue = [start];
@@ -211,6 +262,12 @@ function bfs(start: string, adj: Map<string, string[]>): Set<string> {
   return visited;
 }
 
+/**
+ * Breadth-first search from multiple start nodes.
+ * @param starts - Set of start node IDs
+ * @param adj - Adjacency list (node ID → neighbor IDs)
+ * @returns Set of reachable node IDs
+ */
 function bfsMulti(starts: Set<string>, adj: Map<string, string[]>): Set<string> {
   const visited = new Set<string>(starts);
   const queue = [...starts];

@@ -11,9 +11,31 @@ export const NodeExecutionResponseSchema = z.object({
   error_code: z.string().nullable().default(null),
 });
 
-/** Node execution response. */
+/**
+ * Node execution response returned to the workflow engine.
+ *
+ * Fields use snake_case for wire-format compatibility with the Python engine.
+ *
+ * @property execution_id - Unique identifier for this execution
+ * @property status - Execution result: `"pass"` or `"fail"`
+ * @property outputs - Output values on success, `null` on failure
+ * @property duration_ms - Execution duration in milliseconds
+ * @property token_usage - Token consumption (0.0 if not applicable)
+ * @property error - Error message on failure, `null` on success
+ * @property error_type - Error class name (e.g., `"NodeValidationError"`)
+ * @property error_code - Machine-readable error code (e.g., `"VALIDATION_ERROR"`)
+ */
 export type NodeExecutionResponse = z.infer<typeof NodeExecutionResponseSchema>;
 
+/**
+ * Creates a success response from node execution.
+ *
+ * @param executionId - Unique execution identifier
+ * @param outputs - Node output values
+ * @param durationMs - Execution duration in milliseconds
+ * @param tokenUsage - Token consumption count
+ * @returns NodeExecutionResponse with status "pass"
+ */
 function createSuccessResponse(
   executionId: string,
   outputs: Record<string, unknown>,
@@ -32,6 +54,16 @@ function createSuccessResponse(
   };
 }
 
+/**
+ * Creates a failure response from node execution.
+ *
+ * @param executionId - Unique execution identifier
+ * @param error - Human-readable error message
+ * @param errorType - Error class name
+ * @param durationMs - Execution duration in milliseconds
+ * @param errorCode - Machine-readable error code
+ * @returns NodeExecutionResponse with status "fail"
+ */
 function createFailureResponse(
   executionId: string,
   error: string,

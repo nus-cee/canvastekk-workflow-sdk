@@ -69,17 +69,32 @@ def create_multi_node_app(
     """
     app = FastAPI(**fastapi_kwargs)
 
-    for prefix, node in nodes.items():
-        node_app = create_node_app(
-            node,
-            dependencies=global_dependencies,
-        )
+    node_apps: list[tuple[str, Any]] = []
+    try:
+        for prefix, node in nodes.items():
+            node_app = create_node_app(
+                node,
+                dependencies=global_dependencies,
+            )
+            node_apps.append((prefix, node_app))
+    except Exception:
+        for prefix, node_app in node_apps:
+            try:
+                app.unmount(f"/{prefix}")
+            except Exception:
+                pass
+        raise
 
-        # Mount the node's app as a sub-application under the prefix
+    for prefix, node_app in node_apps:
         app.mount(f"/{prefix}", node_app)
 
     @app.get("/health")
     async def root_health() -> dict[str, Any]:
+        """Root health endpoint for the multi-node application.
+
+        Returns:
+            Dict with ``status`` and list of mounted node prefixes.
+        """
         return {"status": "healthy", "nodes": list(nodes.keys())}
 
     return app

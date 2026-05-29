@@ -17,6 +17,7 @@ export abstract class NodeExecutor {
     inputs: Record<string, unknown>,
     context: ExecutionContext,
   ): Promise<Record<string, unknown>>;
+  /** Checks if a node is registered for the given slug. */
   abstract has(slug: string): boolean;
 }
 
@@ -37,12 +38,21 @@ export class InProcessExecutor extends NodeExecutor {
     return this;
   }
 
+  /**
+   * Executes a node in-process by calling its execute() method directly.
+   * @param slug - Node slug
+   * @param inputs - Node inputs
+   * @param context - Execution context
+   * @returns Node outputs
+   * @throws {Error} If no node is registered for the slug
+   */
   override async execute(slug: string, inputs: Record<string, unknown>, context: ExecutionContext): Promise<Record<string, unknown>> {
     const node = this._registry.get(slug);
     if (!node) throw new Error(`No node registered for slug '${slug}'`);
     return node.execute(inputs, context);
   }
 
+  /** Checks if a node is registered for the given slug. */
   has(slug: string): boolean {
     return this._registry.has(slug);
   }
@@ -75,6 +85,14 @@ export class HttpExecutor extends NodeExecutor {
     return this;
   }
 
+  /**
+   * Executes a node by sending an HTTP POST to its /execute endpoint.
+   * @param slug - Node slug
+   * @param inputs - Node inputs
+   * @param context - Execution context
+   * @returns Node outputs
+   * @throws {Error} If no URL is registered or the node returns an error
+   */
   override async execute(slug: string, inputs: Record<string, unknown>, context: ExecutionContext): Promise<Record<string, unknown>> {
     const url = this._urls.get(slug);
     if (!url) throw new Error(`No URL registered for slug '${slug}'`);
@@ -103,6 +121,7 @@ export class HttpExecutor extends NodeExecutor {
     throw new Error(`Node '${slug}' returned failure: ${data.error ?? "unknown"}`);
   }
 
+  /** Checks if a URL is registered for the given slug. */
   has(slug: string): boolean {
     return this._urls.has(slug);
   }

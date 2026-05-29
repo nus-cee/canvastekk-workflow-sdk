@@ -128,6 +128,14 @@ export function getNodeId(def: Pick<NodeDefinition, "name" | "version">): string
   return `${def.name}-v${def.version}`;
 }
 
+/**
+ * Extracts the names of file input fields from a node's input schema.
+ *
+ * File fields are identified by `format: "file"` in their JSON Schema definition.
+ *
+ * @param def - Node definition to inspect
+ * @returns Array of field names that have `format: "file"`
+ */
 export function getFileInputFields(def: NodeDefinition): string[] {
   const properties = ((def.input_schema as Record<string, unknown>)?.properties ?? {}) as Record<
     string,
@@ -138,6 +146,14 @@ export function getFileInputFields(def: NodeDefinition): string[] {
     .map(([name]) => name);
 }
 
+/**
+ * Extracts the names of file output fields from a node's output schema.
+ *
+ * File fields are identified by `format: "file"` in their JSON Schema definition.
+ *
+ * @param def - Node definition to inspect
+ * @returns Array of field names that have `format: "file"`
+ */
 export function getFileOutputFields(def: NodeDefinition): string[] {
   const properties = ((def.output_schema as Record<string, unknown>)?.properties ?? {}) as Record<
     string,
@@ -148,6 +164,18 @@ export function getFileOutputFields(def: NodeDefinition): string[] {
     .map(([name]) => name);
 }
 
+/**
+ * Validates a downloaded file against schema constraints.
+ *
+ * Checks the file extension against `x-accept` (allowed extensions)
+ * and the file size against `x-maxSizeBytes` (maximum size in bytes).
+ *
+ * @param def - Node definition containing the input schema
+ * @param fieldName - Name of the file input field
+ * @param filePath - Local path to the downloaded file
+ * @param fileSize - Size of the downloaded file in bytes
+ * @throws {NodeValidationError} If file extension or size violates constraints
+ */
 export function validateFileInput(
   def: NodeDefinition,
   fieldName: string,
