@@ -43,7 +43,7 @@ from canvastekk_workflow_sdk import (
     BaseNode,
     NodeDefinition,
     ExecutionContext,
-    NodeStyles,
+    WorkflowNodeStyles,
     RetryConfig,
     NodeAuth,
     NodeExecutionRequest,
@@ -124,7 +124,7 @@ app = node.create_app()
 ### NodeDefinition (Required)
 
 ```python
-from canvastekk_workflow_sdk import NodeDefinition, RetryConfig, NodeStyles
+from canvastekk_workflow_sdk import NodeDefinition, RetryConfig, WorkflowNodeStyles
 
 definition = NodeDefinition(
     # === REQUIRED ===
@@ -141,8 +141,7 @@ definition = NodeDefinition(
     timeout_seconds=30,                # Max execution time in seconds (min: 1)
     token_cost=0.0,                    # Cost per execution (float >= 0)
     default_retry=RetryConfig(),       # See RetryConfig below
-    styles=None,                       # See NodeStyles below
-    is_control_flow=False,             # True for IF, Stop-Error (runs in orchestrator)
+    styles=None,                       # See WorkflowNodeStyles (formerly NodeStyles) below
 )
 ```
 
@@ -157,10 +156,10 @@ RetryConfig(
 )
 ```
 
-#### NodeStyles and ColorPreset
+#### WorkflowNodeStyles (formerly NodeStyles) and ColorPreset
 
 ```python
-NodeStyles(
+WorkflowNodeStyles(
     icon="Brain",       # Any Lucide icon name in PascalCase (1500+ icons). See https://lucide.dev/icons
     color="emerald",    # ColorPreset value (see below)
 )

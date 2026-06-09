@@ -1,45 +1,25 @@
-import type { EdgeType, ResolutionStrategy, WorkflowEdge, WorkflowNode, WorkflowSpec } from "./models.js";
+import type { EdgeType, WorkflowEdgeDefinition, WorkflowDefinitionNode, WorkflowDefinitionSpec } from "./models.js";
 import { validate } from "./validation.js";
 
-/**
- * Fluent API for building workflow specifications.
- */
 export class WorkflowBuilder {
-  private _name: string | null;
-  private _nodes: WorkflowNode[] = [];
-  private _edges: WorkflowEdge[] = [];
+  private _nodes: WorkflowDefinitionNode[] = [];
+  private _edges: WorkflowEdgeDefinition[] = [];
   private _nodeIds: Set<string> = new Set();
   private _hasStart = false;
 
-  /**
-   * Creates a new workflow builder.
-   * @param name - Workflow name
-   */
-  constructor(name?: string | null) {
-    this._name = name ?? null;
-  }
+  constructor() {}
 
-  /**
- * Validates that a node ID is not already used in the workflow.
- * @param nodeId - Node ID to check
- * @throws {Error} If the node ID is a duplicate
- */
-private checkDuplicate(nodeId: string): void {
+  private checkDuplicate(nodeId: string): void {
     if (this._nodeIds.has(nodeId)) {
       throw new Error(`Duplicate node ID: '${nodeId}'`);
     }
   }
 
-  /**
-   * Adds a START node to the workflow.
-   * @param nodeId - Node ID
-   * @param opts - Start node options
-   * @returns This builder for chaining
-   */
   addStart(
     nodeId = "start",
     opts?: {
       outputs?: string[] | Record<string, unknown>;
+      workflowNodeId?: string;
       configSchema?: Record<string, unknown>;
     },
   ): this {
@@ -61,38 +41,37 @@ private checkDuplicate(nodeId: string): void {
       id: nodeId,
       slug: "__start__",
       name: "START",
-      inputs: configSchema ? { config_schema: configSchema } : {},
+      inputs: {},
+      workflow_node_id: opts?.workflowNodeId ?? null,
+      config_schema: configSchema ?? null,
     });
     this._nodeIds.add(nodeId);
     this._hasStart = true;
     return this;
   }
 
-  /**
-   * Adds an END node to the workflow.
-   * @param nodeId - Node ID
-   * @returns This builder for chaining
-   */
-  addEnd(nodeId = "end"): this {
+  addEnd(nodeId = "end", opts?: { workflowNodeId?: string }): this {
     this.checkDuplicate(nodeId);
-    this._nodes.push({ id: nodeId, slug: "__end__", name: "END", inputs: {} });
+    this._nodes.push({
+      id: nodeId,
+      slug: "__end__",
+      name: "END",
+      inputs: {},
+      workflow_node_id: opts?.workflowNodeId ?? null,
+    });
     this._nodeIds.add(nodeId);
     return this;
   }
 
-  /**
-   * Adds a node to the workflow.
-   * @param nodeId - Node ID
-   * @param opts - Node options
-   * @returns This builder for chaining
-   */
   addNode(
     nodeId: string,
     opts: {
-      slug: string;
+      slug?: string;
       name?: string;
       inputs?: Record<string, unknown>;
       version?: string;
+      workflowNodeId?: string;
+      configSchema?: Record<string, unknown>;
     },
   ): this {
     if (opts.slug === "__start__" || opts.slug === "__end__") {
@@ -103,22 +82,17 @@ private checkDuplicate(nodeId: string): void {
     this.checkDuplicate(nodeId);
     this._nodes.push({
       id: nodeId,
-      slug: opts.slug,
+      slug: opts.slug ?? null,
       name: opts.name ?? null,
       inputs: opts.inputs ?? {},
       version: opts.version ?? null,
+      workflow_node_id: opts?.workflowNodeId ?? null,
+      config_schema: opts?.configSchema ?? null,
     });
     this._nodeIds.add(nodeId);
     return this;
   }
 
-  /**
-   * Connects two nodes with an edge.
-   * @param fromNode - Source node ID
-   * @param toNode - Target node ID
-   * @param opts - Edge options
-   * @returns This builder for chaining
-   */
   connect(
     fromNode: string,
     toNode: string,
@@ -126,7 +100,6 @@ private checkDuplicate(nodeId: string): void {
       fromOutput?: string;
       toInput?: string;
       edgeType?: EdgeType;
-      resolutionStrategy?: ResolutionStrategy;
       condition?: string;
     },
   ): this {
@@ -143,20 +116,13 @@ private checkDuplicate(nodeId: string): void {
       fromOutput: opts?.fromOutput ?? "",
       toInput: opts?.toInput ?? "",
       edgeType: opts?.edgeType ?? "default",
-      resolutionStrategy: opts?.resolutionStrategy ?? "auto",
       condition: opts?.condition ?? null,
     });
     return this;
   }
 
-  /**
-   * Builds the workflow specification.
-   * @param opts - Build options
-   * @returns Workflow specification
-   */
-  build(opts?: { validate?: boolean }): WorkflowSpec {
-    const spec: WorkflowSpec = {
-      name: this._name,
+  build(opts?: { validate?: boolean }): WorkflowDefinitionSpec {
+    const spec: WorkflowDefinitionSpec = {
       nodes: [...this._nodes],
       edges: [...this._edges],
       metadata: {},

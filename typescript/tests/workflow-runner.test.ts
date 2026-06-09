@@ -11,7 +11,7 @@ describe("WorkflowRunner", () => {
       execute: async (inputs, ctx) => ({ result: inputs.message }),
     });
 
-    const spec = await new WorkflowBuilder("test")
+    const spec = await new WorkflowBuilder()
       .addStart("start")
       .addNode("process", { slug: "echo-v1.0.0" })
       .addEnd("end")

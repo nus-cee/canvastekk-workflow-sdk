@@ -46,7 +46,7 @@ Full example of an inference node that downloads a point cloud, runs segmentatio
 from pathlib import Path
 
 import httpx
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, NodeStyles
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, WorkflowNodeStyles
 from canvastekk_workflow_sdk.contracts import (
     BoundingBox3D,
     Instance,
@@ -97,7 +97,7 @@ definition = NodeDefinition(
     },
     category="inference",
     timeout_seconds=120,
-    styles=NodeStyles(icon="Brain", color="purple"),
+    styles=WorkflowNodeStyles(icon="Brain", color="purple"),
 )
 
 
@@ -180,7 +180,7 @@ Consumes an InstanceSet and computes measurements (heights, widths, distances).
 from pathlib import Path
 
 import httpx
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, NodeStyles
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, WorkflowNodeStyles
 from canvastekk_workflow_sdk.contracts import (
     InstanceSet,
     Measurement,
@@ -224,7 +224,7 @@ definition = NodeDefinition(
     },
     category="transform",
     timeout_seconds=60,
-    styles=NodeStyles(icon="Ruler", color="cyan"),
+    styles=WorkflowNodeStyles(icon="Ruler", color="cyan"),
 )
 
 
@@ -307,7 +307,7 @@ Detects planes in a point cloud and produces a PlaneSet.
 from pathlib import Path
 
 import httpx
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, NodeStyles
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, WorkflowNodeStyles
 from canvastekk_workflow_sdk.contracts import Plane, PlaneSet, Point3D
 
 definition = NodeDefinition(
@@ -345,7 +345,7 @@ definition = NodeDefinition(
     },
     category="inference",
     timeout_seconds=90,
-    styles=NodeStyles(icon="Layers", color="indigo"),
+    styles=WorkflowNodeStyles(icon="Layers", color="indigo"),
 )
 
 
@@ -403,7 +403,7 @@ Loads a model at startup, checks GPU health, and runs inference in execute().
 from pathlib import Path
 
 import httpx
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, NodeStyles
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, WorkflowNodeStyles
 from canvastekk_workflow_sdk.exceptions import NodeConfigurationError, NodeExecutionError
 
 definition = NodeDefinition(
@@ -438,7 +438,7 @@ definition = NodeDefinition(
     category="inference",
     timeout_seconds=120,
     token_cost=1.0,
-    styles=NodeStyles(icon="Cpu", color="emerald"),
+    styles=WorkflowNodeStyles(icon="Cpu", color="emerald"),
 )
 
 
@@ -683,7 +683,7 @@ Converts between file formats (e.g., PLY to XYZ):
 from pathlib import Path
 
 import httpx
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, NodeStyles
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, WorkflowNodeStyles
 
 definition = NodeDefinition(
     id="convert-v1.0.0",
@@ -726,7 +726,7 @@ definition = NodeDefinition(
     },
     category="transform",
     timeout_seconds=60,
-    styles=NodeStyles(icon="FileOutput", color="amber"),
+    styles=WorkflowNodeStyles(icon="FileOutput", color="amber"),
 )
 
 

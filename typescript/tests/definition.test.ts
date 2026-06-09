@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
-  NodeDefinitionSchema,
+  WorkflowNodeManifestSchema,
+  NodeRoleSchema,
   getNodeId,
   getFileInputFields,
   getFileOutputFields,
@@ -27,46 +28,46 @@ const validDefinition = {
   },
 };
 
-describe("NodeDefinitionSchema", () => {
+describe("WorkflowNodeManifestSchema", () => {
   it("parses a valid definition", () => {
-    const def = NodeDefinitionSchema.parse(validDefinition);
+    const def = WorkflowNodeManifestSchema.parse(validDefinition);
     expect(def.name).toBe("my-node");
     expect(def.version).toBe("1.0.0");
     expect(def.title).toBe("My Node");
     expect(def.token_cost).toBe(0.0);
     expect(def.category).toBe("utility");
     expect(def.timeout_seconds).toBe(30);
-    expect(def.is_control_flow).toBe(false);
+    expect(def.role).toBe("operation");
     expect(def.styles).toBeNull();
   });
 
   it("rejects invalid slug name", () => {
     expect(() =>
-      NodeDefinitionSchema.parse({ ...validDefinition, name: "MyNode" }),
+      WorkflowNodeManifestSchema.parse({ ...validDefinition, name: "MyNode" }),
     ).toThrow(/lowercase slug/);
   });
 
   it("rejects name with leading hyphen", () => {
     expect(() =>
-      NodeDefinitionSchema.parse({ ...validDefinition, name: "-node" }),
+      WorkflowNodeManifestSchema.parse({ ...validDefinition, name: "-node" }),
     ).toThrow(/lowercase slug/);
   });
 
   it("rejects name with trailing hyphen", () => {
     expect(() =>
-      NodeDefinitionSchema.parse({ ...validDefinition, name: "node-" }),
+      WorkflowNodeManifestSchema.parse({ ...validDefinition, name: "node-" }),
     ).toThrow(/lowercase slug/);
   });
 
   it("rejects invalid semver version", () => {
     expect(() =>
-      NodeDefinitionSchema.parse({ ...validDefinition, version: "1.0" }),
+      WorkflowNodeManifestSchema.parse({ ...validDefinition, version: "1.0" }),
     ).toThrow(/semantic version/);
   });
 
   it("rejects format: binary (DA-894)", () => {
     expect(() =>
-      NodeDefinitionSchema.parse({
+      WorkflowNodeManifestSchema.parse({
         ...validDefinition,
         input_schema: {
           type: "object",
@@ -80,7 +81,7 @@ describe("NodeDefinitionSchema", () => {
 
   it("rejects file field with non-string type", () => {
     expect(() =>
-      NodeDefinitionSchema.parse({
+      WorkflowNodeManifestSchema.parse({
         ...validDefinition,
         input_schema: {
           type: "object",
@@ -93,7 +94,7 @@ describe("NodeDefinitionSchema", () => {
   });
 
   it("accepts file field with type string", () => {
-    const def = NodeDefinitionSchema.parse({
+    const def = WorkflowNodeManifestSchema.parse({
       ...validDefinition,
       input_schema: {
         type: "object",
@@ -112,7 +113,7 @@ describe("NodeDefinitionSchema", () => {
 
   it("strips manual id and warns", () => {
     const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const def = NodeDefinitionSchema.parse({
+    const def = WorkflowNodeManifestSchema.parse({
       ...validDefinition,
       id: "manual-id",
     });
@@ -124,7 +125,7 @@ describe("NodeDefinitionSchema", () => {
   });
 
   it("applies default retry config", () => {
-    const def = NodeDefinitionSchema.parse(validDefinition);
+    const def = WorkflowNodeManifestSchema.parse(validDefinition);
     expect(def.default_retry.max_attempts).toBe(1);
     expect(def.default_retry.initial_delay_ms).toBe(1000);
     expect(def.default_retry.backoff_multiplier).toBe(2.0);
@@ -132,7 +133,7 @@ describe("NodeDefinitionSchema", () => {
   });
 
   it("accepts styles with color and icon", () => {
-    const def = NodeDefinitionSchema.parse({
+    const def = WorkflowNodeManifestSchema.parse({
       ...validDefinition,
       styles: { icon: "Brain", color: "emerald" },
     });
@@ -142,7 +143,7 @@ describe("NodeDefinitionSchema", () => {
 
   it("rejects invalid color preset", () => {
     expect(() =>
-      NodeDefinitionSchema.parse({
+      WorkflowNodeManifestSchema.parse({
         ...validDefinition,
         styles: { icon: "Box", color: "not-a-color" },
       }),
@@ -160,7 +161,7 @@ describe("getNodeId", () => {
 
 describe("getFileInputFields", () => {
   it("returns file input field names", () => {
-    const def = NodeDefinitionSchema.parse({
+    const def = WorkflowNodeManifestSchema.parse({
       ...validDefinition,
       input_schema: {
         type: "object",
@@ -175,14 +176,14 @@ describe("getFileInputFields", () => {
   });
 
   it("returns empty array when no file inputs", () => {
-    const def = NodeDefinitionSchema.parse(validDefinition);
+    const def = WorkflowNodeManifestSchema.parse(validDefinition);
     expect(getFileInputFields(def)).toEqual([]);
   });
 });
 
 describe("getFileOutputFields", () => {
   it("returns file output field names", () => {
-    const def = NodeDefinitionSchema.parse({
+    const def = WorkflowNodeManifestSchema.parse({
       ...validDefinition,
       output_schema: {
         type: "object",
@@ -198,7 +199,7 @@ describe("getFileOutputFields", () => {
 
 describe("validateFileInput", () => {
   it("throws on disallowed extension", () => {
-    const def = NodeDefinitionSchema.parse({
+    const def = WorkflowNodeManifestSchema.parse({
       ...validDefinition,
       input_schema: {
         type: "object",
@@ -217,7 +218,7 @@ describe("validateFileInput", () => {
   });
 
   it("passes on allowed extension", () => {
-    const def = NodeDefinitionSchema.parse({
+    const def = WorkflowNodeManifestSchema.parse({
       ...validDefinition,
       input_schema: {
         type: "object",
@@ -234,7 +235,7 @@ describe("validateFileInput", () => {
   });
 
   it("passes when no x-accept constraint", () => {
-    const def = NodeDefinitionSchema.parse({
+    const def = WorkflowNodeManifestSchema.parse({
       ...validDefinition,
       input_schema: {
         type: "object",
@@ -244,5 +245,73 @@ describe("validateFileInput", () => {
       },
     });
     expect(() => validateFileInput(def, "model", "/tmp/file.anything")).not.toThrow();
+  });
+});
+
+describe("NodeRoleSchema", () => {
+  it("accepts all valid roles", () => {
+    for (const role of ["start", "end", "error_gate", "operation"]) {
+      expect(NodeRoleSchema.parse(role)).toBe(role);
+    }
+  });
+
+  it("rejects invalid roles", () => {
+    expect(() => NodeRoleSchema.parse("invalid")).toThrow();
+  });
+
+  it("defaults to operation", () => {
+    expect(NodeRoleSchema.parse(undefined)).toBe("operation");
+  });
+
+  it("WorkflowNodeManifestSchema defaults role to operation", () => {
+    const def = WorkflowNodeManifestSchema.parse(validDefinition);
+    expect(def.role).toBe("operation");
+  });
+
+  it("WorkflowNodeManifestSchema accepts explicit roles", () => {
+    const def = WorkflowNodeManifestSchema.parse({
+      ...validDefinition,
+      role: "start",
+    });
+    expect(def.role).toBe("start");
+  });
+});
+
+describe("backward-compat type aliases", () => {
+  it("WorkflowNodeDefinition type compiles as WorkflowNodeManifest", () => {
+    type Assert<T extends WorkflowNodeManifest> = T;
+    const def: WorkflowNodeManifest = WorkflowNodeManifestSchema.parse(validDefinition);
+    const _check: Assert<typeof def> = def;
+    expect(_check.name).toBe("my-node");
+  });
+
+  it("re-exports WorkflowNodeDefinition from index", async () => {
+    const mod = await import("../src/index.js");
+    expect(mod.WorkflowNodeManifestSchema).toBeDefined();
+  });
+
+  it("WorkflowNodeStylesSchema is WorkflowNodeStylesSchema alias", async () => {
+    const mod = await import("../src/index.js");
+    expect(mod.WorkflowNodeStylesSchema).toBeDefined();
+    expect(mod.NodeStylesSchema).toBeDefined();
+  });
+
+  it("WorkflowNodeRoleSchema is WorkflowNodeRoleSchema alias", async () => {
+    const mod = await import("../src/index.js");
+    expect(mod.WorkflowNodeRoleSchema).toBeDefined();
+    expect(mod.NodeRoleSchema).toBeDefined();
+  });
+
+  it("WorkflowNodeStylesSchema parses styles", async () => {
+    const { WorkflowNodeStylesSchema } = await import("../src/definition.js");
+    const styles = WorkflowNodeStylesSchema.parse({ icon: "Brain", color: "emerald" });
+    expect(styles.icon).toBe("Brain");
+    expect(styles.color).toBe("emerald");
+  });
+
+  it("WorkflowNodeRoleSchema parses roles", async () => {
+    const { WorkflowNodeRoleSchema } = await import("../src/definition.js");
+    expect(WorkflowNodeRoleSchema.parse("start")).toBe("start");
+    expect(WorkflowNodeRoleSchema.parse(undefined)).toBe("operation");
   });
 });

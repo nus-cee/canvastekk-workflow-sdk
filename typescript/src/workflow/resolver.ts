@@ -1,15 +1,8 @@
-import type { WorkflowSpec, ResolutionStrategy } from "./models.js";
+import type { WorkflowDefinitionSpec } from "./models.js";
 
-/**
- * Resolves all inputs for a node from upstream outputs.
- * @param nodeId - Target node ID
- * @param spec - Workflow specification
- * @param nodeOutputs - Outputs from executed nodes
- * @returns Resolved input dictionary
- */
 export function resolveInputs(
   nodeId: string,
-  spec: WorkflowSpec,
+  spec: WorkflowDefinitionSpec,
   nodeOutputs: Record<string, Record<string, unknown>>,
 ): Record<string, unknown> {
   const node = spec.nodes.find((n) => n.id === nodeId);
@@ -20,7 +13,7 @@ export function resolveInputs(
   const incoming = spec.edges.filter((e) => e.toNode === nodeId);
   for (const edge of incoming) {
     const sourceOutputs = nodeOutputs[edge.fromNode] ?? {};
-    const value = resolveOutput(sourceOutputs, edge.fromOutput, edge.resolutionStrategy);
+    const value = resolveOutput(sourceOutputs, edge.fromOutput);
     if (edge.toInput) {
       resolved[edge.toInput] = value;
     } else if (typeof value === "object" && value !== null && !Array.isArray(value)) {
@@ -31,51 +24,19 @@ export function resolveInputs(
   return resolved;
 }
 
-/**
- * Resolves a single output value from upstream outputs using the specified strategy.
- *
- * - `"flat"` — Direct key lookup
- * - `"dot_path"` — Nested object traversal (e.g. "a.b.c")
- * - `"auto"` — Tries flat first, falls back to dot_path
- *
- * @param sourceOutputs - Outputs from the upstream node
- * @param fromOutput - Output field name or dot-path
- * @param strategy - Resolution strategy
- * @returns Resolved value
- */
 function resolveOutput(
   sourceOutputs: Record<string, unknown>,
   fromOutput: string,
-  strategy: ResolutionStrategy,
 ): unknown {
   if (!fromOutput) return sourceOutputs;
 
-  if (strategy === "flat") {
-    return sourceOutputs[fromOutput];
-  }
-
-  if (strategy === "dot_path") {
-    return walkDotPath(sourceOutputs, fromOutput);
-  }
-
-  // AUTO: flat first, dot-path fallback
-  if (fromOutput in sourceOutputs) {
-    return sourceOutputs[fromOutput];
-  }
   if (fromOutput.includes(".")) {
     return walkDotPath(sourceOutputs, fromOutput);
   }
-  throw new Error(`Cannot resolve from_output '${fromOutput}' with AUTO strategy`);
+
+  return sourceOutputs[fromOutput];
 }
 
-/**
- * Traverses a nested object using a dot-separated path (e.g., "a.b.c").
- *
- * @param data - Root object to traverse
- * @param path - Dot-separated path string
- * @returns Value at the path
- * @throws {Error} If path is invalid or a segment is not found
- */
 function walkDotPath(data: Record<string, unknown>, path: string): unknown {
   let current: unknown = data;
   for (const segment of path.split(".")) {

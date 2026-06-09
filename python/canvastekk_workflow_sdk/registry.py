@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from canvastekk_workflow_sdk.base import BaseNode
-    from canvastekk_workflow_sdk.definition import NodeDefinition
+    from canvastekk_workflow_sdk.definition import WorkflowNodeManifest
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ class RegisterNodeResult(BaseModel):
 
 
 def build_registry_payload(
-    definition: NodeDefinition,
+    definition: WorkflowNodeManifest,
     *,
     invoke_type: InvokeType = "http",
     invoke_url: str | None = None,
@@ -74,7 +74,7 @@ def build_registry_payload(
     constraints: dict[str, Any] | None = None,
     node_status: str = "active",
 ) -> dict[str, Any]:
-    """Build a registry-compatible payload dict from a NodeDefinition.
+    """Build a registry-compatible payload dict from a WorkflowNodeManifest.
 
     Centralizes field mapping (title->label, default_retry->retry, omit id)
     so that ``register_node()`` and ``export_definition()`` share the same logic.
@@ -91,7 +91,7 @@ def build_registry_payload(
         Node authors must bump the version for any schema changes.
 
     Args:
-        definition: The SDK NodeDefinition to convert.
+        definition: The SDK WorkflowNodeManifest to convert.
         invoke_type: Invocation type (``"http"``, ``"lambda"``,
             ``"sagemaker"``, or ``"in-process"``).
         invoke_url: URL/ARN for invoking the node.
@@ -118,7 +118,7 @@ def build_registry_payload(
         "category": definition.category,
         "token_cost": definition.token_cost,
         "timeout_seconds": definition.timeout_seconds,
-        "is_control_flow": definition.is_control_flow,
+        "node_role": definition.role.value,
         "retry": definition.default_retry.model_dump(mode="json"),
         "tags": tags or [],
         "styles": resolved_styles,
@@ -176,7 +176,7 @@ def register_node(
     represents a node instance within a specific workflow definition.
 
     Versioning:
-        The engine uses the semantic version string from ``NodeDefinition.version``
+        The engine uses the semantic version string from ``WorkflowNodeManifest.version``
         directly. Versions are immutable: re-registering with the same version
         and changed data is rejected (HTTP 409). Node authors must bump the
         version for any schema or metadata changes.

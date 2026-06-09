@@ -14,16 +14,24 @@
 export { VERSION } from "./version.js";
 export {
   ColorPresetSchema,
+  WorkflowNodeStylesSchema,
   NodeStylesSchema,
   RetryConfigSchema,
-  NodeDefinitionSchema,
+  WorkflowNodeManifestSchema,
+  WorkflowNodeRoleSchema,
+  NodeRoleSchema,
   getNodeId,
   getFileInputFields,
   getFileOutputFields,
   validateFileInput,
   type ColorPreset,
+  type WorkflowNodeStyles,
   type NodeStyles,
   type RetryConfig,
+  type WorkflowNodeManifest,
+  type WorkflowNodeDefinition,
+  type WorkflowNodeRole,
+  type NodeRole,
   type NodeDefinition,
 } from "./definition.js";
 export {
@@ -126,9 +134,11 @@ export {
 } from "./workflow/index.js";
 export type {
   EdgeType,
-  ResolutionStrategy,
+  WorkflowEdgeDefinition,
   WorkflowEdge,
+  WorkflowDefinitionNode,
   WorkflowNode,
+  WorkflowDefinitionSpec,
   WorkflowSpec,
   NodeExecutor,
   ErrorPolicy,

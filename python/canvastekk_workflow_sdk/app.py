@@ -87,7 +87,7 @@ def create_node_app(
     This function creates an HTTP server that implements the node contract:
     - POST /execute - Execute the node with given inputs
     - GET /health - Return node health status
-    - GET /manifest - Return node's self-description (NodeDefinition)
+    - GET /manifest - Return node's self-description (WorkflowNodeManifest)
     - GET /definition - Deprecated redirect to /manifest
     - POST /hook - Webhook/callback handler
 
@@ -242,7 +242,7 @@ def create_node_app(
     @router.get(
         "/manifest",
         summary="Node manifest",
-        description="Returns the full NodeDefinition including identity, schemas, cost, retry policy, and metadata. "
+        description="Returns the full WorkflowNodeManifest including identity, schemas, cost, retry policy, and metadata. "
         "Used by the registry for auto-discovery.",
         tags=["Discovery"],
     )
@@ -250,12 +250,12 @@ def create_node_app(
         """
         Get node's self-description (manifest).
 
-        Returns the NodeDefinition which includes:
+        Returns the WorkflowNodeManifest which includes:
         - Identity (id, name, version, title, description)
         - Schema (input_schema, output_schema)
         - Cost (token_cost)
         - Retry defaults
-        - Metadata (category, timeout, is_control_flow)
+        - Metadata (category, timeout, role)
         - SDK version (sdk_version — auto-injected)
         - Node environment (mode — "dev" or "production", from CANVASTEKK_NODE_ENV)
 

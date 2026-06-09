@@ -2,12 +2,18 @@
 
 from typing import Any
 
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, NodeExecutionRequest, __version__
+from canvastekk_workflow_sdk import (
+    BaseNode,
+    ExecutionContext,
+    NodeExecutionRequest,
+    WorkflowNodeManifest,
+    __version__,
+)
 from canvastekk_workflow_sdk.middleware import LoggingMiddleware, TimingMiddleware
 
 
 class EchoNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="echo",
         version="1.0.0",
         title="Echo",
@@ -21,7 +27,7 @@ class EchoNode(BaseNode):
 
 
 class FailingNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="failing",
         version="1.0.0",
         title="Failing",

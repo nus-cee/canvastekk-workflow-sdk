@@ -1,6 +1,6 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { NodeDefinition } from "./definition.js";
+import type { WorkflowNodeManifest } from "./definition.js";
 import { RegistrationError } from "./exceptions.js";
 
 /** Node invocation type. */
@@ -45,7 +45,7 @@ export function registerNodeResultHas(result: RegisterNodeResult, key: string): 
  * @returns Registration payload dictionary
  */
 export function buildRegistryPayload(
-  definition: NodeDefinition,
+  definition: WorkflowNodeManifest,
   opts: {
     invokeType?: InvokeType;
     invokeUrl?: string;
@@ -77,7 +77,7 @@ export function buildRegistryPayload(
     category: definition.category,
     token_cost: definition.token_cost,
     timeout_seconds: definition.timeout_seconds,
-    is_control_flow: definition.is_control_flow,
+    node_role: definition.role,
     retry: definition.default_retry,
     tags: tags ?? [],
     styles: resolvedStyles,
@@ -121,7 +121,7 @@ export function extractNodeData(payload: Record<string, unknown>): Record<string
  * @throws RegistrationError if registration fails
  */
 export async function registerNode(
-  node: { definition: NodeDefinition },
+  node: { definition: WorkflowNodeManifest },
   registryUrl: string,
   opts: {
     invokeUrl?: string;
@@ -211,7 +211,7 @@ export async function registerNode(
  * @returns Output file path
  */
 export function exportDefinition(
-  definition: NodeDefinition,
+  definition: WorkflowNodeManifest,
   outputPath: string,
   opts: {
     invokeType?: InvokeType;

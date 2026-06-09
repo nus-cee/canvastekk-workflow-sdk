@@ -2,12 +2,12 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import { createNodeApp } from "../src/app.js";
 import { BaseNode } from "../src/base-node.js";
-import type { NodeDefinition } from "../src/definition.js";
+import type { WorkflowNodeManifest } from "../src/definition.js";
 import type { ExecutionContext } from "../src/context.js";
 import { NodeAuth } from "../src/auth.js";
 
 class TestNode extends BaseNode {
-  definition: NodeDefinition = {
+  definition: WorkflowNodeManifest = {
     name: "test-node",
     version: "1.0.0",
     title: "Test Node",
@@ -28,7 +28,7 @@ class TestNode extends BaseNode {
 }
 
 class HealthCheckNode extends BaseNode {
-  definition: NodeDefinition = {
+  definition: WorkflowNodeManifest = {
     name: "health-node",
     version: "2.0.0",
     title: "Health Node",

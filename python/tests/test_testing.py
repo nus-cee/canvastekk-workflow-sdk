@@ -7,14 +7,14 @@ from canvastekk_workflow_sdk import (
     BaseNode,
     ExecutionContext,
     LocalFileServer,
-    NodeDefinition,
     NodeExecutionRequest,
+    WorkflowNodeManifest,
     serve_files,
 )
 
 
 class _FileReaderNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="file-reader-test",
         version="1.0.0",
         title="File Reader Test",

@@ -1,17 +1,15 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { WorkflowSpec } from "./models.js";
+import type { WorkflowDefinitionSpec } from "./models.js";
 import type { NodeExecutor } from "./executor.js";
 import { computeLevels } from "./level.js";
 import { resolveInputs } from "./resolver.js";
 import { CONTROL_FLOW_HANDLERS } from "./control-flow.js";
 import { ExecutionContext } from "../context.js";
 
-/** Error handling policy for workflow execution. */
 export type ErrorPolicy = "fail_fast" | "continue";
 
-/** Result of a single node execution. */
 export interface NodeResult {
   node_id: string;
   slug: string;
@@ -22,7 +20,6 @@ export interface NodeResult {
   skipped_reason?: string | null;
 }
 
-/** Result of a complete workflow run. */
 export interface WorkflowRunResult {
   status: string;
   final_outputs: Record<string, unknown>;
@@ -31,20 +28,12 @@ export interface WorkflowRunResult {
   output_dir: string | null;
 }
 
-/**
- * Executes workflows locally with configurable error policy.
- */
 export class WorkflowRunner {
   private _executor: NodeExecutor;
   private _errorPolicy: ErrorPolicy;
   private _outputDir: string | null;
   private _cleanup: boolean;
 
-  /**
-   * Creates a new workflow runner.
-   * @param executor - Node execution strategy
-   * @param opts - Runner options
-   */
   constructor(
     executor: NodeExecutor,
     opts?: {
@@ -59,14 +48,8 @@ export class WorkflowRunner {
     this._cleanup = opts?.cleanup ?? true;
   }
 
-  /**
-   * Runs a workflow specification.
-   * @param spec - Workflow specification
-   * @param inputs - Initial workflow inputs
-   * @returns Workflow run result
-   */
   async run(
-    spec: WorkflowSpec,
+    spec: WorkflowDefinitionSpec,
     inputs?: Record<string, unknown>,
   ): Promise<WorkflowRunResult> {
     const startTime = performance.now();
@@ -91,14 +74,12 @@ export class WorkflowRunner {
     let result_output_dir: string | null = null;
 
     try {
-      // Set initial inputs as start node outputs before processing levels
       const startNodes = spec.nodes.filter((n) => n.slug === "__start__");
       if (startNodes.length > 0) {
         const startNode = startNodes[0];
         const startInputs = inputs ?? {};
-        // Use the control flow handler to set initial inputs as start node outputs
         const context = new ExecutionContext({ runId: "local", nodeId: startNode.id, outputDir: runOutputDir });
-        const handler = CONTROL_FLOW_HANDLERS[startNode.slug];
+        const handler = CONTROL_FLOW_HANDLERS[startNode.slug!];
         const startOutputs = handler(startInputs, context);
         nodeOutputs[startNode.id] = startOutputs;
       }
@@ -111,7 +92,7 @@ export class WorkflowRunner {
 
         for (const nid of level) {
           const slug = nodeMap.get(nid)!.slug;
-          if (slug in CONTROL_FLOW_HANDLERS) {
+          if (slug && slug in CONTROL_FLOW_HANDLERS) {
             controlIds.push(nid);
           } else {
             userIds.push(nid);
@@ -120,7 +101,8 @@ export class WorkflowRunner {
 
         for (const nid of controlIds) {
           const node = nodeMap.get(nid)!;
-          const handler = CONTROL_FLOW_HANDLERS[node.slug];
+          const slug = node.slug!;
+          const handler = CONTROL_FLOW_HANDLERS[slug];
           const resolved = resolveInputs(nid, spec, nodeOutputs);
           const context = new ExecutionContext({ runId: "local", nodeId: nid, outputDir: runOutputDir });
           const t0 = performance.now();
@@ -129,7 +111,7 @@ export class WorkflowRunner {
             nodeOutputs[nid] = outputs;
             node_results.push({
               node_id: nid,
-              slug: node.slug,
+              slug,
               status: "completed",
               outputs,
               duration_ms: Math.round(performance.now() - t0),
@@ -138,7 +120,7 @@ export class WorkflowRunner {
             failedNodes.add(nid);
             node_results.push({
               node_id: nid,
-              slug: node.slug,
+              slug,
               status: "failed",
               duration_ms: Math.round(performance.now() - t0),
               error: String(exc),
@@ -157,7 +139,7 @@ export class WorkflowRunner {
             const node = nodeMap.get(nid)!;
             node_results.push({
               node_id: nid,
-              slug: node.slug,
+              slug: node.slug ?? "",
               status: "skipped",
               skipped_reason: "upstream_failed",
               duration_ms: 0,
@@ -167,12 +149,13 @@ export class WorkflowRunner {
           }
 
           const node = nodeMap.get(nid)!;
-          if (!this._executor.has(node.slug)) {
+          const slug = node.slug;
+          if (!slug || !this._executor.has(slug)) {
             node_results.push({
               node_id: nid,
-              slug: node.slug,
+              slug: slug ?? "",
               status: "failed",
-              error: `No executor registered for slug '${node.slug}'`,
+              error: slug ? `No executor registered for slug '${slug}'` : "Node has no slug",
               duration_ms: 0,
             });
             failedNodes.add(nid);
@@ -182,7 +165,7 @@ export class WorkflowRunner {
 
           const resolved = resolveInputs(nid, spec, nodeOutputs);
           const context = new ExecutionContext({ runId: "local", nodeId: nid, outputDir: runOutputDir });
-          tasks.push(this._executor.execute(node.slug, resolved, context));
+          tasks.push(this._executor.execute(slug, resolved, context));
           taskNodeIds.push(nid);
         }
 
@@ -196,7 +179,7 @@ export class WorkflowRunner {
               failedNodes.add(nid);
               node_results.push({
                 node_id: nid,
-                slug: node.slug,
+                slug: node.slug ?? "",
                 status: "failed",
                 error: String(r.reason),
                 duration_ms: 0,
@@ -205,7 +188,7 @@ export class WorkflowRunner {
               nodeOutputs[nid] = r.value;
               node_results.push({
                 node_id: nid,
-                slug: node.slug,
+                slug: node.slug ?? "",
                 status: "completed",
                 outputs: r.value,
                 duration_ms: 0,
@@ -233,7 +216,6 @@ export class WorkflowRunner {
         try {
           rmSync(runOutputDir, { recursive: true, force: true });
         } catch {
-          // ignore cleanup errors
         }
         result_output_dir = null;
       } else {

@@ -4,8 +4,8 @@ import { join, basename } from "node:path";
 import AjvModule from "ajv";
 const Ajv = AjvModule.default ?? AjvModule;
 import type { ValidateFunction } from "ajv";
-import type { NodeDefinition } from "./definition.js";
-import { NodeDefinitionSchema, getFileInputFields, validateFileInput } from "./definition.js";
+import type { WorkflowNodeManifest } from "./definition.js";
+import { WorkflowNodeManifestSchema, getFileInputFields, validateFileInput } from "./definition.js";
 import { ExecutionContext } from "./context.js";
 import type { NodeMiddleware } from "./middleware.js";
 import { LoggingMiddleware } from "./middleware.js";
@@ -107,7 +107,7 @@ function formatAjvErrors(errors: import("ajv").ErrorObject[]): Record<string, un
  * Abstract base class for all CanvasTEKK workflow nodes.
  *
  * Subclasses must:
- * 1. Define a `definition` class attribute with a valid NodeDefinition
+ * 1. Define a `definition` class attribute with a valid WorkflowNodeManifest
  * 2. Implement the `execute()` method
  *
  * The SDK validates the definition at construction time and auto-downloads
@@ -133,17 +133,17 @@ function formatAjvErrors(errors: import("ajv").ErrorObject[]): Record<string, un
  * ```
  */
 export abstract class BaseNode {
-  abstract definition: NodeDefinition;
+  abstract definition: WorkflowNodeManifest;
 
   private _middleware: NodeMiddleware[] = [new LoggingMiddleware()];
   private _metricsCollector: MetricsCollector = new MetricsCollector();
-  private _validatedDefinition: NodeDefinition | null = null;
+  private _validatedDefinition: WorkflowNodeManifest | null = null;
 
   constructor() {
     // Constructor-time validation replaces Python's __init_subclass__
   }
 
-  get nodeDefinition(): NodeDefinition {
+  get nodeDefinition(): WorkflowNodeManifest {
     return this.getDefinition();
   }
 
@@ -151,9 +151,9 @@ export abstract class BaseNode {
     return this._metricsCollector;
   }
 
-  protected getDefinition(): NodeDefinition {
+  protected getDefinition(): WorkflowNodeManifest {
     if (!this._validatedDefinition) {
-      this._validatedDefinition = NodeDefinitionSchema.parse(this.definition);
+      this._validatedDefinition = WorkflowNodeManifestSchema.parse(this.definition);
     }
     return this._validatedDefinition;
   }

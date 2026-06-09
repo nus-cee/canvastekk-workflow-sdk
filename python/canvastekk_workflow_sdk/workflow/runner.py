@@ -22,7 +22,7 @@ from canvastekk_workflow_sdk.workflow.level import compute_levels
 from canvastekk_workflow_sdk.workflow.resolver import resolve_inputs
 
 if TYPE_CHECKING:
-    from canvastekk_workflow_sdk.workflow.models import WorkflowSpec
+    from canvastekk_workflow_sdk.workflow.models import WorkflowDefinitionSpec
 
 
 class ErrorPolicy(StrEnum):
@@ -115,7 +115,7 @@ class WorkflowRunner:
 
     def run(
         self,
-        spec: WorkflowSpec,
+        spec: WorkflowDefinitionSpec,
         inputs: dict[str, Any] | None = None,
     ) -> WorkflowRunResult:
         """Execute a workflow synchronously.
@@ -131,7 +131,7 @@ class WorkflowRunner:
 
     async def run_async(
         self,
-        spec: WorkflowSpec,
+        spec: WorkflowDefinitionSpec,
         inputs: dict[str, Any] | None = None,
     ) -> WorkflowRunResult:
         """Execute a workflow asynchronously.

@@ -17,14 +17,14 @@ PYTHON_BIN = Path(sys.executable)
 
 
 def test_validate_valid_definition():
-    """Test validating a valid NodeDefinition."""
+    """Test validating a valid WorkflowNodeManifest."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Create a temporary Python file with a valid NodeDefinition
+        # Create a temporary Python file with a valid WorkflowNodeManifest
         test_file = Path(tmpdir) / "test_node.py"
         test_file.write_text("""
-from canvastekk_workflow_sdk import NodeDefinition
+from canvastekk_workflow_sdk import WorkflowNodeManifest
 
-definition = NodeDefinition(
+definition = WorkflowNodeManifest(
     name="test-node",
     version="1.0.0",
     title="Test Node",
@@ -51,12 +51,12 @@ definition = NodeDefinition(
 def test_validate_with_json_flag():
     """Test validating with --json flag returns valid JSON with valid: true."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Create a temporary Python file with a valid NodeDefinition
+        # Create a temporary Python file with a valid WorkflowNodeManifest
         test_file = Path(tmpdir) / "test_node.py"
         test_file.write_text("""
-from canvastekk_workflow_sdk import NodeDefinition
+from canvastekk_workflow_sdk import WorkflowNodeManifest
 
-definition = NodeDefinition(
+definition = WorkflowNodeManifest(
     name="test-node",
     version="1.0.0",
     title="Test Node",
@@ -86,12 +86,12 @@ definition = NodeDefinition(
 def test_validate_invalid_path_format():
     """Test validating with invalid path format (missing colon) fails with exit 1."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Create a temporary Python file with a valid NodeDefinition
+        # Create a temporary Python file with a valid WorkflowNodeManifest
         test_file = Path(tmpdir) / "test_node.py"
         test_file.write_text("""
-from canvastekk_workflow_sdk import NodeDefinition
+from canvastekk_workflow_sdk import WorkflowNodeManifest
 
-definition = NodeDefinition(
+definition = WorkflowNodeManifest(
     name="test-node",
     version="1.0.0",
     title="Test Node",

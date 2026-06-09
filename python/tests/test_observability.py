@@ -4,12 +4,12 @@ import concurrent.futures
 import threading
 from typing import Any
 
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, NodeExecutionRequest
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeExecutionRequest, WorkflowNodeManifest
 from canvastekk_workflow_sdk.observability import ExecutionMetric, MetricsCollector
 
 
 class EchoNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         id="echo-v1.0.0",
         name="echo",
         version="1.0.0",
@@ -24,7 +24,7 @@ class EchoNode(BaseNode):
 
 
 class FailingNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         id="fail-v1.0.0",
         name="fail",
         version="1.0.0",
