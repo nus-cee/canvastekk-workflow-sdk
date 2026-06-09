@@ -464,7 +464,7 @@ export default app;
 
 ### NodeDefinition
 
-Defines what a node is. Maps to the engine's **registry-level node type** (`WorkflowNode` in engine terminology).
+Defines what a node is. Maps to the engine's **registry-level node type** (`WorkflowNodeManifest` in engine terminology).
 
 **Required fields:** `name`, `version`, `title`, `description`, `input_schema`, `output_schema`. Note: `id` is auto-derived from `name` + `version` and must NOT be provided manually.
 
@@ -490,7 +490,6 @@ const definition: NodeDefinition = {
   default_retry: { max_attempts: 3, initial_delay_ms: 1000 },
   category: "inference",
   timeout_seconds: 60,
-  is_control_flow: false,
   styles: { icon: "Brain", color: "emerald" },
 };
 ```
@@ -503,7 +502,6 @@ Optional fields with defaults:
 | `default_retry` | `{ max_attempts: 1 }` | Retry policy |
 | `category` | `"utility"` | Node category (`transform`, `inference`, `utility`, `control-flow`) |
 | `timeout_seconds` | `30` | Max execution time |
-| `is_control_flow` | `false` | Run in orchestrator, not HTTP |
 | `styles` | `undefined` | Icon/color for UI |
 
 ### ExecutionContext
@@ -831,7 +829,7 @@ import {
 } from "canvastekk-workflow-sdk";
 
 // Build a workflow
-const spec = await new WorkflowBuilder("my-pipeline")
+const spec = await new WorkflowBuilder()
   .addStart("start", { outputs: ["point_cloud"] })
   .addNode("segment", { slug: "segmentation-v1.0.0", inputs: { method: "dbscan" } })
   .addNode("measure", { slug: "measurement-v1.0.0" })
@@ -973,9 +971,46 @@ How `fromOutput` is resolved against source node outputs:
 
 | Strategy | Behavior |
 |----------|----------|
-| `AUTO` | Flat key lookup first; dot-path traversal as fallback |
-| `FLAT` | Treat `fromOutput` as a literal key name |
-| `DOT_PATH` | Always walk dot-path segments (e.g. `"data.url"` → `outputs["data"]["url"]`) |
+| `AUTO` | Default strategy — flat key lookup first; dot-path traversal as fallback |
+
+### Naming Convention Table
+
+| Artifact | Name | Parent Concept |
+|----------|------|----------------|
+| Node registration manifest | `WorkflowNodeManifest` | `WorkflowNodeRegistry` (engine) |
+| Workflow DAG | `WorkflowDefinition` | — |
+| Node in DAG | `WorkflowDefinitionNode` | `WorkflowDefinition` |
+| Edge in DAG | `WorkflowEdgeDefinition` | `WorkflowDefinition` |
+| Full spec | `WorkflowDefinitionSpec` | `WorkflowDefinition` |
+
+### Backward-Compatible Type Aliases
+
+Old names are preserved as type aliases and continue to work:
+
+| Old Name | Current Name |
+|----------|-------------|
+| `NodeDefinition` | `WorkflowNodeManifest` |
+| `WorkflowNodeDefinition` | `WorkflowNodeManifest` |
+| `WorkflowNode` | `WorkflowDefinitionNode` |
+| `WorkflowEdge` | `WorkflowEdgeDefinition` |
+| `WorkflowSpec` | `WorkflowDefinitionSpec` |
+
+### New Fields on `WorkflowDefinitionNode`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `workflow_node_id` | `string` (optional) | Optional custom node identifier |
+| `config_schema` | `Record<string, unknown>` (optional) | Additional configuration schema for the node |
+
+### `role` Field
+
+Nodes have a `role` field from the `WorkflowNodeRole` type that determines their position in the workflow:
+
+```typescript
+type WorkflowNodeRole = "start" | "end" | "error_gate" | "operation";
+```
+
+Defaults to `"operation"`. Set via the builder (`addStart`/`addEnd`) or manually.
 
 ---
 

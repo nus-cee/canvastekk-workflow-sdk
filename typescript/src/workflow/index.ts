@@ -1,9 +1,4 @@
-/**
- * CanvasTEKK workflow SDK for building, validating, and executing workflow DAGs locally.
- * Provides WorkflowBuilder for fluent workflow construction, WorkflowRunner for local execution,
- * and multiple executor strategies (InProcessExecutor, HttpExecutor).
- */
-export type { EdgeType, ResolutionStrategy, WorkflowEdge, WorkflowNode, WorkflowSpec } from "./models.js";
+export type { EdgeType, WorkflowEdgeDefinition, WorkflowEdge, WorkflowDefinitionNode, WorkflowNode, WorkflowDefinitionSpec, WorkflowSpec } from "./models.js";
 export { WorkflowBuilder } from "./builder.js";
 export { InProcessExecutor, HttpExecutor } from "./executor.js";
 export type { NodeExecutor } from "./executor.js";

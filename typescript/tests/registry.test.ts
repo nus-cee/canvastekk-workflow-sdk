@@ -5,9 +5,9 @@ import {
   registerNodeResultGet,
   registerNodeResultHas,
 } from "../src/registry.js";
-import type { NodeDefinition } from "../src/definition.js";
+import type { WorkflowNodeManifest } from "../src/definition.js";
 
-const testDef: NodeDefinition = {
+const testDef: WorkflowNodeManifest = {
   name: "echo",
   version: "1.0.0",
   title: "Echo Node",
@@ -18,7 +18,7 @@ const testDef: NodeDefinition = {
   default_retry: { max_attempts: 1, initial_delay_ms: 1000, backoff_multiplier: 2.0, max_delay_ms: 30000 },
   category: "utility",
   timeout_seconds: 30,
-  is_control_flow: false,
+  role: "operation",
   styles: null,
 };
 
@@ -57,6 +57,11 @@ describe("buildRegistryPayload", () => {
   it("defaults invoke_type to http", () => {
     const payload = buildRegistryPayload(testDef);
     expect(payload.invoke_type).toBe("http");
+  });
+
+  it("includes node_role in payload", () => {
+    const payload = buildRegistryPayload(testDef);
+    expect(payload.node_role).toBe("operation");
   });
 });
 

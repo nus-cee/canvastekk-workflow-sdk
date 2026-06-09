@@ -10,13 +10,13 @@ import pytest
 from fastapi import APIRouter, Depends, Request
 from fastapi.testclient import TestClient
 
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, __version__, create_node_app
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest, __version__, create_node_app
 
 
 class EchoNode(BaseNode):
     """Simple echo node for testing."""
 
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="echo",
         version="1.0.0",
         title="Echo",
@@ -39,7 +39,7 @@ class EchoNode(BaseNode):
 class FileProcessingNode(BaseNode):
     """Node that accepts file uploads and scalar inputs."""
 
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="file-proc",
         version="1.0.0",
         title="File Processor",
@@ -81,7 +81,7 @@ class FileProcessingNode(BaseNode):
 class FailingNode(BaseNode):
     """Node that always fails."""
 
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="failing",
         version="1.0.0",
         title="Failing",
@@ -97,7 +97,7 @@ class FailingNode(BaseNode):
 class DegradedNode(BaseNode):
     """Node with mixed health checks."""
 
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="degraded",
         version="1.0.0",
         title="Degraded",
@@ -265,7 +265,7 @@ class TestDefinitionEndpoint:
 class FileOutputNode(BaseNode):
     """Node that produces file outputs for S3 upload testing."""
 
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="file-output",
         version="1.0.0",
         title="File Output",
@@ -294,7 +294,7 @@ class FileOutputNode(BaseNode):
 class FailingOutputNode(BaseNode):
     """Node that always fails — for testing S3 upload skip on failure."""
 
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="fail-output",
         version="1.0.0",
         title="Fail Output",
@@ -895,7 +895,7 @@ class TestReadinessProbe:
 
     def test_readiness_returns_200_when_all_checks_pass(self, monkeypatch: pytest.MonkeyPatch) -> None:
         class HealthyNode(BaseNode):
-            definition = NodeDefinition(
+            definition = WorkflowNodeManifest(
                 name="healthy",
                 version="1.0.0",
                 title="Healthy",
@@ -917,7 +917,7 @@ class TestReadinessProbe:
 
     def test_readiness_returns_503_when_check_fails(self) -> None:
         class UnhealthyNode(BaseNode):
-            definition = NodeDefinition(
+            definition = WorkflowNodeManifest(
                 name="unhealthy",
                 version="1.0.0",
                 title="Unhealthy",

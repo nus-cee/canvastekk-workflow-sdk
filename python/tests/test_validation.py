@@ -2,11 +2,11 @@
 
 from typing import Any
 
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, NodeExecutionRequest
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeExecutionRequest, WorkflowNodeManifest
 
 
 class StrictNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="strict",
         version="1.0.0",
         title="Strict",
@@ -28,7 +28,7 @@ class StrictNode(BaseNode):
 
 
 class LooseNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="loose",
         version="1.0.0",
         title="Loose",

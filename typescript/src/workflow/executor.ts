@@ -1,5 +1,4 @@
 import type { ExecutionContext } from "../context.js";
-import type { WorkflowSpec } from "./models.js";
 
 /**
  * Abstract base for node execution strategies.

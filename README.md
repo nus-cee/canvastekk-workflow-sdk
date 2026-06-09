@@ -203,13 +203,13 @@ The SDK provides registry-level node definition tools and a local workflow build
 
 | SDK Type | Engine Type | Purpose |
 |----------|-------------|---------|
-| `NodeDefinition` | `WorkflowNode` | Registry-level node type (schemas, metadata, styles, invocation config) |
-| `workflow.WorkflowNode` | `WorkflowDefinitionNode` | Node instance within a workflow definition (inputs, position, edges) |
-| `workflow.WorkflowSpec` | `WorkflowSpec` | Complete workflow definition (nodes + edges as a DAG) |
+| `NodeDefinition` | `WorkflowNodeManifest` | Registry-level node type (schemas, metadata, styles, invocation config) |
+| `workflow.WorkflowDefinitionNode` | `WorkflowDefinitionNode` | Node instance within a workflow definition (inputs, position, edges) |
+| `workflow.WorkflowDefinitionSpec` | `WorkflowDefinitionSpec` | Complete workflow definition (nodes + edges as a DAG) |
 
 Node authors define `NodeDefinition`. The engine handles `WorkflowDefinitionNode` internally when building workflow definitions.
 
-The SDK's `workflow` module lets end users build, validate, and test-run complete workflow DAGs locally without the engine. `WorkflowSpec.model_dump(mode="json")` produces JSON directly POSTable to the engine's `/api/workflows/definitions` endpoint.
+The SDK's `workflow` module lets end users build, validate, and test-run complete workflow DAGs locally without the engine. `WorkflowDefinitionSpec.model_dump(mode="json")` produces JSON directly POSTable to the engine's `/api/workflows/definitions` endpoint.
 
 **Versioning:** `NodeDefinition.version` is the node's semantic version string (e.g., `"1.0.0"`). The engine uses this version directly and enforces immutability — re-registering with the same version and changed data is rejected. Bump the version for any schema or metadata changes.
 

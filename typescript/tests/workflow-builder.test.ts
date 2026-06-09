@@ -4,7 +4,7 @@ import { WorkflowBuilder } from "../src/workflow/builder.js";
 describe("WorkflowBuilder", () => {
   describe("basic building", () => {
     it("builds a valid spec with start, node, and end", async () => {
-      const spec = await new WorkflowBuilder("test")
+      const spec = await new WorkflowBuilder()
         .addStart("start", { outputs: ["input_file"] })
         .addNode("process", { slug: "echo-v1.0.0" })
         .addEnd("end")
@@ -12,7 +12,6 @@ describe("WorkflowBuilder", () => {
         .connect("process", "end", { fromOutput: "result", toInput: "output" })
         .build();
 
-      expect(spec.name).toBe("test");
       expect(spec.nodes).toHaveLength(3);
       expect(spec.edges).toHaveLength(2);
       expect(spec.nodes[0].slug).toBe("__start__");
@@ -20,24 +19,24 @@ describe("WorkflowBuilder", () => {
       expect(spec.nodes[2].slug).toBe("__end__");
     });
 
-  it("converts outputs: string[] to configSchema correctly", async () => {
-    const spec = await new WorkflowBuilder()
-      .addStart("start", { outputs: ["file1", "file2"] })
-      .addNode("n1", { slug: "test-v1" })
-      .addEnd("end")
-      .connect("start", "n1")
-      .connect("n1", "end")
-      .build();
+  	it("converts outputs: string[] to configSchema correctly", async () => {
+      const spec = await new WorkflowBuilder()
+        .addStart("start", { outputs: ["file1", "file2"] })
+        .addNode("n1", { slug: "test-v1" })
+        .addEnd("end")
+        .connect("start", "n1")
+        .connect("n1", "end")
+        .build();
 
-    const startNode = spec.nodes.find((n) => n.id === "start");
-    expect(startNode?.inputs.config_schema).toEqual({
-      type: "object",
-      properties: {
-        file1: { type: "string" },
-        file2: { type: "string" },
-      },
+      const startNode = spec.nodes.find((n) => n.id === "start");
+      expect(startNode?.config_schema).toEqual({
+        type: "object",
+        properties: {
+          file1: { type: "string" },
+          file2: { type: "string" },
+        },
+      });
     });
-  });
 
     it("rejects duplicate node IDs", async () => {
       const builder = new WorkflowBuilder()
@@ -108,14 +107,13 @@ describe("WorkflowBuilder", () => {
         .addNode("n1", { slug: "test-v1" })
         .addEnd("end")
         .connect("start", "n1")
-        // Missing n1 → end connection, which validation would reject
         .build({ validate: false });
 
       expect(spec.nodes).toHaveLength(3);
       expect(spec.edges).toHaveLength(1);
     });
 
-    it("sets edge options (fromOutput, toInput, edgeType, resolutionStrategy, condition)", async () => {
+    it("sets edge options (fromOutput, toInput, edgeType, condition)", async () => {
       const spec = await new WorkflowBuilder()
         .addStart("start")
         .addNode("n1", { slug: "test-v1" })
@@ -124,7 +122,6 @@ describe("WorkflowBuilder", () => {
           fromOutput: "data",
           toInput: "input",
           edgeType: "success",
-          resolutionStrategy: "dot_path",
           condition: "value > 0",
         })
         .connect("n1", "end")
@@ -134,11 +131,10 @@ describe("WorkflowBuilder", () => {
       expect(edge.fromOutput).toBe("data");
       expect(edge.toInput).toBe("input");
       expect(edge.edgeType).toBe("success");
-      expect(edge.resolutionStrategy).toBe("dot_path");
       expect(edge.condition).toBe("value > 0");
     });
 
-  it("spec includes x, y, metadata fields (builder allows positional hints via nodes; WorkflowNode supports x,y)", async () => {
+  it("spec includes metadata fields", async () => {
     const spec = await new WorkflowBuilder()
       .addStart("start")
       .addNode("n1", { slug: "test-v1" })
@@ -147,7 +143,6 @@ describe("WorkflowBuilder", () => {
       .connect("n1", "end")
       .build();
 
-    // Verify that metadata exists on the spec
     expect(spec).toHaveProperty("metadata");
     expect(spec.metadata).toEqual({});
   });
@@ -157,7 +152,7 @@ describe("WorkflowBuilder", () => {
         .addStart("start")
         .addNode("n1", { slug: "test-v1" })
         .addEnd("end")
-        .connect("start", "n1") // no fromOutput/toInput
+        .connect("start", "n1")
         .connect("n1", "end")
         .build();
 
@@ -165,7 +160,7 @@ describe("WorkflowBuilder", () => {
       expect(spec.edges[0].toInput).toBe("");
     });
 
-    it("defaults edgeType and resolutionStrategy when not provided", async () => {
+    it("defaults edgeType when not provided", async () => {
       const spec = await new WorkflowBuilder()
         .addStart("start")
         .addNode("n1", { slug: "test-v1" })
@@ -175,7 +170,6 @@ describe("WorkflowBuilder", () => {
         .build();
 
       expect(spec.edges[0].edgeType).toBe("default");
-      expect(spec.edges[0].resolutionStrategy).toBe("auto");
       expect(spec.edges[0].condition).toBe(null);
     });
 
@@ -209,26 +203,6 @@ describe("WorkflowBuilder", () => {
       const node = spec.nodes.find((n) => n.id === "n1");
       expect(node?.name).toBe(null);
       expect(node?.version).toBe(null);
-    });
-
-    it("builder name can be null or omitted", async () => {
-      const noName = await new WorkflowBuilder()
-        .addStart("start")
-        .addNode("n1", { slug: "test-v1" })
-        .addEnd("end")
-        .connect("start", "n1")
-        .connect("n1", "end")
-        .build();
-      expect(noName.name).toBe(null);
-
-      const explicitNull = await new WorkflowBuilder(null)
-        .addStart("start")
-        .addNode("n1", { slug: "test-v1" })
-        .addEnd("end")
-        .connect("start", "n1")
-        .connect("n1", "end")
-        .build();
-      expect(explicitNull.name).toBe(null);
     });
 
     it("adds start with default ID 'start' when omitted", async () => {
@@ -268,6 +242,37 @@ describe("WorkflowBuilder", () => {
 
       const node = spec.nodes.find((n) => n.id === "n1");
       expect(node?.inputs).toEqual({ param: 42 });
+    });
+
+    it("addNode passes workflowNodeId and configSchema", async () => {
+      const spec = await new WorkflowBuilder()
+        .addStart("start")
+        .addNode("n1", {
+          slug: "test-v1",
+          workflowNodeId: "wn-123",
+          configSchema: { type: "object", properties: { x: { type: "number" } } },
+        })
+        .addEnd("end")
+        .connect("start", "n1")
+        .connect("n1", "end")
+        .build();
+
+      const node = spec.nodes.find((n) => n.id === "n1");
+      expect(node?.workflow_node_id).toBe("wn-123");
+      expect(node?.config_schema).toEqual({ type: "object", properties: { x: { type: "number" } } });
+    });
+
+    it("slug is optional in addNode", async () => {
+      const spec = await new WorkflowBuilder()
+        .addStart("start")
+        .addNode("n1", {})
+        .addEnd("end")
+        .connect("start", "n1")
+        .connect("n1", "end")
+        .build();
+
+      const node = spec.nodes.find((n) => n.id === "n1");
+      expect(node?.slug).toBe(null);
     });
   });
 });

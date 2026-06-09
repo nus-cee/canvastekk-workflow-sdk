@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { BaseNode } from "../src/base-node.js";
-import type { NodeDefinition } from "../src/definition.js";
+import type { WorkflowNodeManifest } from "../src/definition.js";
 import type { ExecutionContext } from "../src/context.js";
 import { NodeValidationError, NodeOutputValidationError } from "../src/exceptions.js";
 import { TimingMiddleware } from "../src/middleware.js";
 
 class EchoNode extends BaseNode {
-  definition: NodeDefinition = {
+  definition: WorkflowNodeManifest = {
     name: "echo",
     version: "1.0.0",
     title: "Echo",
@@ -29,7 +29,7 @@ class EchoNode extends BaseNode {
 }
 
 class FailingNode extends BaseNode {
-  definition: NodeDefinition = {
+  definition: WorkflowNodeManifest = {
     name: "fail-node",
     version: "1.0.0",
     title: "Fail",
@@ -44,7 +44,7 @@ class FailingNode extends BaseNode {
 }
 
 class ValidatingNode extends BaseNode {
-  definition: NodeDefinition = {
+  definition: WorkflowNodeManifest = {
     name: "validating",
     version: "1.0.0",
     title: "Validating",

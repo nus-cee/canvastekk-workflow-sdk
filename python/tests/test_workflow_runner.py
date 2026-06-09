@@ -5,71 +5,61 @@ from pathlib import Path
 
 import pytest
 
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest
 from canvastekk_workflow_sdk.workflow.executor import InProcessExecutor
 from canvastekk_workflow_sdk.workflow.level import compute_levels
 from canvastekk_workflow_sdk.workflow.models import (
-    ResolutionStrategy,
-    WorkflowEdge,
-    WorkflowNode,
-    WorkflowSpec,
+    WorkflowDefinitionNode,
+    WorkflowDefinitionSpec,
+    WorkflowEdgeDefinition,
 )
 from canvastekk_workflow_sdk.workflow.resolver import _resolve_output, _walk_dot_path, resolve_inputs
 from canvastekk_workflow_sdk.workflow.runner import ErrorPolicy, WorkflowRunner, WorkflowRunResult
 
 
-class TestResolverFlatStrategy:
+class TestResolverOutput:
     def test_flat_key_resolution(self) -> None:
         source_outputs = {"message": "hello", "count": 5}
-        result = _resolve_output(source_outputs, "message", ResolutionStrategy.FLAT)
+        result = _resolve_output(source_outputs, "message")
         assert result == "hello"
 
     def test_flat_key_not_found_raises(self) -> None:
         source_outputs = {"message": "hello"}
         with pytest.raises(KeyError):
-            _resolve_output(source_outputs, "missing", ResolutionStrategy.FLAT)
+            _resolve_output(source_outputs, "missing")
 
-
-class TestResolverDotPathStrategy:
     def test_dot_notation_resolution(self) -> None:
         source_outputs = {"data": {"nested": {"value": 42}}}
-        result = _resolve_output(source_outputs, "data.nested.value", ResolutionStrategy.DOT_PATH)
+        result = _resolve_output(source_outputs, "data.nested.value")
         assert result == 42
 
     def test_dot_path_partial_nesting(self) -> None:
         source_outputs = {"user": {"name": "Alice", "age": 30}}
-        result = _resolve_output(source_outputs, "user.name", ResolutionStrategy.DOT_PATH)
+        result = _resolve_output(source_outputs, "user.name")
         assert result == "Alice"
 
     def test_dot_path_not_found_raises(self) -> None:
         source_outputs = {"data": {"nested": {"value": 42}}}
         with pytest.raises(KeyError):
-            _resolve_output(source_outputs, "data.missing.field", ResolutionStrategy.DOT_PATH)
+            _resolve_output(source_outputs, "data.missing.field")
 
+    def test_empty_from_output_returns_full_outputs(self) -> None:
+        source_outputs = {"file": "data.ply", "count": 5}
+        result = _resolve_output(source_outputs, "")
+        assert result == source_outputs
 
-class TestResolverAutoStrategy:
-    def test_auto_flat_first(self) -> None:
-        source_outputs = {"message": "hello", "data": {"value": 42}}
-        result = _resolve_output(source_outputs, "message", ResolutionStrategy.AUTO)
-        assert result == "hello"
-
-    def test_auto_dot_fallback(self) -> None:
-        source_outputs = {"data": {"value": 42}}
-        result = _resolve_output(source_outputs, "data.value", ResolutionStrategy.AUTO)
-        assert result == 42
-
-    def test_auto_key_not_in_outputs_raises(self) -> None:
+    def test_key_not_in_outputs_with_dot_raises(self) -> None:
         source_outputs = {"message": "hello"}
-        with pytest.raises(KeyError, match="Cannot resolve from_output"):
-            _resolve_output(source_outputs, "missing", ResolutionStrategy.AUTO)
+        with pytest.raises(KeyError):
+            _resolve_output(source_outputs, "missing")
 
 
 class TestResolveInputs:
     def test_static_inputs_used(self) -> None:
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="start", slug="__start__"),
-                WorkflowNode(id="node1", slug="echo-v1.0.0", inputs={"threshold": 0.5}),
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="node1", slug="echo-v1.0.0", inputs={"threshold": 0.5}),
             ],
             edges=[],
         )
@@ -79,13 +69,13 @@ class TestResolveInputs:
         assert result == {"threshold": 0.5}
 
     def test_static_inputs_merged_with_edge_inputs(self) -> None:
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="start", slug="__start__"),
-                WorkflowNode(id="node1", slug="echo-v1.0.0", inputs={"threshold": 0.5}),
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="node1", slug="echo-v1.0.0", inputs={"threshold": 0.5}),
             ],
             edges=[
-                WorkflowEdge(from_node="start", to_node="node1", from_output="file", to_input="input_file"),
+                WorkflowEdgeDefinition(from_node="start", to_node="node1", from_output="file", to_input="input_file"),
             ],
         )
         node_outputs = {"start": {"file": "/data/input.ply"}}
@@ -94,13 +84,13 @@ class TestResolveInputs:
         assert result == {"threshold": 0.5, "input_file": "/data/input.ply"}
 
     def test_edge_overwrites_static_input(self) -> None:
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="start", slug="__start__"),
-                WorkflowNode(id="node1", slug="echo-v1.0.0", inputs={"file": "/static.txt"}),
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="node1", slug="echo-v1.0.0", inputs={"file": "/static.txt"}),
             ],
             edges=[
-                WorkflowEdge(from_node="start", to_node="node1", from_output="file", to_input="file"),
+                WorkflowEdgeDefinition(from_node="start", to_node="node1", from_output="file", to_input="file"),
             ],
         )
         node_outputs = {"start": {"file": "/dynamic.ply"}}
@@ -109,15 +99,15 @@ class TestResolveInputs:
         assert result == {"file": "/dynamic.ply"}
 
     def test_multiple_incoming_edges_merged(self) -> None:
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="start", slug="__start__"),
-                WorkflowNode(id="node1", slug="echo-v1.0.0"),
-                WorkflowNode(id="node2", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="node1", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="node2", slug="echo-v1.0.0"),
             ],
             edges=[
-                WorkflowEdge(from_node="start", to_node="node1", from_output="file1", to_input="input1"),
-                WorkflowEdge(from_node="start", to_node="node1", from_output="file2", to_input="input2"),
+                WorkflowEdgeDefinition(from_node="start", to_node="node1", from_output="file1", to_input="input1"),
+                WorkflowEdgeDefinition(from_node="start", to_node="node1", from_output="file2", to_input="input2"),
             ],
         )
         node_outputs = {"start": {"file1": "a.ply", "file2": "b.ply"}}
@@ -126,13 +116,13 @@ class TestResolveInputs:
         assert result == {"input1": "a.ply", "input2": "b.ply"}
 
     def test_empty_from_output_returns_full_outputs(self) -> None:
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="start", slug="__start__"),
-                WorkflowNode(id="node1", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="node1", slug="echo-v1.0.0"),
             ],
             edges=[
-                WorkflowEdge(from_node="start", to_node="node1", from_output="", to_input=""),
+                WorkflowEdgeDefinition(from_node="start", to_node="node1", from_output="", to_input=""),
             ],
         )
         node_outputs = {"start": {"file": "data.ply", "count": 5}}
@@ -170,62 +160,62 @@ class TestWalkDotPath:
 
 class TestLevelComputation:
     def test_single_node(self) -> None:
-        spec = WorkflowSpec(
-            nodes=[WorkflowNode(id="node1", slug="echo-v1.0.0")],
+        spec = WorkflowDefinitionSpec(
+            nodes=[WorkflowDefinitionNode(id="node1", slug="echo-v1.0.0")],
             edges=[],
         )
         levels = compute_levels(spec)
         assert levels == [["node1"]]
 
     def test_linear_chain(self) -> None:
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="A", slug="echo-v1.0.0"),
-                WorkflowNode(id="B", slug="echo-v1.0.0"),
-                WorkflowNode(id="C", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="A", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="B", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="C", slug="echo-v1.0.0"),
             ],
             edges=[
-                WorkflowEdge(from_node="A", to_node="B"),
-                WorkflowEdge(from_node="B", to_node="C"),
+                WorkflowEdgeDefinition(from_node="A", to_node="B"),
+                WorkflowEdgeDefinition(from_node="B", to_node="C"),
             ],
         )
         levels = compute_levels(spec)
         assert levels == [["A"], ["B"], ["C"]]
 
     def test_diamond_dag(self) -> None:
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="A", slug="echo-v1.0.0"),
-                WorkflowNode(id="B", slug="echo-v1.0.0"),
-                WorkflowNode(id="C", slug="echo-v1.0.0"),
-                WorkflowNode(id="D", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="A", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="B", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="C", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="D", slug="echo-v1.0.0"),
             ],
             edges=[
-                WorkflowEdge(from_node="A", to_node="B"),
-                WorkflowEdge(from_node="A", to_node="C"),
-                WorkflowEdge(from_node="B", to_node="D"),
-                WorkflowEdge(from_node="C", to_node="D"),
+                WorkflowEdgeDefinition(from_node="A", to_node="B"),
+                WorkflowEdgeDefinition(from_node="A", to_node="C"),
+                WorkflowEdgeDefinition(from_node="B", to_node="D"),
+                WorkflowEdgeDefinition(from_node="C", to_node="D"),
             ],
         )
         levels = compute_levels(spec)
         assert levels == [["A"], ["B", "C"], ["D"]]
 
     def test_empty_spec(self) -> None:
-        spec = WorkflowSpec(nodes=[], edges=[])
+        spec = WorkflowDefinitionSpec(nodes=[], edges=[])
         levels = compute_levels(spec)
         assert levels == []
 
     def test_cycle_raises(self) -> None:
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="A", slug="echo-v1.0.0"),
-                WorkflowNode(id="B", slug="echo-v1.0.0"),
-                WorkflowNode(id="C", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="A", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="B", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="C", slug="echo-v1.0.0"),
             ],
             edges=[
-                WorkflowEdge(from_node="A", to_node="B"),
-                WorkflowEdge(from_node="B", to_node="C"),
-                WorkflowEdge(from_node="C", to_node="A"),
+                WorkflowEdgeDefinition(from_node="A", to_node="B"),
+                WorkflowEdgeDefinition(from_node="B", to_node="C"),
+                WorkflowEdgeDefinition(from_node="C", to_node="A"),
             ],
         )
         with pytest.raises(ValueError, match="cycle"):
@@ -250,15 +240,15 @@ class TestInProcessExecutor:
 
 class TestWorkflowRunner:
     def test_linear_workflow_execution(self) -> None:
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="start", slug="__start__"),
-                WorkflowNode(id="echo", slug="echo-v1.0.0", inputs={"message": "hello"}),
-                WorkflowNode(id="end", slug="__end__"),
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="echo", slug="echo-v1.0.0", inputs={"message": "hello"}),
+                WorkflowDefinitionNode(id="end", slug="__end__"),
             ],
             edges=[
-                WorkflowEdge(from_node="start", to_node="echo"),
-                WorkflowEdge(from_node="echo", to_node="end", from_output="message", to_input="result"),
+                WorkflowEdgeDefinition(from_node="start", to_node="echo"),
+                WorkflowEdgeDefinition(from_node="echo", to_node="end", from_output="message", to_input="result"),
             ],
         )
 
@@ -302,15 +292,15 @@ class TestWorkflowRunner:
         assert node_result.duration_ms == 50
 
     def test_error_handling_failing_node(self) -> None:
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="start", slug="__start__"),
-                WorkflowNode(id="fail", slug="failing-v1.0.0"),
-                WorkflowNode(id="end", slug="__end__"),
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="fail", slug="failing-v1.0.0"),
+                WorkflowDefinitionNode(id="end", slug="__end__"),
             ],
             edges=[
-                WorkflowEdge(from_node="start", to_node="fail"),
-                WorkflowEdge(from_node="fail", to_node="end"),
+                WorkflowEdgeDefinition(from_node="start", to_node="fail"),
+                WorkflowEdgeDefinition(from_node="fail", to_node="end"),
             ],
         )
 
@@ -326,15 +316,15 @@ class TestWorkflowRunner:
         assert failed_result.error is not None
 
     def test_error_policy_fail_fast(self) -> None:
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="start", slug="__start__"),
-                WorkflowNode(id="fail", slug="failing-v1.0.0"),
-                WorkflowNode(id="end", slug="__end__"),
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="fail", slug="failing-v1.0.0"),
+                WorkflowDefinitionNode(id="end", slug="__end__"),
             ],
             edges=[
-                WorkflowEdge(from_node="start", to_node="fail"),
-                WorkflowEdge(from_node="fail", to_node="end"),
+                WorkflowEdgeDefinition(from_node="start", to_node="fail"),
+                WorkflowEdgeDefinition(from_node="fail", to_node="end"),
             ],
         )
 
@@ -350,18 +340,18 @@ class TestWorkflowRunner:
         assert fail_result.status == "failed"
 
     def test_error_policy_continue(self) -> None:
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="start", slug="__start__"),
-                WorkflowNode(id="fail", slug="failing-v1.0.0"),
-                WorkflowNode(id="skip", slug="echo-v1.0.0"),
-                WorkflowNode(id="end", slug="__end__"),
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="fail", slug="failing-v1.0.0"),
+                WorkflowDefinitionNode(id="skip", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="end", slug="__end__"),
             ],
             edges=[
-                WorkflowEdge(from_node="start", to_node="fail"),
-                WorkflowEdge(from_node="start", to_node="skip"),
-                WorkflowEdge(from_node="fail", to_node="end"),
-                WorkflowEdge(from_node="skip", to_node="end"),
+                WorkflowEdgeDefinition(from_node="start", to_node="fail"),
+                WorkflowEdgeDefinition(from_node="start", to_node="skip"),
+                WorkflowEdgeDefinition(from_node="fail", to_node="end"),
+                WorkflowEdgeDefinition(from_node="skip", to_node="end"),
             ],
         )
 
@@ -377,15 +367,15 @@ class TestWorkflowRunner:
         assert skip_result.status == "completed"
 
     def test_missing_executor_fails_node(self) -> None:
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="start", slug="__start__"),
-                WorkflowNode(id="missing", slug="unknown-v1.0.0"),
-                WorkflowNode(id="end", slug="__end__"),
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="missing", slug="unknown-v1.0.0"),
+                WorkflowDefinitionNode(id="end", slug="__end__"),
             ],
             edges=[
-                WorkflowEdge(from_node="start", to_node="missing"),
-                WorkflowEdge(from_node="missing", to_node="end"),
+                WorkflowEdgeDefinition(from_node="start", to_node="missing"),
+                WorkflowEdgeDefinition(from_node="missing", to_node="end"),
             ],
         )
 
@@ -400,17 +390,17 @@ class TestWorkflowRunner:
         assert "No executor registered" in missing_result.error
 
     def test_upstream_failure_skips_dependent_nodes(self) -> None:
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="start", slug="__start__"),
-                WorkflowNode(id="fail", slug="failing-v1.0.0"),
-                WorkflowNode(id="dependent", slug="echo-v1.0.0"),
-                WorkflowNode(id="end", slug="__end__"),
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="fail", slug="failing-v1.0.0"),
+                WorkflowDefinitionNode(id="dependent", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="end", slug="__end__"),
             ],
             edges=[
-                WorkflowEdge(from_node="start", to_node="fail"),
-                WorkflowEdge(from_node="fail", to_node="dependent"),
-                WorkflowEdge(from_node="dependent", to_node="end"),
+                WorkflowEdgeDefinition(from_node="start", to_node="fail"),
+                WorkflowEdgeDefinition(from_node="fail", to_node="dependent"),
+                WorkflowEdgeDefinition(from_node="dependent", to_node="end"),
             ],
         )
 
@@ -427,7 +417,7 @@ class TestWorkflowRunner:
 
 
 class EchoNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="echo",
         version="1.0.0",
         title="Echo",
@@ -441,7 +431,7 @@ class EchoNode(BaseNode):
 
 
 class FailingNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="failing",
         version="1.0.0",
         title="Failing",
@@ -455,7 +445,7 @@ class FailingNode(BaseNode):
 
 
 class FileWriterNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="file-writer",
         version="1.0.0",
         title="File Writer",
@@ -474,7 +464,7 @@ class FileWriterNode(BaseNode):
 
 
 class FileReaderNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="file-reader",
         version="1.0.0",
         title="File Reader",
@@ -495,7 +485,7 @@ class FileReaderNode(BaseNode):
 
 
 class OutputDirCaptureNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="dir-capture",
         version="1.0.0",
         title="Dir Capture",
@@ -520,22 +510,22 @@ class OutputDirCaptureNode(BaseNode):
 
 class TestWorkflowRunnerOutputDir:
     def test_file_passing_between_nodes(self) -> None:
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="start", slug="__start__"),
-                WorkflowNode(id="writer", slug="file-writer-v1.0.0"),
-                WorkflowNode(id="reader", slug="file-reader-v1.0.0"),
-                WorkflowNode(id="end", slug="__end__"),
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="writer", slug="file-writer-v1.0.0"),
+                WorkflowDefinitionNode(id="reader", slug="file-reader-v1.0.0"),
+                WorkflowDefinitionNode(id="end", slug="__end__"),
             ],
             edges=[
-                WorkflowEdge(from_node="start", to_node="writer"),
-                WorkflowEdge(
+                WorkflowEdgeDefinition(from_node="start", to_node="writer"),
+                WorkflowEdgeDefinition(
                     from_node="writer",
                     to_node="reader",
                     from_output="file_path",
                     to_input="file_path",
                 ),
-                WorkflowEdge(
+                WorkflowEdgeDefinition(
                     from_node="reader",
                     to_node="end",
                     from_output="content",
@@ -558,15 +548,15 @@ class TestWorkflowRunnerOutputDir:
         with tempfile.TemporaryDirectory() as tmp:
             output_dir = Path(tmp) / "my_outputs"
 
-            spec = WorkflowSpec(
+            spec = WorkflowDefinitionSpec(
                 nodes=[
-                    WorkflowNode(id="start", slug="__start__"),
-                    WorkflowNode(id="echo", slug="echo-v1.0.0", inputs={"message": "hi"}),
-                    WorkflowNode(id="end", slug="__end__"),
+                    WorkflowDefinitionNode(id="start", slug="__start__"),
+                    WorkflowDefinitionNode(id="echo", slug="echo-v1.0.0", inputs={"message": "hi"}),
+                    WorkflowDefinitionNode(id="end", slug="__end__"),
                 ],
                 edges=[
-                    WorkflowEdge(from_node="start", to_node="echo"),
-                    WorkflowEdge(
+                    WorkflowEdgeDefinition(from_node="start", to_node="echo"),
+                    WorkflowEdgeDefinition(
                         from_node="echo",
                         to_node="end",
                         from_output="message",
@@ -588,15 +578,15 @@ class TestWorkflowRunnerOutputDir:
     def test_auto_created_temp_dir_cleaned_up(self) -> None:
         captured_dir: list[str] = []
 
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="start", slug="__start__"),
-                WorkflowNode(id="cap", slug="dir-capture-v1.0.0"),
-                WorkflowNode(id="end", slug="__end__"),
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="cap", slug="dir-capture-v1.0.0"),
+                WorkflowDefinitionNode(id="end", slug="__end__"),
             ],
             edges=[
-                WorkflowEdge(from_node="start", to_node="cap"),
-                WorkflowEdge(from_node="cap", to_node="end"),
+                WorkflowEdgeDefinition(from_node="start", to_node="cap"),
+                WorkflowEdgeDefinition(from_node="cap", to_node="end"),
             ],
         )
 
@@ -614,15 +604,15 @@ class TestWorkflowRunnerOutputDir:
     def test_cleanup_false_preserves_temp_dir(self) -> None:
         captured_dir: list[str] = []
 
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="start", slug="__start__"),
-                WorkflowNode(id="cap", slug="dir-capture-v1.0.0"),
-                WorkflowNode(id="end", slug="__end__"),
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="cap", slug="dir-capture-v1.0.0"),
+                WorkflowDefinitionNode(id="end", slug="__end__"),
             ],
             edges=[
-                WorkflowEdge(from_node="start", to_node="cap"),
-                WorkflowEdge(from_node="cap", to_node="end"),
+                WorkflowEdgeDefinition(from_node="start", to_node="cap"),
+                WorkflowEdgeDefinition(from_node="cap", to_node="end"),
             ],
         )
 
@@ -640,17 +630,17 @@ class TestWorkflowRunnerOutputDir:
     def test_auto_temp_dir_cleaned_up_on_exception(self) -> None:
         captured_dir: list[str] = []
 
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="start", slug="__start__"),
-                WorkflowNode(id="cap", slug="dir-capture-v1.0.0"),
-                WorkflowNode(id="fail", slug="failing-v1.0.0"),
-                WorkflowNode(id="end", slug="__end__"),
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="cap", slug="dir-capture-v1.0.0"),
+                WorkflowDefinitionNode(id="fail", slug="failing-v1.0.0"),
+                WorkflowDefinitionNode(id="end", slug="__end__"),
             ],
             edges=[
-                WorkflowEdge(from_node="start", to_node="cap"),
-                WorkflowEdge(from_node="cap", to_node="fail"),
-                WorkflowEdge(from_node="fail", to_node="end"),
+                WorkflowEdgeDefinition(from_node="start", to_node="cap"),
+                WorkflowEdgeDefinition(from_node="cap", to_node="fail"),
+                WorkflowEdgeDefinition(from_node="fail", to_node="end"),
             ],
         )
 
@@ -669,15 +659,15 @@ class TestWorkflowRunnerOutputDir:
         with tempfile.TemporaryDirectory() as tmp:
             output_dir = Path(tmp) / "outputs"
 
-            spec = WorkflowSpec(
+            spec = WorkflowDefinitionSpec(
                 nodes=[
-                    WorkflowNode(id="start", slug="__start__"),
-                    WorkflowNode(id="echo", slug="echo-v1.0.0", inputs={"message": "x"}),
-                    WorkflowNode(id="end", slug="__end__"),
+                    WorkflowDefinitionNode(id="start", slug="__start__"),
+                    WorkflowDefinitionNode(id="echo", slug="echo-v1.0.0", inputs={"message": "x"}),
+                    WorkflowDefinitionNode(id="end", slug="__end__"),
                 ],
                 edges=[
-                    WorkflowEdge(from_node="start", to_node="echo"),
-                    WorkflowEdge(
+                    WorkflowEdgeDefinition(from_node="start", to_node="echo"),
+                    WorkflowEdgeDefinition(
                         from_node="echo",
                         to_node="end",
                         from_output="message",
@@ -695,15 +685,15 @@ class TestWorkflowRunnerOutputDir:
             assert result.output_dir == output_dir
 
     def test_result_output_dir_none_when_auto_cleaned(self) -> None:
-        spec = WorkflowSpec(
+        spec = WorkflowDefinitionSpec(
             nodes=[
-                WorkflowNode(id="start", slug="__start__"),
-                WorkflowNode(id="echo", slug="echo-v1.0.0", inputs={"message": "x"}),
-                WorkflowNode(id="end", slug="__end__"),
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="echo", slug="echo-v1.0.0", inputs={"message": "x"}),
+                WorkflowDefinitionNode(id="end", slug="__end__"),
             ],
             edges=[
-                WorkflowEdge(from_node="start", to_node="echo"),
-                WorkflowEdge(
+                WorkflowEdgeDefinition(from_node="start", to_node="echo"),
+                WorkflowEdgeDefinition(
                     from_node="echo",
                     to_node="end",
                     from_output="message",

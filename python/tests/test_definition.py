@@ -1,4 +1,4 @@
-"""Tests for NodeDefinition and RetryConfig models."""
+"""Tests for WorkflowNodeManifest and RetryConfig models."""
 
 import json
 import tempfile
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from canvastekk_workflow_sdk import NodeDefinition, RetryConfig
+from canvastekk_workflow_sdk import NodeRole, NodeStyles, RetryConfig, WorkflowNodeManifest
 from canvastekk_workflow_sdk.definition import export_definition
 
 
@@ -45,12 +45,45 @@ class TestRetryConfig:
             RetryConfig(backoff_multiplier=0.5)
 
 
-class TestNodeDefinition:
-    """Tests for NodeDefinition model."""
+class TestNodeRole:
+    """Tests for NodeRole enum."""
+
+    def test_enum_values(self) -> None:
+        assert NodeRole.START.value == "start"
+        assert NodeRole.END.value == "end"
+        assert NodeRole.ERROR_GATE.value == "error_gate"
+        assert NodeRole.OPERATION.value == "operation"
+
+    def test_default_role_is_operation(self) -> None:
+        definition = WorkflowNodeManifest(
+            name="echo",
+            version="1.0.0",
+            title="Echo",
+            description="Test",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        )
+        assert definition.role == NodeRole.OPERATION
+
+    def test_explicit_role(self) -> None:
+        definition = WorkflowNodeManifest(
+            name="start",
+            version="1.0.0",
+            title="Start",
+            description="Test",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+            role=NodeRole.START,
+        )
+        assert definition.role == NodeRole.START
+
+
+class TestWorkflowNodeManifest:
+    """Tests for WorkflowNodeManifest model."""
 
     def test_minimal_definition(self) -> None:
         """Test creating a minimal node definition."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="echo",
             version="1.0.0",
             title="Echo",
@@ -65,11 +98,11 @@ class TestNodeDefinition:
         assert definition.token_cost == 0.0
         assert definition.category == "utility"
         assert definition.timeout_seconds == 30
-        assert definition.is_control_flow is False
+        assert definition.role == NodeRole.OPERATION
 
     def test_full_definition(self) -> None:
         """Test creating a full node definition with all fields."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="segmentation",
             version="2.0.0",
             title="Point Cloud Segmentation",
@@ -99,7 +132,7 @@ class TestNodeDefinition:
 
     def test_to_dict(self) -> None:
         """Test converting definition to dictionary."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="echo",
             version="1.0.0",
             title="Echo",
@@ -114,8 +147,8 @@ class TestNodeDefinition:
         assert "default_retry" in data
 
     def test_control_flow_node(self) -> None:
-        """Test creating a control flow node definition."""
-        definition = NodeDefinition(
+        """Test creating a node with explicit role."""
+        definition = WorkflowNodeManifest(
             name="if",
             version="1.0.0",
             title="IF Condition",
@@ -123,16 +156,16 @@ class TestNodeDefinition:
             input_schema={"type": "object"},
             output_schema={"type": "object"},
             category="control-flow",
-            is_control_flow=True,
+            role=NodeRole.START,
             token_cost=0.0,
         )
-        assert definition.is_control_flow is True
+        assert definition.role == NodeRole.START
         assert definition.category == "control-flow"
         assert definition.token_cost == 0.0
 
     def test_file_input_fields_with_file(self) -> None:
         """Test file_input_fields returns fields with format: file."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="upload",
             version="1.0.0",
             title="Upload Node",
@@ -151,7 +184,7 @@ class TestNodeDefinition:
 
     def test_file_input_fields_no_file(self) -> None:
         """Test file_input_fields returns empty list when no file fields."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="echo",
             version="1.0.0",
             title="Echo",
@@ -169,7 +202,7 @@ class TestNodeDefinition:
 
     def test_file_input_fields_empty_schema(self) -> None:
         """Test file_input_fields with schema that has no properties."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="empty",
             version="1.0.0",
             title="Empty",
@@ -181,7 +214,7 @@ class TestNodeDefinition:
 
     def test_has_file_inputs_true(self) -> None:
         """Test has_file_inputs returns True when file fields exist."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="upload",
             version="1.0.0",
             title="Upload Node",
@@ -198,7 +231,7 @@ class TestNodeDefinition:
 
     def test_has_file_inputs_false(self) -> None:
         """Test has_file_inputs returns False when no file fields."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="echo",
             version="1.0.0",
             title="Echo",
@@ -213,7 +246,7 @@ class TestNodeDefinition:
 
     def test_file_output_fields_with_file(self) -> None:
         """Test file_output_fields returns fields with format: file in output_schema."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="segmentation",
             version="1.0.0",
             title="Segmentation",
@@ -232,7 +265,7 @@ class TestNodeDefinition:
 
     def test_file_output_fields_no_file(self) -> None:
         """Test file_output_fields returns empty list when no file output fields."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="echo",
             version="1.0.0",
             title="Echo",
@@ -250,7 +283,7 @@ class TestNodeDefinition:
 
     def test_file_output_fields_empty_schema(self) -> None:
         """Test file_output_fields with output_schema that has no properties."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="empty",
             version="1.0.0",
             title="Empty",
@@ -263,7 +296,7 @@ class TestNodeDefinition:
     def test_file_input_fields_does_not_detect_binary(self) -> None:
         """Test that file_input_fields does NOT detect format: binary (breaking change)."""
         with pytest.raises(ValueError, match="format 'binary'"):
-            NodeDefinition(
+            WorkflowNodeManifest(
                 name="old",
                 version="1.0.0",
                 title="Old",
@@ -278,9 +311,9 @@ class TestNodeDefinition:
             )
 
     def test_model_validator_rejects_binary_format(self) -> None:
-        """Test that NodeDefinition rejects format: binary at definition time."""
+        """Test that WorkflowNodeManifest rejects format: binary at definition time."""
         with pytest.raises(ValueError, match="no longer supported"):
-            NodeDefinition(
+            WorkflowNodeManifest(
                 name="bad",
                 version="1.0.0",
                 title="Bad",
@@ -295,9 +328,9 @@ class TestNodeDefinition:
             )
 
     def test_model_validator_rejects_file_with_wrong_type(self) -> None:
-        """Test that NodeDefinition rejects format: file with non-string type."""
+        """Test that WorkflowNodeManifest rejects format: file with non-string type."""
         with pytest.raises(ValueError, match="must have type 'string'"):
-            NodeDefinition(
+            WorkflowNodeManifest(
                 name="bad",
                 version="1.0.0",
                 title="Bad",
@@ -313,7 +346,7 @@ class TestNodeDefinition:
 
     def test_to_dict_contains_file_format(self) -> None:
         """Test that to_dict() preserves format: file in schemas."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="echo",
             version="1.0.0",
             title="Echo",
@@ -341,7 +374,7 @@ class TestExportDefinition:
 
     def test_export_definition_creates_registry_compatible_json(self) -> None:
         """Test that export_definition creates registry-compatible JSON."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="test",
             version="1.0.0",
             title="Test Node",
@@ -381,7 +414,7 @@ class TestExportDefinition:
 
     def test_export_definition_maps_title_to_label(self) -> None:
         """Test that title field is mapped to label."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="test",
             version="1.0.0",
             title="My Test Node",
@@ -407,7 +440,7 @@ class TestExportDefinition:
             backoff_multiplier=1.5,
             max_delay_ms=10000,
         )
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="test",
             version="1.0.0",
             title="Test",
@@ -430,7 +463,7 @@ class TestExportDefinition:
 
     def test_export_definition_includes_all_required_fields(self) -> None:
         """Test that export_definition includes all required fields."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="test",
             version="1.0.0",
             title="Test",
@@ -464,7 +497,7 @@ class TestExportDefinition:
 
     def test_export_definition_with_custom_invoke_type(self) -> None:
         """Test that custom invoke_type is included."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="test",
             version="1.0.0",
             title="Test",
@@ -482,7 +515,7 @@ class TestExportDefinition:
 
     def test_export_definition_with_invoke_url(self) -> None:
         """Test that invoke_url is included when provided."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="test",
             version="1.0.0",
             title="Test",
@@ -500,7 +533,7 @@ class TestExportDefinition:
 
     def test_export_definition_with_custom_tags(self) -> None:
         """Test that custom tags are included."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="test",
             version="1.0.0",
             title="Test",
@@ -519,7 +552,7 @@ class TestExportDefinition:
 
     def test_export_definition_with_custom_styles(self) -> None:
         """Test that custom styles override definition.styles."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="test",
             version="1.0.0",
             title="Test",
@@ -538,10 +571,8 @@ class TestExportDefinition:
 
     def test_export_definition_uses_definition_styles_when_not_overridden(self) -> None:
         """Test that definition.styles is used when not overridden."""
-        from canvastekk_workflow_sdk.definition import NodeStyles
-
         styles = NodeStyles(icon="Box", color="blue")
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="test",
             version="1.0.0",
             title="Test",
@@ -560,7 +591,7 @@ class TestExportDefinition:
 
     def test_export_definition_with_constraints(self) -> None:
         """Test that constraints are included when provided."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="test",
             version="1.0.0",
             title="Test",
@@ -579,7 +610,7 @@ class TestExportDefinition:
 
     def test_export_definition_with_node_status(self) -> None:
         """Test that node_status is included."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="test",
             version="1.0.0",
             title="Test",
@@ -597,7 +628,7 @@ class TestExportDefinition:
 
     def test_export_definition_creates_parent_directories(self) -> None:
         """Test that export_definition creates parent directories."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="test",
             version="1.0.0",
             title="Test",
@@ -616,7 +647,7 @@ class TestExportDefinition:
 
     def test_export_definition_writes_formatted_json(self) -> None:
         """Test that export_definition writes formatted JSON with newlines."""
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="test",
             version="1.0.0",
             title="Test",
@@ -635,7 +666,7 @@ class TestExportDefinition:
 
 
 class TestValidateFileInput:
-    """Tests for NodeDefinition.validate_file_input()."""
+    """Tests for WorkflowNodeManifest.validate_file_input()."""
 
     def _make_definition(self, **schema_overrides):
         props = {
@@ -647,7 +678,7 @@ class TestValidateFileInput:
             },
         }
         props.update(schema_overrides)
-        return NodeDefinition(
+        return WorkflowNodeManifest(
             name="test",
             version="1.0.0",
             title="Test",
@@ -683,7 +714,7 @@ class TestValidateFileInput:
                 "format": "file",
             },
         }
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="test",
             version="1.0.0",
             title="Test",
@@ -699,7 +730,7 @@ class TestValidateFileInput:
 class TestSlugValidation:
     def test_valid_slugs(self) -> None:
         for slug in ["echo", "file-loader", "point-cloud-segment", "a1"]:
-            NodeDefinition(
+            WorkflowNodeManifest(
                 name=slug,
                 version="1.0.0",
                 title="Test",
@@ -709,7 +740,7 @@ class TestSlugValidation:
             )
 
     def test_single_char_slug(self) -> None:
-        NodeDefinition(
+        WorkflowNodeManifest(
             name="a",
             version="1.0.0",
             title="Test",
@@ -720,7 +751,7 @@ class TestSlugValidation:
 
     def test_rejects_uppercase(self) -> None:
         with pytest.raises(ValueError, match="lowercase slug"):
-            NodeDefinition(
+            WorkflowNodeManifest(
                 name="Echo",
                 version="1.0.0",
                 title="Test",
@@ -731,7 +762,7 @@ class TestSlugValidation:
 
     def test_rejects_spaces(self) -> None:
         with pytest.raises(ValueError, match="lowercase slug"):
-            NodeDefinition(
+            WorkflowNodeManifest(
                 name="has space",
                 version="1.0.0",
                 title="Test",
@@ -742,7 +773,7 @@ class TestSlugValidation:
 
     def test_rejects_underscores(self) -> None:
         with pytest.raises(ValueError, match="lowercase slug"):
-            NodeDefinition(
+            WorkflowNodeManifest(
                 name="under_score",
                 version="1.0.0",
                 title="Test",
@@ -753,7 +784,7 @@ class TestSlugValidation:
 
     def test_rejects_leading_hyphen(self) -> None:
         with pytest.raises(ValueError, match="lowercase slug"):
-            NodeDefinition(
+            WorkflowNodeManifest(
                 name="-leading",
                 version="1.0.0",
                 title="Test",
@@ -764,7 +795,7 @@ class TestSlugValidation:
 
     def test_rejects_trailing_hyphen(self) -> None:
         with pytest.raises(ValueError, match="lowercase slug"):
-            NodeDefinition(
+            WorkflowNodeManifest(
                 name="trailing-",
                 version="1.0.0",
                 title="Test",
@@ -775,7 +806,7 @@ class TestSlugValidation:
 
     def test_rejects_numeric_start(self) -> None:
         with pytest.raises(ValueError, match="lowercase slug"):
-            NodeDefinition(
+            WorkflowNodeManifest(
                 name="1numeric",
                 version="1.0.0",
                 title="Test",
@@ -788,7 +819,7 @@ class TestSlugValidation:
 class TestSemverValidation:
     def test_valid_versions(self) -> None:
         for v in ["1.0.0", "0.1.0", "10.20.30"]:
-            NodeDefinition(
+            WorkflowNodeManifest(
                 name="test",
                 version=v,
                 title="Test",
@@ -799,7 +830,7 @@ class TestSemverValidation:
 
     def test_rejects_two_part(self) -> None:
         with pytest.raises(ValueError, match="semantic version"):
-            NodeDefinition(
+            WorkflowNodeManifest(
                 name="test",
                 version="1.0",
                 title="Test",
@@ -810,7 +841,7 @@ class TestSemverValidation:
 
     def test_rejects_v_prefix(self) -> None:
         with pytest.raises(ValueError, match="semantic version"):
-            NodeDefinition(
+            WorkflowNodeManifest(
                 name="test",
                 version="v1.0.0",
                 title="Test",
@@ -821,7 +852,7 @@ class TestSemverValidation:
 
     def test_rejects_prerelease(self) -> None:
         with pytest.raises(ValueError, match="semantic version"):
-            NodeDefinition(
+            WorkflowNodeManifest(
                 name="test",
                 version="1.0.0-alpha",
                 title="Test",
@@ -832,7 +863,7 @@ class TestSemverValidation:
 
     def test_rejects_non_numeric(self) -> None:
         with pytest.raises(ValueError, match="semantic version"):
-            NodeDefinition(
+            WorkflowNodeManifest(
                 name="test",
                 version="abc",
                 title="Test",
@@ -843,7 +874,7 @@ class TestSemverValidation:
 
     def test_rejects_leading_zeros(self) -> None:
         with pytest.raises(ValueError, match="semantic version"):
-            NodeDefinition(
+            WorkflowNodeManifest(
                 name="test",
                 version="01.0.0",
                 title="Test",
@@ -855,7 +886,7 @@ class TestSemverValidation:
 
 class TestIdAutoDerivation:
     def test_id_auto_derived(self) -> None:
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="echo",
             version="1.0.0",
             title="Echo",
@@ -866,7 +897,7 @@ class TestIdAutoDerivation:
         assert definition.id == "echo-v1.0.0"
 
     def test_id_in_to_dict(self) -> None:
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="echo",
             version="1.2.0",
             title="Echo",
@@ -881,7 +912,7 @@ class TestIdAutoDerivation:
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            definition = NodeDefinition(
+            definition = WorkflowNodeManifest(
                 id="echo-v1.0.0",
                 name="echo",
                 version="1.0.0",
@@ -899,7 +930,7 @@ class TestIdAutoDerivation:
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            definition = NodeDefinition(
+            definition = WorkflowNodeManifest(
                 id="wrong-v1.0.0",
                 name="echo",
                 version="1.0.0",
@@ -915,13 +946,7 @@ class TestIdAutoDerivation:
 
 class TestExportDefinitionNoId:
     def test_export_does_not_include_id(self) -> None:
-        import json
-        import tempfile
-        from pathlib import Path
-
-        from canvastekk_workflow_sdk.definition import export_definition
-
-        definition = NodeDefinition(
+        definition = WorkflowNodeManifest(
             name="test",
             version="1.0.0",
             title="Test",
@@ -936,3 +961,51 @@ class TestExportDefinitionNoId:
             assert "id" not in data
             assert data["name"] == "test"
             assert data["version"] == "1.0.0"
+
+
+class TestBackwardCompatAliases:
+    def test_node_styles_alias(self) -> None:
+        from canvastekk_workflow_sdk.definition import NodeStyles, WorkflowNodeStyles
+
+        assert NodeStyles is WorkflowNodeStyles
+
+    def test_node_role_alias(self) -> None:
+        from canvastekk_workflow_sdk.definition import NodeRole, WorkflowNodeRole
+
+        assert NodeRole is WorkflowNodeRole
+
+    def test_node_definition_alias(self) -> None:
+        from canvastekk_workflow_sdk.definition import NodeDefinition, WorkflowNodeManifest
+
+        assert NodeDefinition is WorkflowNodeManifest
+
+    def test_workflow_node_definition_alias(self) -> None:
+        from canvastekk_workflow_sdk.definition import WorkflowNodeDefinition, WorkflowNodeManifest
+
+        assert WorkflowNodeDefinition is WorkflowNodeManifest
+
+    def test_workflow_node_styles_importable_from_top_level(self) -> None:
+        from canvastekk_workflow_sdk import WorkflowNodeStyles
+
+        styles = WorkflowNodeStyles(icon="Brain", color="emerald")
+        assert styles.icon == "Brain"
+
+    def test_workflow_node_role_importable_from_top_level(self) -> None:
+        from canvastekk_workflow_sdk import WorkflowNodeRole
+
+        assert WorkflowNodeRole.OPERATION.value == "operation"
+
+    def test_workflow_node_styles_primary_name(self) -> None:
+        from canvastekk_workflow_sdk.definition import WorkflowNodeStyles
+
+        styles = WorkflowNodeStyles(icon="Test", color="blue")
+        assert styles.icon == "Test"
+        assert styles.color == "blue"
+
+    def test_workflow_node_role_primary_name(self) -> None:
+        from canvastekk_workflow_sdk.definition import WorkflowNodeRole
+
+        assert WorkflowNodeRole.START.value == "start"
+        assert WorkflowNodeRole.END.value == "end"
+        assert WorkflowNodeRole.ERROR_GATE.value == "error_gate"
+        assert WorkflowNodeRole.OPERATION.value == "operation"

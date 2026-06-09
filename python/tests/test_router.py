@@ -4,12 +4,12 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest
 from canvastekk_workflow_sdk.router import create_multi_node_app
 
 
 class EchoNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="echo",
         version="1.0.0",
         title="Echo",
@@ -23,7 +23,7 @@ class EchoNode(BaseNode):
 
 
 class ReverseNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="reverse",
         version="1.0.0",
         title="Reverse",
@@ -37,7 +37,7 @@ class ReverseNode(BaseNode):
 
 
 class UpperNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="upper",
         version="1.0.0",
         title="Upper",

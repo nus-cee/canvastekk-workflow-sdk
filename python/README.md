@@ -752,14 +752,14 @@ poetry run pytest tests/test_my_node.py
 
 ### NodeDefinition
 
-Defines what a node is. Maps to the engine's **registry-level node type** (`WorkflowNode` in engine terminology). This is distinct from `WorkflowDefinitionNode`, which the engine uses for node instances within a workflow definition.
+Defines what a node is. Maps to the engine's **registry-level node type** (`WorkflowNodeManifest` in engine terminology). This is distinct from `WorkflowDefinitionNode`, which the engine uses for node instances within a workflow definition.
 
 **Required fields:** `name`, `version`, `title`, `description`, `input_schema`, `output_schema`. Note: `id` is auto-derived from `name` + `version` and must NOT be provided manually.
 
 **Versioning:** The `version` field is a semantic version string (e.g., `"1.0.0"`) validated against the X.Y.Z pattern. The engine uses this version directly and enforces immutability: re-registering with the same version and changed data is rejected. Bump the version for any schema or metadata changes.
 
 ```python
-from canvastekk_workflow_sdk import NodeDefinition, RetryConfig, NodeStyles
+from canvastekk_workflow_sdk import NodeDefinition, RetryConfig, WorkflowNodeStyles
 from canvastekk_workflow_sdk.definition import ColorPreset
 
 definition = NodeDefinition(
@@ -779,8 +779,7 @@ definition = NodeDefinition(
     default_retry=RetryConfig(max_attempts=3, initial_delay_ms=1000),
     category="inference",
     timeout_seconds=60,
-    is_control_flow=False,
-    styles=NodeStyles(icon="Brain", color="emerald"),
+    styles=WorkflowNodeStyles(icon="Brain", color="emerald"),
 )
 ```
 
@@ -792,7 +791,7 @@ Optional fields with defaults:
 | `default_retry` | `RetryConfig(1 attempt)` | Retry policy |
 | `category` | `"utility"` | Node category (`transform`, `inference`, `utility`, `control-flow`) |
 | `timeout_seconds` | 30 | Max execution time |
-| `is_control_flow` | `False` | Run in orchestrator, not HTTP |
+| `role` | `WorkflowNodeRole.OPERATION` | Node role (`start`, `end`, `error_gate`, `operation`) |
 | `styles` | `None` | Icon/color for UI |
 
 ### ExecutionContext
@@ -1006,13 +1005,35 @@ The SDK provides utilities for registering nodes with the CanvasTEKK Workflow En
 
 | SDK Type | Engine Type | Purpose |
 |----------|-------------|---------|
-| `NodeDefinition` | `WorkflowNode` | Registry-level node type (schemas, metadata, styles) |
-| `workflow.WorkflowNode` | `WorkflowDefinitionNode` | Node instance within a workflow (inputs, position, edges) |
-| `workflow.WorkflowSpec` | `WorkflowSpec` | Complete workflow definition (nodes + edges as a DAG) |
+| `NodeDefinition` | `WorkflowNodeManifest` | Registry-level node type (schemas, metadata, styles) |
+| `workflow.WorkflowDefinitionNode` | `WorkflowDefinitionNode` | Node instance within a workflow (inputs, position, edges) |
+| `workflow.WorkflowDefinitionSpec` | `WorkflowDefinitionSpec` | Complete workflow definition (nodes + edges as a DAG) |
 
 Node authors only interact with `NodeDefinition`. The engine handles `WorkflowDefinitionNode` internally.
 
-The SDK's `workflow` module provides a local equivalent: `WorkflowBuilder` creates `WorkflowSpec` objects that serialize to engine-compatible JSON, and `WorkflowRunner` executes them locally.
+The SDK's `workflow` module provides a local equivalent: `WorkflowBuilder` creates `WorkflowDefinitionSpec` objects that serialize to engine-compatible JSON, and `WorkflowRunner` executes them locally.
+
+### Naming Convention Table
+
+| Artifact | Name | Parent Concept |
+|----------|------|----------------|
+| Node registration manifest | `WorkflowNodeManifest` | `WorkflowNodeRegistry` (engine) |
+| Workflow DAG | `WorkflowDefinition` | — |
+| Node in DAG | `WorkflowDefinitionNode` | `WorkflowDefinition` |
+| Edge in DAG | `WorkflowEdgeDefinition` | `WorkflowDefinition` |
+| Full spec | `WorkflowDefinitionSpec` | `WorkflowDefinition` |
+
+### Backward-Compatible Aliases
+
+Old names still work as aliases and will not be removed:
+
+| Old Name | Current Name |
+|----------|-------------|
+| `NodeDefinition` | `WorkflowNodeManifest` |
+| `WorkflowNodeDefinition` | `WorkflowNodeManifest` |
+| `WorkflowNode` | `WorkflowDefinitionNode` |
+| `WorkflowEdge` | `WorkflowEdgeDefinition` |
+| `WorkflowSpec` | `WorkflowDefinitionSpec` |
 
 ### Versioning
 
@@ -1159,7 +1180,7 @@ from canvastekk_workflow_sdk.workflow.executor import InProcessExecutor
 
 # Build a workflow
 spec = (
-    WorkflowBuilder("my-pipeline")
+    WorkflowBuilder()
     .add_start("start", outputs=["point_cloud"])
     .add_node("segment", slug="segmentation-v1.0.0", inputs={"method": "dbscan"})
     .add_node("measure", slug="measurement-v1.0.0")
@@ -1209,7 +1230,7 @@ Add an END node (workflow terminal). Multiple allowed.
 builder.add_end("end")
 ```
 
-#### `add_node(node_id, *, slug, name=None, inputs=None, version=None)`
+#### `add_node(node_id, *, slug, name=None, inputs=None, version=None, config_schema=None, workflow_node_id=None)`
 
 Add a user node with a registry slug reference. Slug `"__start__"` and `"__end__"` are reserved.
 
@@ -1217,7 +1238,11 @@ Add a user node with a registry slug reference. Slug `"__start__"` and `"__end__
 builder.add_node("segment", slug="segmentation-v1.0.0", inputs={"method": "dbscan"}, version="1.0.0")
 ```
 
-#### `connect(from_node, to_node, *, from_output="", to_input="", edge_type=EdgeType.DEFAULT, resolution_strategy=ResolutionStrategy.AUTO, condition=None)`
+The created `WorkflowDefinitionNode` includes:
+- `workflow_node_id` — optional str, a separate identifier for the node within the workflow
+- `config_schema` — optional dict, a JSON Schema describing the node's configuration UI
+
+#### `connect(from_node, to_node, *, from_output="", to_input="", edge_type=EdgeType.DEFAULT, condition=None)`
 
 Add an edge connecting two nodes. Validates that both node IDs exist.
 
@@ -1227,7 +1252,7 @@ builder.connect("start", "segment", from_output="point_cloud", to_input="input_f
 
 #### `build(*, validate=True)`
 
-Construct the `WorkflowSpec`. If `validate=True` (default), validates the graph and raises `WorkflowValidationError` on failure.
+Construct the `WorkflowDefinitionSpec`. If `validate=True` (default), validates the graph and raises `WorkflowValidationError` on failure.
 
 ### NodeExecutor Strategy
 
@@ -1319,19 +1344,9 @@ Matching engine routing semantics:
 | `FAILURE` | Fires only on failure result |
 | `CONDITIONAL` | Fires based on CEL expression evaluation |
 
-### Resolution Strategies
-
-How `from_output` is resolved against source node outputs:
-
-| Strategy | Behavior |
-|----------|----------|
-| `AUTO` | Flat key lookup first; dot-path traversal as fallback |
-| `FLAT` | Treat `from_output` as a literal key name |
-| `DOT_PATH` | Always walk dot-path segments (e.g. `"data.url"` → `outputs["data"]["url"]`) |
-
 ### Engine Compatibility
 
-`WorkflowSpec.model_dump(mode="json")` produces JSON compatible with the engine's `SaveWorkflowRequest.spec`:
+`WorkflowDefinitionSpec.model_dump(mode="json")` produces JSON compatible with the engine's `SaveWorkflowRequest.spec`:
 
 ```python
 spec_json = spec.model_dump(mode="json")

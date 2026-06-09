@@ -9,7 +9,7 @@ from canvastekk_workflow_sdk.workflow.models import EdgeType
 class TestWorkflowBuilder:
     def test_basic_workflow_creation(self) -> None:
         spec = (
-            WorkflowBuilder("test-workflow")
+            WorkflowBuilder()
             .add_start("start", outputs=["message"])
             .add_node("echo", slug="echo-v1.0.0")
             .add_end("end")
@@ -18,7 +18,6 @@ class TestWorkflowBuilder:
             .build()
         )
 
-        assert spec.name == "test-workflow"
         assert len(spec.nodes) == 3
         assert len(spec.edges) == 2
 
@@ -94,7 +93,6 @@ class TestWorkflowBuilder:
             .build(validate=False)
         )
 
-        assert spec.name is None
         assert len(spec.nodes) == 2
 
     def test_duplicate_node_id_detection(self) -> None:
@@ -139,21 +137,6 @@ class TestWorkflowBuilder:
 
         edge = next(e for e in spec.edges if e.from_node == "start" and e.to_node == "node")
         assert edge.edge_type == EdgeType.SUCCESS
-
-    def test_connect_with_resolution_strategy(self) -> None:
-        from canvastekk_workflow_sdk.workflow.models import ResolutionStrategy
-
-        spec = (
-            WorkflowBuilder()
-            .add_start("start")
-            .add_node("node", slug="echo-v1.0.0")
-            .add_end("end")
-            .connect("start", "node", resolution_strategy=ResolutionStrategy.DOT_PATH)
-            .build(validate=False)
-        )
-
-        edge = next(e for e in spec.edges if e.from_node == "start" and e.to_node == "node")
-        assert edge.resolution_strategy == ResolutionStrategy.DOT_PATH
 
     def test_connect_with_condition(self) -> None:
         spec = (
@@ -206,10 +189,46 @@ class TestWorkflowBuilder:
         assert len(edges) == 2
         assert edges[0].edge_type != edges[1].edge_type
 
-    def test_workflow_builder_name(self) -> None:
-        spec = WorkflowBuilder("my-workflow").add_start("start").add_end("end").build(validate=False)
-        assert spec.name == "my-workflow"
+    def test_add_start_with_workflow_node_id(self) -> None:
+        builder = WorkflowBuilder()
+        builder.add_start("start", workflow_node_id="wn-start-1")
+        spec = builder.build(validate=False)
 
-    def test_workflow_builder_no_name(self) -> None:
-        spec = WorkflowBuilder().add_start("start").add_end("end").build(validate=False)
-        assert spec.name is None
+        start_node = next(n for n in spec.nodes if n.id == "start")
+        assert start_node.workflow_node_id == "wn-start-1"
+
+    def test_add_end_with_workflow_node_id(self) -> None:
+        builder = WorkflowBuilder()
+        builder.add_end("end", workflow_node_id="wn-end-1")
+        spec = builder.build(validate=False)
+
+        end_node = next(n for n in spec.nodes if n.id == "end")
+        assert end_node.workflow_node_id == "wn-end-1"
+
+    def test_add_node_with_workflow_node_id_and_config_schema(self) -> None:
+        spec = (
+            WorkflowBuilder()
+            .add_node(
+                "node1",
+                slug="echo-v1.0.0",
+                workflow_node_id="wn-123",
+                config_schema={"type": "object", "properties": {"param": {"type": "string"}}},
+            )
+            .add_end("end")
+            .build(validate=False)
+        )
+
+        node = next(n for n in spec.nodes if n.id == "node1")
+        assert node.workflow_node_id == "wn-123"
+        assert node.config_schema == {"type": "object", "properties": {"param": {"type": "string"}}}
+
+    def test_add_node_with_optional_slug(self) -> None:
+        spec = (
+            WorkflowBuilder()
+            .add_node("node1")
+            .add_end("end")
+            .build(validate=False)
+        )
+
+        node = next(n for n in spec.nodes if n.id == "node1")
+        assert node.slug is None

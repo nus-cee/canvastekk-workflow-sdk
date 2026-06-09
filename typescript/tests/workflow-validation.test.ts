@@ -4,15 +4,14 @@ import { validate } from "../src/workflow/validation.js";
 describe("validate", () => {
   it("valid spec passes", () => {
     const spec = {
-      name: "valid",
       nodes: [
         { id: "start", slug: "__start__", name: "START", inputs: {} },
         { id: "n1", slug: "node-v1", inputs: {} },
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
-        { id: "e2", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
+        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e2", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -25,13 +24,12 @@ describe("validate", () => {
 
   it("missing start node → error", () => {
     const spec = {
-      name: "no-start",
       nodes: [
         { id: "n1", slug: "node-v1", inputs: {} },
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
+        { id: "e1", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -42,15 +40,14 @@ describe("validate", () => {
 
   it("multiple start nodes → error", () => {
     const spec = {
-      name: "multi-start",
       nodes: [
         { id: "start1", slug: "__start__", name: "START", inputs: {} },
         { id: "start2", slug: "__start__", name: "START", inputs: {} },
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
-        { id: "e2", fromNode: "start2", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
+        { id: "e1", fromNode: "start1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e2", fromNode: "start2", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -61,13 +58,12 @@ describe("validate", () => {
 
   it("missing end node → error", () => {
     const spec = {
-      name: "no-end",
       nodes: [
         { id: "start", slug: "__start__", name: "START", inputs: {} },
         { id: "n1", slug: "node-v1", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
+        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -78,7 +74,6 @@ describe("validate", () => {
 
   it("duplicate node IDs → error", () => {
     const spec = {
-      name: "dup-id",
       nodes: [
         { id: "n1", slug: "node-v1", inputs: {} },
         { id: "n1", slug: "node-v2", inputs: {} },
@@ -86,8 +81,8 @@ describe("validate", () => {
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
-        { id: "e2", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
+        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e2", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -98,15 +93,14 @@ describe("validate", () => {
 
   it("edge references non-existent node → error", () => {
     const spec = {
-      name: "bad-edge",
       nodes: [
         { id: "start", slug: "__start__", name: "START", inputs: {} },
         { id: "n1", slug: "node-v1", inputs: {} },
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "ghost", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
-        { id: "e2", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
+        { id: "e1", fromNode: "start", toNode: "ghost", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e2", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -117,7 +111,6 @@ describe("validate", () => {
 
   it("cycle → error", () => {
     const spec = {
-      name: "cycle",
       nodes: [
         { id: "start", slug: "__start__", name: "START", inputs: {} },
         { id: "n1", slug: "node-v1", inputs: {} },
@@ -125,10 +118,10 @@ describe("validate", () => {
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
-        { id: "e2", fromNode: "n1", toNode: "n2", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
-        { id: "e3", fromNode: "n2", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
-        { id: "e4", fromNode: "n2", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
+        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e2", fromNode: "n1", toNode: "n2", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e3", fromNode: "n2", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e4", fromNode: "n2", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -139,7 +132,6 @@ describe("validate", () => {
 
   it("orphan nodes detected", () => {
     const spec = {
-      name: "orphans",
       nodes: [
         { id: "start", slug: "__start__", name: "START", inputs: {} },
         { id: "n1", slug: "node-v1", inputs: {} },
@@ -147,8 +139,8 @@ describe("validate", () => {
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
-        { id: "e2", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
+        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e2", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -160,7 +152,6 @@ describe("validate", () => {
 
   it("dead-end nodes detected", () => {
     const spec = {
-      name: "dead-end",
       nodes: [
         { id: "start", slug: "__start__", name: "START", inputs: {} },
         { id: "n1", slug: "node-v1", inputs: {} },
@@ -168,9 +159,8 @@ describe("validate", () => {
         { id: "end2", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
-        { id: "e2", fromNode: "n1", toNode: "end1", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
-        // end2 is a dead end (no path from start to end2)
+        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e2", fromNode: "n1", toNode: "end1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -182,15 +172,14 @@ describe("validate", () => {
 
   it("start node with incoming edges → error", () => {
     const spec = {
-      name: "start-incoming",
       nodes: [
         { id: "start", slug: "__start__", name: "START", inputs: {} },
         { id: "n1", slug: "node-v1", inputs: {} },
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "n1", toNode: "start", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
-        { id: "e2", fromNode: "start", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
+        { id: "e1", fromNode: "n1", toNode: "start", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e2", fromNode: "start", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -201,15 +190,14 @@ describe("validate", () => {
 
   it("end node with outgoing edges → error", () => {
     const spec = {
-      name: "end-outgoing",
       nodes: [
         { id: "start", slug: "__start__", name: "START", inputs: {} },
         { id: "end", slug: "__end__", name: "END", inputs: {} },
         { id: "n1", slug: "node-v1", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
-        { id: "e2", fromNode: "end", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
+        { id: "e1", fromNode: "start", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e2", fromNode: "end", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -220,15 +208,14 @@ describe("validate", () => {
 
   it("duplicate edge IDs → error", () => {
     const spec = {
-      name: "dup-edge-id",
       nodes: [
         { id: "start", slug: "__start__", name: "START", inputs: {} },
         { id: "n1", slug: "node-v1", inputs: {} },
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
-        { id: "e1", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, resolutionStrategy: "auto" as const, condition: null },
+        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e1", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
       ],
       metadata: {},
     };

@@ -36,13 +36,14 @@ export const ColorPresetSchema = z.union([
 /** Color preset for node UI styling. */
 export type ColorPreset = z.infer<typeof ColorPresetSchema>;
 
-export const NodeStylesSchema = z.object({
+export const WorkflowNodeStylesSchema = z.object({
   icon: z.string().nullable().default(null),
   color: ColorPresetSchema.nullable().default(null),
 });
 
-/** Node UI styling configuration. */
-export type NodeStyles = z.infer<typeof NodeStylesSchema>;
+export type WorkflowNodeStyles = z.infer<typeof WorkflowNodeStylesSchema>;
+export type NodeStyles = WorkflowNodeStyles;
+export const NodeStylesSchema = WorkflowNodeStylesSchema;
 
 export const RetryConfigSchema = z.object({
   max_attempts: z.number().int().min(1).default(1),
@@ -53,6 +54,12 @@ export const RetryConfigSchema = z.object({
 
 /** Retry configuration with exponential backoff. */
 export type RetryConfig = z.infer<typeof RetryConfigSchema>;
+
+export const WorkflowNodeRoleSchema = z.enum(["start", "end", "error_gate", "operation"]).default("operation");
+
+export type WorkflowNodeRole = z.infer<typeof WorkflowNodeRoleSchema>;
+export type NodeRole = WorkflowNodeRole;
+export const NodeRoleSchema = WorkflowNodeRoleSchema;
 
 function validateFileFieldFormats(
   schema: Record<string, unknown>,
@@ -79,7 +86,7 @@ function validateFileFieldFormats(
   }
 }
 
-export const NodeDefinitionSchema = z
+export const WorkflowNodeManifestSchema = z
   .object({
     id: z.unknown().optional(),
     name: z.string().refine((v) => SLUG_PATTERN.test(v), (v) => ({
@@ -96,8 +103,8 @@ export const NodeDefinitionSchema = z
     default_retry: RetryConfigSchema.default(RetryConfigSchema.parse({})),
     category: z.string().default("utility"),
     timeout_seconds: z.number().int().min(1).default(30),
-    is_control_flow: z.boolean().default(false),
-    styles: NodeStylesSchema.nullable().default(null),
+    role: WorkflowNodeRoleSchema,
+    styles: WorkflowNodeStylesSchema.nullable().default(null),
   })
   .transform((data, ctx) => {
     if (data.id !== undefined) {
@@ -121,10 +128,14 @@ export const NodeDefinitionSchema = z
     return rest;
   });
 
-/** Complete node definition including metadata, schemas, and configuration. */
-export type NodeDefinition = z.infer<typeof NodeDefinitionSchema>;
+/** Complete node manifest including metadata, schemas, and configuration. */
+export type WorkflowNodeManifest = z.infer<typeof WorkflowNodeManifestSchema>;
 
-export function getNodeId(def: Pick<NodeDefinition, "name" | "version">): string {
+export type WorkflowNodeDefinition = WorkflowNodeManifest;
+
+export type NodeDefinition = WorkflowNodeManifest;
+
+export function getNodeId(def: Pick<WorkflowNodeManifest, "name" | "version">): string {
   return `${def.name}-v${def.version}`;
 }
 
@@ -136,7 +147,7 @@ export function getNodeId(def: Pick<NodeDefinition, "name" | "version">): string
  * @param def - Node definition to inspect
  * @returns Array of field names that have `format: "file"`
  */
-export function getFileInputFields(def: NodeDefinition): string[] {
+export function getFileInputFields(def: WorkflowNodeManifest): string[] {
   const properties = ((def.input_schema as Record<string, unknown>)?.properties ?? {}) as Record<
     string,
     Record<string, unknown>
@@ -154,7 +165,7 @@ export function getFileInputFields(def: NodeDefinition): string[] {
  * @param def - Node definition to inspect
  * @returns Array of field names that have `format: "file"`
  */
-export function getFileOutputFields(def: NodeDefinition): string[] {
+export function getFileOutputFields(def: WorkflowNodeManifest): string[] {
   const properties = ((def.output_schema as Record<string, unknown>)?.properties ?? {}) as Record<
     string,
     Record<string, unknown>
@@ -177,7 +188,7 @@ export function getFileOutputFields(def: NodeDefinition): string[] {
  * @throws {NodeValidationError} If file extension or size violates constraints
  */
 export function validateFileInput(
-  def: NodeDefinition,
+  def: WorkflowNodeManifest,
   fieldName: string,
   filePath: string,
   fileSize?: number,

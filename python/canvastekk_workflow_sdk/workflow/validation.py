@@ -12,7 +12,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from canvastekk_workflow_sdk.workflow.models import WorkflowEdge, WorkflowNode, WorkflowSpec
+    from canvastekk_workflow_sdk.workflow.models import (
+        WorkflowDefinitionNode,
+        WorkflowDefinitionSpec,
+        WorkflowEdgeDefinition,
+    )
 
 
 @dataclass
@@ -25,7 +29,7 @@ class ValidationResult:
     dead_ends: list[str] = field(default_factory=list)
 
 
-def validate(spec: WorkflowSpec) -> ValidationResult:
+def validate(spec: WorkflowDefinitionSpec) -> ValidationResult:
     """Validate a workflow spec for structural correctness.
 
     Checks:
@@ -68,7 +72,7 @@ def validate(spec: WorkflowSpec) -> ValidationResult:
     return result
 
 
-def _check_node_ids(nodes: list[WorkflowNode], result: ValidationResult) -> None:
+def _check_node_ids(nodes: list[WorkflowDefinitionNode], result: ValidationResult) -> None:
     """Validate that all nodes have unique, non-empty string IDs.
 
     Args:
@@ -89,7 +93,7 @@ def _check_node_ids(nodes: list[WorkflowNode], result: ValidationResult) -> None
 
 
 def _check_edge_references(
-    edges: list[WorkflowEdge],
+    edges: list[WorkflowEdgeDefinition],
     node_ids: set[str],
     result: ValidationResult,
 ) -> None:
@@ -121,9 +125,9 @@ def _check_edge_references(
 
 
 def _check_start_end(
-    nodes: list[WorkflowNode],
-    edges: list[WorkflowEdge],
-    node_map: dict[str, WorkflowNode],
+    nodes: list[WorkflowDefinitionNode],
+    edges: list[WorkflowEdgeDefinition],
+    node_map: dict[str, WorkflowDefinitionNode],
     result: ValidationResult,
 ) -> None:
     """Validate START/END constraints.
@@ -182,8 +186,8 @@ def _check_start_end(
 
 
 def _check_cycles(
-    nodes: list[WorkflowNode],
-    edges: list[WorkflowEdge],
+    nodes: list[WorkflowDefinitionNode],
+    edges: list[WorkflowEdgeDefinition],
     result: ValidationResult,
 ) -> None:
     """Detect cycles using Kahn's algorithm (topological sort).
@@ -221,9 +225,9 @@ def _check_cycles(
 
 
 def _check_connectivity(
-    nodes: list[WorkflowNode],
-    edges: list[WorkflowEdge],
-    node_map: dict[str, WorkflowNode],
+    nodes: list[WorkflowDefinitionNode],
+    edges: list[WorkflowEdgeDefinition],
+    node_map: dict[str, WorkflowDefinitionNode],
     result: ValidationResult,
 ) -> None:
     """Check graph connectivity using BFS.

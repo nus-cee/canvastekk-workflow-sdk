@@ -1,4 +1,4 @@
-import type { WorkflowSpec } from "./models.js";
+import type { WorkflowDefinitionSpec } from "./models.js";
 
 /**
  * Computes topological levels for workflow execution.
@@ -7,7 +7,7 @@ import type { WorkflowSpec } from "./models.js";
  * @returns Array of node ID arrays, one per level
  * @throws Error if workflow contains a cycle
  */
-export function computeLevels(spec: WorkflowSpec): string[][] {
+export function computeLevels(spec: WorkflowDefinitionSpec): string[][] {
   const nodeIds = spec.nodes.map((n) => n.id);
   if (nodeIds.length === 0) return [];
 

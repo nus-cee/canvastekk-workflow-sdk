@@ -106,14 +106,62 @@ The `id` field is automatically derived from `name` + `version` as `{name}-v{ver
 
 ### SDK Types and Engine Terminology
 
-The SDK's `NodeDefinition` maps to the engine's **registry-level node type** (called `WorkflowNode` in the engine). This is distinct from `WorkflowDefinitionNode`, which the engine uses to represent a node instance within a specific workflow definition.
+The SDK's `NodeDefinition` maps to the engine's **registry-level node type** (called `WorkflowNodeManifest` in the engine). This is distinct from `WorkflowDefinitionNode`, which the engine uses to represent a node instance within a specific workflow definition.
 
 | SDK Type | Engine Type | Purpose |
 |----------|-------------|---------|
-| `NodeDefinition` | `WorkflowNode` | Registry-level node type (schemas, metadata, styles) |
+| `NodeDefinition` | `WorkflowNodeManifest` | Registry-level node type (schemas, metadata, styles) |
 | — | `WorkflowDefinitionNode` | Node instance within a workflow definition (inputs, position, edges) |
+| — | `WorkflowEdgeDefinition` | Edge instance connecting two nodes in a workflow definition |
+| — | `WorkflowDefinitionSpec` | Complete workflow definition (nodes, edges, metadata) |
 
-Node authors only interact with `NodeDefinition`. The engine handles `WorkflowDefinitionNode` internally.
+Node authors only interact with `NodeDefinition`. The engine handles `WorkflowDefinitionNode`, `WorkflowEdgeDefinition`, and `WorkflowDefinitionSpec` internally.
+
+### Node Role (`WorkflowNodeRole` enum)
+
+Every node has a `role` field (type: `WorkflowNodeRole`) that indicates its function in the workflow:
+
+| Role | Value | Description |
+|------|-------|-------------|
+| `start` | `"start"` | Workflow entry point. The engine creates an implicit start node for every workflow. |
+| `end` | `"end"` | Workflow terminal node. Marks a completion path. |
+| `error_gate` | `"error_gate"` | Error handling node. The engine routes failures here when configured. |
+| `operation` | `"operation"` | Default. A processing/transform node. |
+
+The `role` field defaults to `"operation"` — most custom nodes do not need to set it explicitly.
+
+### Workflow Definition Node Fields
+
+`WorkflowDefinitionNode` (engine-internal) includes these fields that node authors should be aware of:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `workflow_node_id` | `str \| None` | Optional. References a registered `WorkflowNodeManifest` by ID (e.g., `my-node-v1.0.0`). Links the node instance to its registered definition. |
+| `config_schema` | `dict \| None` | Optional. Runtime configuration schema overrides for this specific node instance within the workflow. |
+| `role` | `WorkflowNodeRole` | Node function in the workflow (see above). Defaults to `operation`. |
+
+### Naming Conventions
+
+SDK and engine types follow a parent→child naming pattern:
+
+| Type | Parent | Purpose |
+|------|--------|---------|
+| `WorkflowNodeManifest` | `WorkflowNodeRegistry` | Registration artifact stored in the engine registry |
+| `WorkflowDefinitionNode` | `WorkflowDefinition` | Node instance within a specific workflow definition |
+| `WorkflowEdgeDefinition` | `WorkflowDefinition` | Edge instance connecting two nodes in a workflow definition |
+| `WorkflowDefinitionSpec` | `WorkflowDefinition` | Complete workflow spec containing nodes, edges, and metadata |
+
+### Backward-Compatibility Aliases
+
+Old type names remain available as aliases for migration compatibility:
+
+| Old Name | Current Name |
+|----------|-------------|
+| `NodeDefinition` | `WorkflowNodeManifest` |
+| `WorkflowNodeDefinition` | `WorkflowNodeManifest` |
+| `WorkflowNode` | `WorkflowDefinitionNode` |
+| `WorkflowEdge` | `WorkflowEdgeDefinition` |
+| `WorkflowSpec` | `WorkflowDefinitionSpec` |
 
 ### File Inputs
 
@@ -237,7 +285,7 @@ The platform team will deploy it to the cluster. Once running, your node exposes
 
 ## Step 5: Register with the Engine
 
-After deployment, register your node so the engine can discover it. The engine stores your node as a `WorkflowNode` (registry-level node type) — distinct from a `WorkflowDefinitionNode`, which represents a node instance within a workflow definition.
+After deployment, register your node so the engine can discover it. The engine stores your node as a `WorkflowNodeManifest` (registry-level node type) — distinct from a `WorkflowDefinitionNode`, which represents a node instance within a workflow definition.
 
 ### Authentication Methods
 

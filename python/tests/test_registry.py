@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from canvastekk_workflow_sdk import NodeDefinition
+from canvastekk_workflow_sdk import WorkflowNodeManifest
 from canvastekk_workflow_sdk.base import BaseNode
 from canvastekk_workflow_sdk.context import ExecutionContext
 from canvastekk_workflow_sdk.registry import (
@@ -21,7 +21,7 @@ from canvastekk_workflow_sdk.registry import (
 
 
 class DummyNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="test",
         version="1.0.0",
         title="Test Node",
@@ -406,7 +406,7 @@ class TestRegistrationError:
 class TestBuildRegistryPayload:
     """Tests for build_registry_payload shared helper."""
 
-    def _make_definition(self, **overrides) -> NodeDefinition:
+    def _make_definition(self, **overrides) -> WorkflowNodeManifest:
         defaults = dict(
             name="test",
             version="1.0.0",
@@ -416,7 +416,7 @@ class TestBuildRegistryPayload:
             output_schema={"type": "object"},
         )
         defaults.update(overrides)
-        return NodeDefinition(**defaults)
+        return WorkflowNodeManifest(**defaults)
 
     def test_maps_title_to_label(self) -> None:
         definition = self._make_definition(title="My Node")
@@ -436,10 +436,17 @@ class TestBuildRegistryPayload:
         payload = build_registry_payload(definition)
         assert "id" not in payload
 
-    def test_includes_is_control_flow(self) -> None:
-        definition = self._make_definition(is_control_flow=True)
+    def test_includes_node_role(self) -> None:
+        from canvastekk_workflow_sdk.definition import NodeRole
+
+        definition = self._make_definition(role=NodeRole.START)
         payload = build_registry_payload(definition)
-        assert payload["is_control_flow"] is True
+        assert payload["node_role"] == "start"
+
+    def test_default_node_role_is_operation(self) -> None:
+        definition = self._make_definition()
+        payload = build_registry_payload(definition)
+        assert payload["node_role"] == "operation"
 
     def test_styles_none_produces_null(self) -> None:
         definition = self._make_definition()
@@ -505,7 +512,7 @@ class TestBuildRegistryPayload:
             "name", "label", "version", "description",
             "input_schema", "output_schema", "invoke_type",
             "category", "token_cost", "timeout_seconds",
-            "is_control_flow", "retry", "tags", "styles",
+            "node_role", "retry", "tags", "styles",
             "node_status",
         }
         assert expected_keys.issubset(payload.keys())

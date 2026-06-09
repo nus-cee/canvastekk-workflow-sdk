@@ -12,10 +12,10 @@ from collections import defaultdict, deque
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from canvastekk_workflow_sdk.workflow.models import WorkflowSpec
+    from canvastekk_workflow_sdk.workflow.models import WorkflowDefinitionSpec
 
 
-def compute_levels(spec: WorkflowSpec) -> list[list[str]]:
+def compute_levels(spec: WorkflowDefinitionSpec) -> list[list[str]]:
     """Compute execution levels via BFS topological sort (Kahn's algorithm).
 
     Args:

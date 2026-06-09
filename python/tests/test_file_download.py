@@ -7,11 +7,11 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, NodeExecutionRequest
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeExecutionRequest, WorkflowNodeManifest
 
 
 class FileInputNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         id="file-input-v1.0.0",
         name="file-input",
         version="1.0.0",
@@ -42,7 +42,7 @@ class FileInputNode(BaseNode):
 
 
 class MultiFileInputNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         id="multi-file-v1.0.0",
         name="multi-file",
         version="1.0.0",
@@ -73,7 +73,7 @@ class MultiFileInputNode(BaseNode):
 
 
 class OptionalFileInputNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         id="opt-file-v1.0.0",
         name="opt-file",
         version="1.0.0",
@@ -101,7 +101,7 @@ class OptionalFileInputNode(BaseNode):
 
 
 class NoFileInputNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         id="no-file-v1.0.0",
         name="no-file",
         version="1.0.0",
@@ -122,7 +122,7 @@ class NoFileInputNode(BaseNode):
 
 
 class StrictValidationNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         id="strict-v1.0.0",
         name="strict",
         version="1.0.0",
@@ -275,7 +275,7 @@ class TestAutoDownload:
             node._validate_inputs(request.inputs)
 
         class LenientOptionalNode(BaseNode):
-            definition = NodeDefinition(
+            definition = WorkflowNodeManifest(
                 id="lenient-opt-v1.0.0",
                 name="lenient-opt",
                 version="1.0.0",
@@ -458,7 +458,7 @@ class TestAutoDownload:
         mock_stream.return_value = _make_mock_stream(b"data", {})
 
         class NoExtNode(BaseNode):
-            definition = NodeDefinition(
+            definition = WorkflowNodeManifest(
                 id="noext-v1.0.0",
                 name="noext",
                 version="1.0.0",

@@ -21,7 +21,7 @@ import httpx
 import jsonschema
 
 from canvastekk_workflow_sdk.context import ExecutionContext
-from canvastekk_workflow_sdk.definition import NodeDefinition
+from canvastekk_workflow_sdk.definition import WorkflowNodeManifest
 from canvastekk_workflow_sdk.exceptions import (
     NodeExecutionError,
     NodeIOError,
@@ -42,12 +42,12 @@ class BaseNode(ABC):
     Abstract base class for all nodes.
 
     Subclasses must:
-    1. Define a `definition` class attribute with NodeDefinition
+    1. Define a `definition` class attribute with WorkflowNodeManifest
     2. Implement the `execute()` method
 
     Example:
         class EchoNode(BaseNode):
-            definition = NodeDefinition(
+            definition = WorkflowNodeManifest(
                 name="echo",
                 version="1.0.0",
                 title="Echo",
@@ -60,7 +60,7 @@ class BaseNode(ABC):
                 return {"message": inputs.get("message", "")}
     """
 
-    definition: NodeDefinition
+    definition: WorkflowNodeManifest
 
     def __init__(self) -> None:
         self._middleware: list[NodeMiddleware] = [LoggingMiddleware()]

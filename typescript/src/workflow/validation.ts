@@ -1,4 +1,4 @@
-import type { WorkflowSpec } from "./models.js";
+import type { WorkflowDefinitionSpec } from "./models.js";
 
 /**
  * Result of workflow DAG validation.
@@ -21,7 +21,7 @@ export interface ValidationResult {
  * @param spec - Workflow specification
  * @returns Validation result
  */
-export function validate(spec: WorkflowSpec): ValidationResult {
+export function validate(spec: WorkflowDefinitionSpec): ValidationResult {
   const result: ValidationResult = { isValid: true, errors: [], orphans: [], deadEnds: [] };
   const nodeIds = new Set(spec.nodes.map((n) => n.id));
   const nodeMap = new Map(spec.nodes.map((n) => [n.id, n]));
@@ -44,7 +44,7 @@ export function validate(spec: WorkflowSpec): ValidationResult {
  * @param nodes - Workflow nodes to validate
  * @param result - Validation result to accumulate errors
  */
-function checkNodeIds(nodes: WorkflowSpec["nodes"], result: ValidationResult): void {
+function checkNodeIds(nodes: WorkflowDefinitionSpec["nodes"], result: ValidationResult): void {
   const seen = new Set<string>();
   for (const node of nodes) {
     if (!node.id || typeof node.id !== "string") {
@@ -67,7 +67,7 @@ function checkNodeIds(nodes: WorkflowSpec["nodes"], result: ValidationResult): v
  * @param nodeIds - Set of valid node IDs
  * @param result - Validation result to accumulate errors
  */
-function checkEdgeReferences(edges: WorkflowSpec["edges"], nodeIds: Set<string>, result: ValidationResult): void {
+function checkEdgeReferences(edges: WorkflowDefinitionSpec["edges"], nodeIds: Set<string>, result: ValidationResult): void {
   const edgeIds = new Set<string>();
   for (const edge of edges) {
     if (edge.id && edgeIds.has(edge.id)) {
@@ -99,9 +99,9 @@ function checkEdgeReferences(edges: WorkflowSpec["edges"], nodeIds: Set<string>,
  * @param result - Validation result to accumulate errors
  */
 function checkStartEnd(
-  nodes: WorkflowSpec["nodes"],
-  edges: WorkflowSpec["edges"],
-  nodeMap: Map<string, WorkflowSpec["nodes"][0]>,
+  nodes: WorkflowDefinitionSpec["nodes"],
+  edges: WorkflowDefinitionSpec["edges"],
+  nodeMap: Map<string, WorkflowDefinitionSpec["nodes"][0]>,
   result: ValidationResult,
 ): void {
   const startNodes = nodes.filter((n) => n.slug === "__start__");
@@ -158,7 +158,7 @@ function checkStartEnd(
  * @param edges - Workflow edges
  * @param result - Validation result to accumulate errors
  */
-function checkCycles(nodes: WorkflowSpec["nodes"], edges: WorkflowSpec["edges"], result: ValidationResult): void {
+function checkCycles(nodes: WorkflowDefinitionSpec["nodes"], edges: WorkflowDefinitionSpec["edges"], result: ValidationResult): void {
   const nodeIds = new Set(nodes.map((n) => n.id));
   const adj = new Map<string, string[]>();
   const inDegree = new Map<string, number>();
@@ -203,7 +203,7 @@ function checkCycles(nodes: WorkflowSpec["nodes"], edges: WorkflowSpec["edges"],
  * @param edges - Workflow edges
  * @param result - Validation result to accumulate errors
  */
-function checkConnectivity(nodes: WorkflowSpec["nodes"], edges: WorkflowSpec["edges"], result: ValidationResult): void {
+function checkConnectivity(nodes: WorkflowDefinitionSpec["nodes"], edges: WorkflowDefinitionSpec["edges"], result: ValidationResult): void {
   const startNodes = nodes.filter((n) => n.slug === "__start__");
   if (startNodes.length === 0) return;
 

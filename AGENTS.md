@@ -24,7 +24,7 @@ The SDK includes a `workflow` package for building, validating, and test-running
 
 | Class | Purpose |
 |-------|---------|
-| `WorkflowBuilder` | Fluent API for building workflow definitions with `add_start()`, `add_end()`, `add_node()`, `connect()`, `build()` |
+| `WorkflowBuilder` | Fluent API for building workflow definitions with `add_start()`, `add_end()`, `add_node()`, `connect()`, `build()`. Constructor no longer takes a `name` parameter. |
 | `WorkflowRunner` | Local executor — accepts a `NodeExecutor` strategy (in-process or HTTP). Supports `output_dir` for shared file passing between nodes and `cleanup` for temp dir management |
 | `InProcessExecutor` | **Python:** runs `BaseNode.execute()` directly via `asyncio.to_thread()`. **TypeScript:** runs via `await node.execute()` directly |
 | `HttpExecutor` | **Python:** calls node `/execute` endpoints via httpx. **TypeScript:** calls via `fetch` |

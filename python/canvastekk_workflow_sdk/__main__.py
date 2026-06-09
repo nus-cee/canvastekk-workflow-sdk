@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 def _load_definition(module_path: str):
-    """Load a NodeDefinition from a module:attribute path."""
+    """Load a WorkflowNodeManifest from a module:attribute path."""
     if ":" not in module_path:
         raise ValueError(f"Invalid path '{module_path}'. Use 'module:attribute' format (e.g., 'handler:definition').")
 
@@ -25,23 +25,23 @@ def _load_definition(module_path: str):
     module = importlib.import_module(module_name)
     definition = getattr(module, attr_name)
 
-    from canvastekk_workflow_sdk.definition import NodeDefinition
+    from canvastekk_workflow_sdk.definition import WorkflowNodeManifest
 
-    if not isinstance(definition, NodeDefinition):
-        raise TypeError(f"Expected NodeDefinition, got {type(definition).__name__}")
+    if not isinstance(definition, WorkflowNodeManifest):
+        raise TypeError(f"Expected WorkflowNodeManifest, got {type(definition).__name__}")
 
     return definition
 
 
 def _validate_definition(definition) -> dict:
-    """Inspect a validated NodeDefinition and return a diagnostic report.
+    """Inspect a validated WorkflowNodeManifest and return a diagnostic report.
 
     The Pydantic ``model_validator`` has already checked format/type
     constraints.  This function inspects file fields for recommended
     ``x-*`` extensions and builds a human-readable report.
 
     Args:
-        definition: A fully-validated :class:`NodeDefinition` instance.
+        definition: A fully-validated :class:`WorkflowNodeManifest` instance.
 
     Returns:
         A dict with keys ``valid``, ``errors``, ``warnings``,

@@ -2,11 +2,12 @@
 Node Definition Models
 
 These models define what a node is and how it should behave.
-Every compliant node must provide a NodeDefinition.
+Every compliant node must provide a WorkflowNodeManifest.
 """
 
 from __future__ import annotations
 
+import enum
 import json
 import re
 import warnings
@@ -43,7 +44,7 @@ nodes within the same category, in which case use ``-light`` or ``-dark``.
 # fmt: on
 
 
-class NodeStyles(BaseModel):
+class WorkflowNodeStyles(BaseModel):
     """Presentation metadata consumed by the frontend."""
 
     icon: str | None = Field(
@@ -85,7 +86,14 @@ class RetryConfig(BaseModel):
     )
 
 
-class NodeDefinition(BaseModel):
+class WorkflowNodeRole(str, enum.Enum):  # noqa: UP042
+    START = "start"
+    END = "end"
+    ERROR_GATE = "error_gate"
+    OPERATION = "operation"
+
+
+class WorkflowNodeManifest(BaseModel):
     """
     Standard definition that every node must provide.
 
@@ -148,13 +156,13 @@ class NodeDefinition(BaseModel):
         ge=1,
         description="Maximum execution time in seconds",
     )
-    is_control_flow: bool = Field(
-        default=False,
-        description="True for IF, Stop-Error, etc. (run in orchestrator, not HTTP)",
+    role: WorkflowNodeRole = Field(
+        default=WorkflowNodeRole.OPERATION,
+        description="Node role in the workflow system",
     )
 
     # Styles (optional — frontend presentation)
-    styles: NodeStyles | None = Field(
+    styles: WorkflowNodeStyles | None = Field(
         default=None,
         description="Icon and color for the workflow builder UI",
     )
@@ -248,7 +256,7 @@ class NodeDefinition(BaseModel):
                 )
 
     @model_validator(mode="after")
-    def _validate_file_field_formats(self) -> NodeDefinition:
+    def _validate_file_field_formats(self) -> WorkflowNodeManifest:
         """Validate that file fields use format: "file" and type: "string"."""
         schemas_to_check = [
             ("input_schema", self.input_schema),
@@ -281,7 +289,7 @@ class NodeDefinition(BaseModel):
 
 
 def export_definition(
-    definition: NodeDefinition,
+    definition: WorkflowNodeManifest,
     output_path: str | Path,
     *,
     invoke_type: InvokeType = "http",
@@ -292,24 +300,24 @@ def export_definition(
     constraints: dict[str, Any] | None = None,
 ) -> Path:
     """
-    Export a NodeDefinition as a WorkflowNode-compatible JSON file.
+    Export a WorkflowNodeManifest as a WorkflowNode-compatible JSON file.
 
     The output matches the engine's ``RegisterNodeRequest`` schema, which
     registers a ``WorkflowNode`` (registry-level node type). This is distinct
     from ``WorkflowDefinitionNode``, which represents a node instance within
     a specific workflow definition.
 
-    Maps SDK NodeDefinition fields to the registry schema and writes the result
+    Maps SDK WorkflowNodeManifest fields to the registry schema and writes the result
     as a clean JSON file suitable for CI/CD registration via POST /api/workflows/nodes/.
 
     Field mapping:
-        NodeDefinition.title  -> label
-        NodeDefinition.default_retry -> retry
-        NodeDefinition.id (computed) -> intentionally omitted; registry derives its own identifier
-        NodeDefinition.version -> included as the node's semantic version; same version + changed data is rejected by the engine
+        WorkflowNodeManifest.title  -> label
+        WorkflowNodeManifest.default_retry -> retry
+        WorkflowNodeManifest.id (computed) -> intentionally omitted; registry derives its own identifier
+        WorkflowNodeManifest.version -> included as the node's semantic version; same version + changed data is rejected by the engine
 
     Args:
-        definition: The SDK NodeDefinition to export.
+        definition: The SDK WorkflowNodeManifest to export.
         output_path: File path to write the JSON output.
         invoke_type: Invocation type (http, lambda, sagemaker, in-process).
         invoke_url: URL/ARN for invoking the node. None for in-process nodes.
@@ -340,3 +348,9 @@ def export_definition(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(registry_dict, indent=2) + "\n")
     return output_path
+
+
+NodeDefinition = WorkflowNodeManifest
+WorkflowNodeDefinition = WorkflowNodeManifest
+NodeStyles = WorkflowNodeStyles
+NodeRole = WorkflowNodeRole

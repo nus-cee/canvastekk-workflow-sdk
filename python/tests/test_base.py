@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, NodeExecutionRequest
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeExecutionRequest, WorkflowNodeManifest
 from canvastekk_workflow_sdk.exceptions import (
     NodeIOError,
     NodeOutputValidationError,
@@ -17,7 +17,7 @@ from canvastekk_workflow_sdk.observability import MetricsCollector
 class EchoNode(BaseNode):
     """Simple echo node for testing."""
 
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="echo",
         version="1.0.0",
         title="Echo",
@@ -39,7 +39,7 @@ class EchoNode(BaseNode):
 class FailingNode(BaseNode):
     """Node that always fails for testing."""
 
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="failing",
         version="1.0.0",
         title="Failing",
@@ -55,7 +55,7 @@ class FailingNode(BaseNode):
 class HealthyNode(BaseNode):
     """Node with custom health checks."""
 
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="healthy",
         version="1.0.0",
         title="Healthy",
@@ -77,7 +77,7 @@ class HealthyNode(BaseNode):
 class NodeIOErrorNode(BaseNode):
     """Node that raises NodeIOError."""
 
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="io-err",
         version="1.0.0",
         title="IO Error",
@@ -93,7 +93,7 @@ class NodeIOErrorNode(BaseNode):
 class NodeTimeoutErrorNode(BaseNode):
     """Node that raises NodeTimeoutError."""
 
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="timeout-err",
         version="1.0.0",
         title="Timeout Error",
@@ -109,7 +109,7 @@ class NodeTimeoutErrorNode(BaseNode):
 class TokenReportingNode(BaseNode):
     """Node that reports token usage via context."""
 
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="token",
         version="1.0.0",
         title="Token",
@@ -127,7 +127,7 @@ class TokenReportingNode(BaseNode):
 class ValidatedNode(BaseNode):
     """Node with required input fields for validation testing."""
 
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="validated",
         version="1.0.0",
         title="Validated",
@@ -350,7 +350,7 @@ class TestBaseNodeInitSubclass:
 class OutputValidationNode(BaseNode):
     """Node with strict output schema for validation testing."""
 
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="output-val",
         version="1.0.0",
         title="Output Validation",
@@ -377,7 +377,7 @@ class OutputValidationNode(BaseNode):
 class OutputValidationErrorNode(BaseNode):
     """Node that returns invalid output type."""
 
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="output-err",
         version="1.0.0",
         title="Output Error",
@@ -396,7 +396,7 @@ class OutputValidationErrorNode(BaseNode):
 class OutputMissingRequiredNode(BaseNode):
     """Node that returns missing required field."""
 
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="output-missing",
         version="1.0.0",
         title="Output Missing",
@@ -416,7 +416,7 @@ class OutputMissingRequiredNode(BaseNode):
 class TrivialOutputSchemaNode(BaseNode):
     """Node with trivial output schema."""
 
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="trivial",
         version="1.0.0",
         title="Trivial",
@@ -488,7 +488,7 @@ class TestLifecycleHooks:
         """Test that on_startup is called when the app starts."""
 
         class LifecycleNode(BaseNode):
-            definition = NodeDefinition(
+            definition = WorkflowNodeManifest(
                 name="lifecycle",
                 version="1.0.0",
                 title="Lifecycle",
@@ -530,7 +530,7 @@ class TestLifecycleHooks:
         """Test that on_shutdown is called when the app stops."""
 
         class ShutdownNode(BaseNode):
-            definition = NodeDefinition(
+            definition = WorkflowNodeManifest(
                 name="shutdown",
                 version="1.0.0",
                 title="Shutdown",
@@ -576,7 +576,7 @@ class TestLifecycleHooks:
         hook_order: list[str] = []
 
         class OrderedLifecycleNode(BaseNode):
-            definition = NodeDefinition(
+            definition = WorkflowNodeManifest(
                 name="ordered",
                 version="1.0.0",
                 title="Ordered",
@@ -610,7 +610,7 @@ class TestLifecycleHooks:
         """Test that exceptions in on_startup propagate correctly."""
 
         class FailingStartupNode(BaseNode):
-            definition = NodeDefinition(
+            definition = WorkflowNodeManifest(
                 name="failing-startup",
                 version="1.0.0",
                 title="Failing Startup",
@@ -640,7 +640,7 @@ class TestLifecycleHooks:
         """Test that exceptions in on_shutdown propagate correctly."""
 
         class FailingShutdownNode(BaseNode):
-            definition = NodeDefinition(
+            definition = WorkflowNodeManifest(
                 name="failing-shutdown",
                 version="1.0.0",
                 title="Failing Shutdown",
@@ -670,7 +670,7 @@ class TestLifecycleHooks:
         """Test that lifespan hooks work with create_node_app function."""
 
         class LifecycleTestNode(BaseNode):
-            definition = NodeDefinition(
+            definition = WorkflowNodeManifest(
                 name="lifespan-test",
                 version="1.0.0",
                 title="Lifespan Test",
@@ -711,7 +711,7 @@ class TestLifecycleHooks:
         """Test that multiple TestClient contexts invoke hooks multiple times."""
 
         class MultiLifecycleNode(BaseNode):
-            definition = NodeDefinition(
+            definition = WorkflowNodeManifest(
                 name="multi-lifecycle",
                 version="1.0.0",
                 title="Multi Lifecycle",
