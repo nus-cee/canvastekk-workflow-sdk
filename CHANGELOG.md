@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.0] - 2026-06-09
+
+### Features
+
+- SDK model renames with parent→child naming convention [DA-1230] (#38) (**BREAKING**)
+
+
 ## [0.14.1] - 2026-05-29
 
 ### Documentation
 
 - **DA-1162**: Add docstrings/JSDoc coverage + fix exception handling (#37)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.14.1
 
 
 ## [0.14.0] - 2026-05-28
