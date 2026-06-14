@@ -75,3 +75,34 @@ When working on the TypeScript SDK (`typescript/` directory):
 - Run `npx tsup` to build (ESM + CJS + `.d.ts`)
 - SDK version is in `typescript/src/version.ts` and `typescript/package.json`
 - Wire-format types use `snake_case` (for Python engine compatibility); internal types use `camelCase`
+
+### Versioning & Releases
+
+**Versions are NEVER bumped manually.** The entire release flow is automated by `.github/workflows/release.yml` using [git-cliff](https://git-cliff.org) with conventional commits.
+
+**Release trigger**: Push to `main` → git-cliff determines if a new version is needed based on conventional commit messages since the last tag.
+
+**Version bump rules** (from `cliff.toml`):
+
+| Commit Type | Version Bump | Example |
+|-------------|-------------|---------|
+| `feat:` | Minor (0.15.0 → 0.16.0) | `feat: add new node pattern` |
+| `fix:` | Patch (0.15.0 → 0.15.1) | `fix(ci): fix release pipeline` |
+| `docs:`, `chore:`, `ci:`, `refactor:`, `test:`, `style:` | No release (skipped) | — |
+| `feat!:` / `BREAKING CHANGE` | Major or minor (`breaking_always_bump_major = false`) | `feat!: rename API` |
+
+**Automated pipeline flow** (on qualifying push to `main`):
+
+1. git-cliff determines next version from commit history
+2. Python script auto-bumps ALL version files: `pyproject.toml`, `__init__.py`, `typescript/package.json`, `dotnet/Directory.Build.props`
+3. Auto-commits (`chore(release): prepare vX.Y.Z`), auto-tags (`vX.Y.Z`), auto-pushes
+4. Creates GitHub Release with auto-generated changelog notes
+5. Builds Python wheel (`poetry build`) and uploads to GitHub Release
+
+**Important**:
+
+- Do NOT manually edit version strings in `pyproject.toml`, `__init__.py`, `package.json`, or `Directory.Build.props` — the pipeline overwrites them
+- To trigger a patch release, use `fix:` commit type
+- To trigger a minor release, use `feat:` commit type
+- `docs:` / `chore:` / `ci:` commits alone do NOT trigger a release
+- The released wheel is published to GitHub Packages at `https://pypi.pkg.github.com/nus-cee/`
