@@ -31,7 +31,6 @@ Endpoints:
     POST /execute    - Run the node
     GET /health      - Health check
     GET /manifest    - Node self-description
-    GET /definition  - Deprecated, redirects to /manifest
     POST /hook       - Webhook/callback handler
 
 Philosophy:
@@ -56,11 +55,7 @@ from canvastekk_workflow_sdk.contracts import (
 )
 from canvastekk_workflow_sdk.definition import (
     ColorPreset,
-    NodeDefinition,
-    NodeRole,
-    NodeStyles,
     RetryConfig,
-    WorkflowNodeDefinition,
     WorkflowNodeManifest,
     WorkflowNodeRole,
     WorkflowNodeStyles,
@@ -100,12 +95,9 @@ from canvastekk_workflow_sdk.workflow import (
     WorkflowBuilder,
     WorkflowDefinitionNode,
     WorkflowDefinitionSpec,
-    WorkflowEdge,
     WorkflowEdgeDefinition,
-    WorkflowNode,
     WorkflowRunner,
     WorkflowRunResult,
-    WorkflowSpec,
     validate,
 )
 
@@ -129,7 +121,6 @@ __all__ = [
     "MetricsCollector",
     "NodeAuth",
     "NodeConfigurationError",
-    "NodeDefinition",
     "NodeExecutionError",
     "NodeExecutionRequest",
     "NodeExecutionResponse",
@@ -138,8 +129,6 @@ __all__ = [
     "NodeMiddleware",
     "NodeOutputValidationError",
     "NodeResult",
-    "NodeRole",
-    "NodeStyles",
     "NodeTimeoutError",
     "NodeValidationError",
     "OutputUploader",
@@ -157,17 +146,13 @@ __all__ = [
     "WorkflowBuilder",
     "WorkflowDefinitionNode",
     "WorkflowDefinitionSpec",
-    "WorkflowEdge",
     "WorkflowEdgeDefinition",
     "WorkflowExecutionError",
-    "WorkflowNode",
-    "WorkflowNodeDefinition",
     "WorkflowNodeManifest",
     "WorkflowNodeRole",
     "WorkflowNodeStyles",
     "WorkflowRunResult",
     "WorkflowRunner",
-    "WorkflowSpec",
     "WorkflowValidationError",
     "build_registry_payload",
     "configure_logging",

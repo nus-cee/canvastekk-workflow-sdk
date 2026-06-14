@@ -243,12 +243,12 @@ class TestHealthEndpoint:
         assert data["checks"]["secondary"] is False
 
 
-class TestDefinitionEndpoint:
-    """Tests for GET /definition endpoint."""
+class TestManifestBasic:
+    """Basic tests for GET /manifest endpoint."""
 
-    def test_definition(self, echo_client: TestClient) -> None:
-        """Test getting node definition."""
-        response = echo_client.get("/definition")
+    def test_manifest(self, echo_client: TestClient) -> None:
+        """Test getting node manifest."""
+        response = echo_client.get("/manifest")
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == "echo-v1.0.0"
@@ -627,9 +627,6 @@ class TestApiKeyAuthIntegration:
         assert response.status_code == 200
 
         response = client.get("/manifest", headers=headers)
-        assert response.status_code == 200
-
-        response = client.get("/definition", headers=headers, follow_redirects=True)
         assert response.status_code == 200
 
         response = client.get("/metrics", headers=headers)

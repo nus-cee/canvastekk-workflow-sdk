@@ -18,10 +18,6 @@ from canvastekk_workflow_sdk.workflow.resolver import resolve_inputs
 from canvastekk_workflow_sdk.workflow.runner import NodeResult, WorkflowRunner, WorkflowRunResult
 from canvastekk_workflow_sdk.workflow.validation import ValidationResult, validate
 
-WorkflowNode = WorkflowDefinitionNode
-WorkflowEdge = WorkflowEdgeDefinition
-WorkflowSpec = WorkflowDefinitionSpec
-
 __all__ = [
     "EdgeType",
     "HttpExecutor",
@@ -30,14 +26,11 @@ __all__ = [
     "NodeResult",
     "ValidationResult",
     "WorkflowBuilder",
-    "WorkflowEdge",
-    "WorkflowEdgeDefinition",
-    "WorkflowNode",
     "WorkflowDefinitionNode",
+    "WorkflowDefinitionSpec",
+    "WorkflowEdgeDefinition",
     "WorkflowRunResult",
     "WorkflowRunner",
-    "WorkflowSpec",
-    "WorkflowDefinitionSpec",
     "compute_levels",
     "resolve_inputs",
     "validate",

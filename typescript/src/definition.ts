@@ -42,8 +42,6 @@ export const WorkflowNodeStylesSchema = z.object({
 });
 
 export type WorkflowNodeStyles = z.infer<typeof WorkflowNodeStylesSchema>;
-export type NodeStyles = WorkflowNodeStyles;
-export const NodeStylesSchema = WorkflowNodeStylesSchema;
 
 export const RetryConfigSchema = z.object({
   max_attempts: z.number().int().min(1).default(1),
@@ -58,8 +56,6 @@ export type RetryConfig = z.infer<typeof RetryConfigSchema>;
 export const WorkflowNodeRoleSchema = z.enum(["start", "end", "error_gate", "operation"]).default("operation");
 
 export type WorkflowNodeRole = z.infer<typeof WorkflowNodeRoleSchema>;
-export type NodeRole = WorkflowNodeRole;
-export const NodeRoleSchema = WorkflowNodeRoleSchema;
 
 function validateFileFieldFormats(
   schema: Record<string, unknown>,
@@ -107,11 +103,6 @@ export const WorkflowNodeManifestSchema = z
     styles: WorkflowNodeStylesSchema.nullable().default(null),
   })
   .transform((data, ctx) => {
-    if (data.id !== undefined) {
-      console.warn(
-        `Providing 'id' manually is deprecated. Auto-derived '${data.name}-v${data.version}' will be used.`,
-      );
-    }
     const { id: _id, ...rest } = data;
 
     try {
@@ -130,10 +121,6 @@ export const WorkflowNodeManifestSchema = z
 
 /** Complete node manifest including metadata, schemas, and configuration. */
 export type WorkflowNodeManifest = z.infer<typeof WorkflowNodeManifestSchema>;
-
-export type WorkflowNodeDefinition = WorkflowNodeManifest;
-
-export type NodeDefinition = WorkflowNodeManifest;
 
 export function getNodeId(def: Pick<WorkflowNodeManifest, "name" | "version">): string {
   return `${def.name}-v${def.version}`;

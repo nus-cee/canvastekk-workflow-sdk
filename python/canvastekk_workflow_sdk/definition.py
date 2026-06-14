@@ -10,7 +10,6 @@ from __future__ import annotations
 import enum
 import json
 import re
-import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -188,19 +187,6 @@ class WorkflowNodeManifest(BaseModel):
             raise ValueError(f"Node version must be semantic version (X.Y.Z). Got: '{v}'")
         return v
 
-    @model_validator(mode="before")
-    @classmethod
-    def _handle_deprecated_id(cls, data: Any) -> Any:
-        if isinstance(data, dict) and "id" in data:
-            warnings.warn(
-                "Providing 'id' manually is deprecated. "
-                f"Auto-derived '{data.get('name', '')}-v{data.get('version', '')}' will be used.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            del data["id"]
-        return data
-
     @property
     def file_input_fields(self) -> list[str]:
         """Return list of input field names that accept file uploads.
@@ -348,9 +334,3 @@ def export_definition(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(registry_dict, indent=2) + "\n")
     return output_path
-
-
-NodeDefinition = WorkflowNodeManifest
-WorkflowNodeDefinition = WorkflowNodeManifest
-NodeStyles = WorkflowNodeStyles
-NodeRole = WorkflowNodeRole

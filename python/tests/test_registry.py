@@ -437,9 +437,9 @@ class TestBuildRegistryPayload:
         assert "id" not in payload
 
     def test_includes_node_role(self) -> None:
-        from canvastekk_workflow_sdk.definition import NodeRole
+        from canvastekk_workflow_sdk.definition import WorkflowNodeRole
 
-        definition = self._make_definition(role=NodeRole.START)
+        definition = self._make_definition(role=WorkflowNodeRole.START)
         payload = build_registry_payload(definition)
         assert payload["node_role"] == "start"
 
@@ -454,9 +454,9 @@ class TestBuildRegistryPayload:
         assert payload["styles"] is None
 
     def test_styles_serialized_when_set(self) -> None:
-        from canvastekk_workflow_sdk.definition import NodeStyles
+        from canvastekk_workflow_sdk.definition import WorkflowNodeStyles
 
-        definition = self._make_definition(styles=NodeStyles(icon="Brain", color="emerald"))
+        definition = self._make_definition(styles=WorkflowNodeStyles(icon="Brain", color="emerald"))
         payload = build_registry_payload(definition)
         assert payload["styles"] == {"icon": "Brain", "color": "emerald"}
 

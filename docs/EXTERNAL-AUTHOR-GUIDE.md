@@ -52,14 +52,14 @@ poetry install
 
 ## Step 2: Create Your Node
 
-Create a file called `handler.py`. Subclass `BaseNode`, define a `NodeDefinition`, implement `execute()`, and call `.create_app()`:
+Create a file called `handler.py`. Subclass `BaseNode`, define a `WorkflowNodeManifest`, implement `execute()`, and call `.create_app()`:
 
 ```python
 # handler.py
-from canvastekk_workflow_sdk import BaseNode, NodeDefinition, ExecutionContext
+from canvastekk_workflow_sdk import BaseNode, WorkflowNodeManifest, ExecutionContext
 
 # Module-level definition — needed for CLI validation
-definition = NodeDefinition(
+definition = WorkflowNodeManifest(
     name="my-node",
     version="1.0.0",
     title="My Node",
@@ -102,20 +102,20 @@ The `id` field is automatically derived from `name` + `version` as `{name}-v{ver
 - `name` must be a valid slug: lowercase alphanumeric characters and hyphens only
 - `version` must follow semantic versioning (e.g., `1.0.0`, `2.3.1`) — the engine uses this version directly for registry storage
 
-> **Note on versioning:** The engine uses your `NodeDefinition.version` semantic version string directly. Versions are **immutable** — re-registering with the same version and changed data is rejected. You must bump the version for any schema or metadata changes.
+> **Note on versioning:** The engine uses your `WorkflowNodeManifest.version` semantic version string directly. Versions are **immutable** — re-registering with the same version and changed data is rejected. You must bump the version for any schema or metadata changes.
 
 ### SDK Types and Engine Terminology
 
-The SDK's `NodeDefinition` maps to the engine's **registry-level node type** (called `WorkflowNodeManifest` in the engine). This is distinct from `WorkflowDefinitionNode`, which the engine uses to represent a node instance within a specific workflow definition.
+The SDK's `WorkflowNodeManifest` maps to the engine's **registry-level node type** (called `WorkflowNodeManifest` in the engine). This is distinct from `WorkflowDefinitionNode`, which the engine uses to represent a node instance within a specific workflow definition.
 
 | SDK Type | Engine Type | Purpose |
 |----------|-------------|---------|
-| `NodeDefinition` | `WorkflowNodeManifest` | Registry-level node type (schemas, metadata, styles) |
+| `WorkflowNodeManifest` | `WorkflowNodeManifest` | Registry-level node type (schemas, metadata, styles) |
 | — | `WorkflowDefinitionNode` | Node instance within a workflow definition (inputs, position, edges) |
 | — | `WorkflowEdgeDefinition` | Edge instance connecting two nodes in a workflow definition |
 | — | `WorkflowDefinitionSpec` | Complete workflow definition (nodes, edges, metadata) |
 
-Node authors only interact with `NodeDefinition`. The engine handles `WorkflowDefinitionNode`, `WorkflowEdgeDefinition`, and `WorkflowDefinitionSpec` internally.
+Node authors only interact with `WorkflowNodeManifest`. The engine handles `WorkflowDefinitionNode`, `WorkflowEdgeDefinition`, and `WorkflowDefinitionSpec` internally.
 
 ### Node Role (`WorkflowNodeRole` enum)
 
@@ -157,8 +157,8 @@ Old type names remain available as aliases for migration compatibility:
 
 | Old Name | Current Name |
 |----------|-------------|
-| `NodeDefinition` | `WorkflowNodeManifest` |
-| `WorkflowNodeDefinition` | `WorkflowNodeManifest` |
+| `WorkflowNodeManifest` | `WorkflowNodeManifest` |
+| `WorkflowWorkflowNodeManifest` | `WorkflowNodeManifest` |
 | `WorkflowNode` | `WorkflowDefinitionNode` |
 | `WorkflowEdge` | `WorkflowEdgeDefinition` |
 | `WorkflowSpec` | `WorkflowDefinitionSpec` |
@@ -297,7 +297,7 @@ After deployment, register your node so the engine can discover it. The engine s
 ### Using `register_node()` (Python)
 
 ```python
-from canvastekk_workflow_sdk import BaseNode, NodeDefinition
+from canvastekk_workflow_sdk import BaseNode, WorkflowNodeManifest
 from canvastekk_workflow_sdk.registry import register_node
 
 node = MyNode()

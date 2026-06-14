@@ -156,11 +156,6 @@ export function createNodeApp(
     }
   });
 
-  /** GET /definition — Redirects to /manifest (deprecated endpoint). */
-  router.get("/definition", (_req: Request, res: Response) => {
-    res.redirect(301, "/manifest");
-  });
-
   /** POST /hook — Handles lifecycle hook payloads. Returns 501 if the node does not implement hooks. */
   router.post("/hook", async (req: Request, res: Response, next: NextFunction) => {
     try {

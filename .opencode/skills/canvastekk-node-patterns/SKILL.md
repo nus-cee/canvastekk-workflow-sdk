@@ -46,7 +46,7 @@ Full example of an inference node that downloads a point cloud, runs segmentatio
 from pathlib import Path
 
 import httpx
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, WorkflowNodeStyles
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest, WorkflowNodeStyles
 from canvastekk_workflow_sdk.contracts import (
     BoundingBox3D,
     Instance,
@@ -55,7 +55,7 @@ from canvastekk_workflow_sdk.contracts import (
 )
 from canvastekk_workflow_sdk.exceptions import NodeExecutionError
 
-definition = NodeDefinition(
+definition = WorkflowNodeManifest(
     id="segment-v1.0.0",
     name="segment",
     version="1.0.0",
@@ -181,7 +181,7 @@ Consumes an InstanceSet and computes measurements (heights, widths, distances).
 from pathlib import Path
 
 import httpx
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, WorkflowNodeStyles
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest, WorkflowNodeStyles
 from canvastekk_workflow_sdk.contracts import (
     InstanceSet,
     Measurement,
@@ -190,7 +190,7 @@ from canvastekk_workflow_sdk.contracts import (
 )
 from canvastekk_workflow_sdk.exceptions import NodeIOError
 
-definition = NodeDefinition(
+definition = WorkflowNodeManifest(
     id="measure-v1.0.0",
     name="measure",
     version="1.0.0",
@@ -307,10 +307,10 @@ Detects planes in a point cloud and produces a PlaneSet.
 from pathlib import Path
 
 import httpx
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, WorkflowNodeStyles
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest, WorkflowNodeStyles
 from canvastekk_workflow_sdk.contracts import Plane, PlaneSet, Point3D
 
-definition = NodeDefinition(
+definition = WorkflowNodeManifest(
     id="plane-detect-v1.0.0",
     name="plane-detect",
     version="1.0.0",
@@ -405,10 +405,10 @@ Loads a model at startup, checks GPU health, and runs inference in execute().
 from pathlib import Path
 
 import httpx
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, WorkflowNodeStyles
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest, WorkflowNodeStyles
 from canvastekk_workflow_sdk.exceptions import NodeConfigurationError, NodeExecutionError
 
-definition = NodeDefinition(
+definition = WorkflowNodeManifest(
     id="infer-v1.0.0",
     name="infer",
     version="1.0.0",
@@ -530,9 +530,9 @@ A pure data transform node with no file uploads/downloads.
 ```python
 """Uppercase Node — converts text to uppercase (no file I/O)."""
 
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest
 
-definition = NodeDefinition(
+definition = WorkflowNodeManifest(
     id="uppercase-v1.0.0",
     name="uppercase",
     version="1.0.0",
@@ -593,7 +593,7 @@ During development, set `CANVASTEKK_DEV_MODE=true` to bypass auth.
 
 ```python
 from typing import Any
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest
 from canvastekk_workflow_sdk.middleware import NodeMiddleware
 
 
@@ -644,7 +644,7 @@ app = node.create_app()
 
 ```python
 class AsyncTaskNode(BaseNode):
-    definition = NodeDefinition(...)
+    definition = WorkflowNodeManifest(...)
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
         """Start a long-running task and return immediately."""
@@ -688,9 +688,9 @@ Converts between file formats (e.g., PLY to XYZ):
 from pathlib import Path
 
 import httpx
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition, WorkflowNodeStyles
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest, WorkflowNodeStyles
 
-definition = NodeDefinition(
+definition = WorkflowNodeManifest(
     id="convert-v1.0.0",
     name="convert",
     version="1.0.0",
