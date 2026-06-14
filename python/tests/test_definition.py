@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from canvastekk_workflow_sdk import NodeRole, NodeStyles, RetryConfig, WorkflowNodeManifest
+from canvastekk_workflow_sdk import RetryConfig, WorkflowNodeManifest, WorkflowNodeRole, WorkflowNodeStyles
 from canvastekk_workflow_sdk.definition import export_definition
 
 
@@ -45,14 +45,14 @@ class TestRetryConfig:
             RetryConfig(backoff_multiplier=0.5)
 
 
-class TestNodeRole:
-    """Tests for NodeRole enum."""
+class TestWorkflowNodeRole:
+    """Tests for WorkflowNodeRole enum."""
 
     def test_enum_values(self) -> None:
-        assert NodeRole.START.value == "start"
-        assert NodeRole.END.value == "end"
-        assert NodeRole.ERROR_GATE.value == "error_gate"
-        assert NodeRole.OPERATION.value == "operation"
+        assert WorkflowNodeRole.START.value == "start"
+        assert WorkflowNodeRole.END.value == "end"
+        assert WorkflowNodeRole.ERROR_GATE.value == "error_gate"
+        assert WorkflowNodeRole.OPERATION.value == "operation"
 
     def test_default_role_is_operation(self) -> None:
         definition = WorkflowNodeManifest(
@@ -63,7 +63,7 @@ class TestNodeRole:
             input_schema={"type": "object"},
             output_schema={"type": "object"},
         )
-        assert definition.role == NodeRole.OPERATION
+        assert definition.role == WorkflowNodeRole.OPERATION
 
     def test_explicit_role(self) -> None:
         definition = WorkflowNodeManifest(
@@ -73,9 +73,9 @@ class TestNodeRole:
             description="Test",
             input_schema={"type": "object"},
             output_schema={"type": "object"},
-            role=NodeRole.START,
+            role=WorkflowNodeRole.START,
         )
-        assert definition.role == NodeRole.START
+        assert definition.role == WorkflowNodeRole.START
 
 
 class TestWorkflowNodeManifest:
@@ -98,7 +98,7 @@ class TestWorkflowNodeManifest:
         assert definition.token_cost == 0.0
         assert definition.category == "utility"
         assert definition.timeout_seconds == 30
-        assert definition.role == NodeRole.OPERATION
+        assert definition.role == WorkflowNodeRole.OPERATION
 
     def test_full_definition(self) -> None:
         """Test creating a full node definition with all fields."""
@@ -156,10 +156,10 @@ class TestWorkflowNodeManifest:
             input_schema={"type": "object"},
             output_schema={"type": "object"},
             category="control-flow",
-            role=NodeRole.START,
+            role=WorkflowNodeRole.START,
             token_cost=0.0,
         )
-        assert definition.role == NodeRole.START
+        assert definition.role == WorkflowNodeRole.START
         assert definition.category == "control-flow"
         assert definition.token_cost == 0.0
 
@@ -571,7 +571,7 @@ class TestExportDefinition:
 
     def test_export_definition_uses_definition_styles_when_not_overridden(self) -> None:
         """Test that definition.styles is used when not overridden."""
-        styles = NodeStyles(icon="Box", color="blue")
+        styles = WorkflowNodeStyles(icon="Box", color="blue")
         definition = WorkflowNodeManifest(
             name="test",
             version="1.0.0",
@@ -907,42 +907,6 @@ class TestIdAutoDerivation:
         )
         assert definition.to_dict()["id"] == "echo-v1.2.0"
 
-    def test_manual_id_matching_warns(self) -> None:
-        import warnings
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            definition = WorkflowNodeManifest(
-                id="echo-v1.0.0",
-                name="echo",
-                version="1.0.0",
-                title="Echo",
-                description="Test",
-                input_schema={"type": "object"},
-                output_schema={"type": "object"},
-            )
-            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
-            assert len(deprecation_warnings) >= 1
-        assert definition.id == "echo-v1.0.0"
-
-    def test_manual_id_mismatching_warns(self) -> None:
-        import warnings
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            definition = WorkflowNodeManifest(
-                id="wrong-v1.0.0",
-                name="echo",
-                version="1.0.0",
-                title="Echo",
-                description="Test",
-                input_schema={"type": "object"},
-                output_schema={"type": "object"},
-            )
-            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
-            assert len(deprecation_warnings) >= 1
-        assert definition.id == "echo-v1.0.0"
-
 
 class TestExportDefinitionNoId:
     def test_export_does_not_include_id(self) -> None:
@@ -961,51 +925,3 @@ class TestExportDefinitionNoId:
             assert "id" not in data
             assert data["name"] == "test"
             assert data["version"] == "1.0.0"
-
-
-class TestBackwardCompatAliases:
-    def test_node_styles_alias(self) -> None:
-        from canvastekk_workflow_sdk.definition import NodeStyles, WorkflowNodeStyles
-
-        assert NodeStyles is WorkflowNodeStyles
-
-    def test_node_role_alias(self) -> None:
-        from canvastekk_workflow_sdk.definition import NodeRole, WorkflowNodeRole
-
-        assert NodeRole is WorkflowNodeRole
-
-    def test_node_definition_alias(self) -> None:
-        from canvastekk_workflow_sdk.definition import NodeDefinition, WorkflowNodeManifest
-
-        assert NodeDefinition is WorkflowNodeManifest
-
-    def test_workflow_node_definition_alias(self) -> None:
-        from canvastekk_workflow_sdk.definition import WorkflowNodeDefinition, WorkflowNodeManifest
-
-        assert WorkflowNodeDefinition is WorkflowNodeManifest
-
-    def test_workflow_node_styles_importable_from_top_level(self) -> None:
-        from canvastekk_workflow_sdk import WorkflowNodeStyles
-
-        styles = WorkflowNodeStyles(icon="Brain", color="emerald")
-        assert styles.icon == "Brain"
-
-    def test_workflow_node_role_importable_from_top_level(self) -> None:
-        from canvastekk_workflow_sdk import WorkflowNodeRole
-
-        assert WorkflowNodeRole.OPERATION.value == "operation"
-
-    def test_workflow_node_styles_primary_name(self) -> None:
-        from canvastekk_workflow_sdk.definition import WorkflowNodeStyles
-
-        styles = WorkflowNodeStyles(icon="Test", color="blue")
-        assert styles.icon == "Test"
-        assert styles.color == "blue"
-
-    def test_workflow_node_role_primary_name(self) -> None:
-        from canvastekk_workflow_sdk.definition import WorkflowNodeRole
-
-        assert WorkflowNodeRole.START.value == "start"
-        assert WorkflowNodeRole.END.value == "end"
-        assert WorkflowNodeRole.ERROR_GATE.value == "error_gate"
-        assert WorkflowNodeRole.OPERATION.value == "operation"

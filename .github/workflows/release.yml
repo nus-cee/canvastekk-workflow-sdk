@@ -181,5 +181,68 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
         run: |
+          # Assert we are building from the tagged commit (prevents stale wheel bug [DA-1302])
+          HEAD_SHA=$(git rev-parse HEAD)
+          TAG_SHA=$(git rev-parse "${NEW_VERSION}^{commit}" 2>/dev/null || echo "")
+          if [ -n "${TAG_SHA}" ] && [ "${HEAD_SHA}" != "${TAG_SHA}" ]; then
+            echo "ERROR: HEAD (${HEAD_SHA}) does not match tag ${NEW_VERSION} (${TAG_SHA})" >&2
+            exit 1
+          fi
+          echo "Building from tagged commit ${HEAD_SHA} (${NEW_VERSION})"
+
+          # Clean dist/ to prevent stale artifacts from previous builds
+          rm -rf dist/
+
+          # Build wheel from the tagged commit
           poetry build
-          gh release upload "${NEW_VERSION}" dist/*
+
+          # Verify the built wheel contains expected symbols (prevents stale wheel bug [DA-1302])
+          echo "Verifying wheel contents..."
+          WHEEL_FILE=$(ls dist/*.whl)
+          python3 -c "
+          import zipfile, sys
+          with zipfile.ZipFile('${WHEEL_FILE}') as z:
+              def_path = [n for n in z.namelist() if n.endswith('definition.py')][0]
+              source = z.read(def_path).decode()
+              for symbol in ['WorkflowNodeManifest', 'WorkflowNodeStyles', 'WorkflowNodeRole']:
+                  if symbol not in source:
+                      print(f'FAIL: {symbol} not found in wheel definition.py', file=sys.stderr)
+                      sys.exit(1)
+              print('Pre-upload verification passed: all expected symbols present in wheel')
+          "
+
+          # Generate SHA256 hash for provenance attestation
+          sha256sum "${WHEEL_FILE}" > "${WHEEL_FILE}.sha256"
+
+          # Upload wheel and hash (use --clobber to replace any existing asset)
+          gh release upload "${NEW_VERSION}" dist/*.whl dist/*.whl.sha256 --clobber
+
+      - name: Verify published wheel (post-publish smoke test)
+        if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
+        env:
+          NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
+        run: |
+          VERSION_NUM="${NEW_VERSION#v}"
+
+          # Create clean virtualenv
+          python3 -m venv /tmp/verify-venv
+
+          # Install from GitHub Packages (simulates real consumer experience)
+          /tmp/verify-venv/bin/pip install \
+            "canvastekk-workflow-sdk==${VERSION_NUM}" \
+            --index-url "https://pypi.pkg.github.com/nus-cee/"
+
+          # Verify all canonical names import correctly from published wheel
+          /tmp/verify-venv/bin/python -c "
+          from canvastekk_workflow_sdk import (
+              WorkflowNodeManifest, WorkflowNodeStyles, WorkflowNodeRole,
+              RetryConfig, BaseNode, ExecutionContext,
+          )
+
+          # Verify workflow model canonical names
+          from canvastekk_workflow_sdk.workflow.models import (
+              WorkflowDefinitionNode, WorkflowEdgeDefinition, WorkflowDefinitionSpec,
+          )
+
+          print('Post-publish verification passed: all canonical names resolve correctly')
+          "

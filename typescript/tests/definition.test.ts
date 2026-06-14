@@ -1,7 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   WorkflowNodeManifestSchema,
-  NodeRoleSchema,
+  WorkflowNodeRoleSchema,
   getNodeId,
   getFileInputFields,
   getFileOutputFields,
@@ -111,17 +111,12 @@ describe("WorkflowNodeManifestSchema", () => {
     expect(def.input_schema).toBeDefined();
   });
 
-  it("strips manual id and warns", () => {
-    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("strips manual id", () => {
     const def = WorkflowNodeManifestSchema.parse({
       ...validDefinition,
       id: "manual-id",
     });
     expect(def).not.toHaveProperty("id");
-    expect(spy).toHaveBeenCalledWith(
-      expect.stringContaining("deprecated"),
-    );
-    spy.mockRestore();
   });
 
   it("applies default retry config", () => {
@@ -248,19 +243,19 @@ describe("validateFileInput", () => {
   });
 });
 
-describe("NodeRoleSchema", () => {
+describe("WorkflowNodeRoleSchema", () => {
   it("accepts all valid roles", () => {
     for (const role of ["start", "end", "error_gate", "operation"]) {
-      expect(NodeRoleSchema.parse(role)).toBe(role);
+      expect(WorkflowNodeRoleSchema.parse(role)).toBe(role);
     }
   });
 
   it("rejects invalid roles", () => {
-    expect(() => NodeRoleSchema.parse("invalid")).toThrow();
+    expect(() => WorkflowNodeRoleSchema.parse("invalid")).toThrow();
   });
 
   it("defaults to operation", () => {
-    expect(NodeRoleSchema.parse(undefined)).toBe("operation");
+    expect(WorkflowNodeRoleSchema.parse(undefined)).toBe("operation");
   });
 
   it("WorkflowNodeManifestSchema defaults role to operation", () => {
@@ -277,39 +272,15 @@ describe("NodeRoleSchema", () => {
   });
 });
 
-describe("backward-compat type aliases", () => {
-  it("WorkflowNodeDefinition type compiles as WorkflowNodeManifest", () => {
-    type Assert<T extends WorkflowNodeManifest> = T;
-    const def: WorkflowNodeManifest = WorkflowNodeManifestSchema.parse(validDefinition);
-    const _check: Assert<typeof def> = def;
-    expect(_check.name).toBe("my-node");
-  });
-
-  it("re-exports WorkflowNodeDefinition from index", async () => {
-    const mod = await import("../src/index.js");
-    expect(mod.WorkflowNodeManifestSchema).toBeDefined();
-  });
-
-  it("WorkflowNodeStylesSchema is WorkflowNodeStylesSchema alias", async () => {
-    const mod = await import("../src/index.js");
-    expect(mod.WorkflowNodeStylesSchema).toBeDefined();
-    expect(mod.NodeStylesSchema).toBeDefined();
-  });
-
-  it("WorkflowNodeRoleSchema is WorkflowNodeRoleSchema alias", async () => {
-    const mod = await import("../src/index.js");
-    expect(mod.WorkflowNodeRoleSchema).toBeDefined();
-    expect(mod.NodeRoleSchema).toBeDefined();
-  });
-
-  it("WorkflowNodeStylesSchema parses styles", async () => {
+describe("WorkflowNodeStylesSchema", () => {
+  it("parses styles", async () => {
     const { WorkflowNodeStylesSchema } = await import("../src/definition.js");
     const styles = WorkflowNodeStylesSchema.parse({ icon: "Brain", color: "emerald" });
     expect(styles.icon).toBe("Brain");
     expect(styles.color).toBe("emerald");
   });
 
-  it("WorkflowNodeRoleSchema parses roles", async () => {
+  it("parses roles", async () => {
     const { WorkflowNodeRoleSchema } = await import("../src/definition.js");
     expect(WorkflowNodeRoleSchema.parse("start")).toBe("start");
     expect(WorkflowNodeRoleSchema.parse(undefined)).toBe("operation");

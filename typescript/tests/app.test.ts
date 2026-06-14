@@ -102,13 +102,6 @@ describe("Express endpoints", () => {
     });
   });
 
-  describe("GET /definition", () => {
-    it("redirects to /manifest with 301", async () => {
-      const resp = await request(app).get("/definition");
-      expect(resp.status).toBe(301);
-    });
-  });
-
   describe("POST /hook", () => {
     it("returns 501 when not implemented", async () => {
       const resp = await request(app)

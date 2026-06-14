@@ -12,9 +12,9 @@ Demonstrates:
 from pathlib import Path
 
 import httpx
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest
 
-definition = NodeDefinition(
+definition = WorkflowNodeManifest(
     name="echo",
     version="1.0.0",  # semantic version — engine enforces immutability; bump for schema changes
     title="Echo",

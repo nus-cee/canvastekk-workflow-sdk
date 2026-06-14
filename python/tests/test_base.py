@@ -215,7 +215,7 @@ class TestBaseNode:
         routes = [route.path for route in app.routes]
         assert "/execute" in routes
         assert "/health" in routes
-        assert "/definition" in routes
+        assert "/manifest" in routes
 
 
 class TestBaseNodeTypedExceptions:

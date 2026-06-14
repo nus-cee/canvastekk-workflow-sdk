@@ -1,6 +1,6 @@
 ---
 name: canvastekk-node-builder
-description: Create CanvasTEKK workflow nodes with correct SDK patterns, schemas, file I/O, Dockerfiles, and tests. Covers BaseNode, NodeDefinition, ExecutionContext, contracts, and the complete node creation workflow from analysis to CLI validation.
+description: Create CanvasTEKK workflow nodes with correct SDK patterns, schemas, file I/O, Dockerfiles, and tests. Covers BaseNode, WorkflowNodeManifest, ExecutionContext, contracts, and the complete node creation workflow from analysis to CLI validation.
 license: Apache-2.0
 compatibility: opencode
 metadata:
@@ -41,7 +41,7 @@ For domain-specific code examples (point cloud segmentation patterns, measuremen
 ```python
 from canvastekk_workflow_sdk import (
     BaseNode,
-    NodeDefinition,
+    WorkflowNodeManifest,
     ExecutionContext,
     WorkflowNodeStyles,
     RetryConfig,
@@ -79,10 +79,10 @@ from canvastekk_workflow_sdk import (
 All nodes must subclass `BaseNode`, define a class-level `definition` attribute, and implement `execute()`.
 
 ```python
-from canvastekk_workflow_sdk import BaseNode, NodeDefinition, ExecutionContext
+from canvastekk_workflow_sdk import BaseNode, WorkflowNodeManifest, ExecutionContext
 
 class MyNode(BaseNode):
-    definition = NodeDefinition(...)  # Class-level attribute (NOT inside __init__)
+    definition = WorkflowNodeManifest(...)  # Class-level attribute (NOT inside __init__)
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
         """Required: Implement business logic. Return a dict matching output_schema."""
@@ -121,12 +121,12 @@ node.add_middleware(MyMiddleware())
 app = node.create_app()
 ```
 
-### NodeDefinition (Required)
+### WorkflowNodeManifest (Required)
 
 ```python
-from canvastekk_workflow_sdk import NodeDefinition, RetryConfig, WorkflowNodeStyles
+from canvastekk_workflow_sdk import WorkflowNodeManifest, RetryConfig, WorkflowNodeStyles
 
-definition = NodeDefinition(
+definition = WorkflowNodeManifest(
     # === REQUIRED ===
     name="segment",                    # Slug for routing (lowercase, alphanumeric, hyphens)
     version="1.0.0",                   # Semantic version (X.Y.Z)
@@ -140,7 +140,7 @@ definition = NodeDefinition(
     timeout_seconds=30,                # Max execution time in seconds (min: 1)
     token_cost=0.0,                    # Cost per execution (float >= 0)
     default_retry=RetryConfig(),       # See RetryConfig below
-    styles=None,                       # See WorkflowNodeStyles (formerly NodeStyles) below
+    styles=None,                       # See WorkflowNodeStyles below
 )
 ```
 
@@ -155,7 +155,7 @@ RetryConfig(
 )
 ```
 
-#### WorkflowNodeStyles (formerly NodeStyles) and ColorPreset
+#### WorkflowNodeStyles and ColorPreset
 
 ```python
 WorkflowNodeStyles(
@@ -170,7 +170,7 @@ WorkflowNodeStyles(
 # Dark:      red-dark, sky-dark, teal-dark, emerald-dark
 ```
 
-#### NodeDefinition Properties and Methods
+#### WorkflowNodeManifest Properties and Methods
 
 ```python
 definition.file_input_fields    # list[str] — field names with format: "file" in input_schema
@@ -286,7 +286,6 @@ app = MyNode().create_app(dependencies=[Depends(auth)])
 | `/execute` | POST | Run node business logic |
 | `/health` | GET | Health status (calls health_check()) |
 | `/manifest` | GET | Node self-description + sdk_version + mode |
-| `/definition` | GET | Deprecated — redirects to /manifest |
 | `/hook` | POST | Webhook handler (501 if not overridden) |
 | `/metrics` | GET | Execution statistics |
 | `/live` | GET | Liveness probe (Kubernetes) |
@@ -408,9 +407,9 @@ Follow this structure exactly:
 from pathlib import Path
 
 import httpx
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest
 
-definition = NodeDefinition(
+definition = WorkflowNodeManifest(
     name="{{name}}",
     version="{{version}}",
     title="{{title}}",
@@ -557,7 +556,7 @@ class Test{{ClassName}}Unit:
     """Unit tests for node business logic."""
 
     def test_definition_fields(self):
-        """Verify NodeDefinition has all required fields."""
+        """Verify WorkflowNodeManifest has all required fields."""
         assert definition.id == "{{name}}-v{{version}}"
         assert definition.name == "{{name}}"
         assert definition.version == "{{version}}"
@@ -732,7 +731,7 @@ Before considering a node complete, verify ALL of these:
 - [ ] `execute(self, inputs: dict, context: ExecutionContext) -> dict` is implemented
 - [ ] Docstring describes the node's purpose
 
-### NodeDefinition
+### WorkflowNodeManifest
 - [ ] `id` is NOT provided manually — it is auto-derived from `name` + `version` as `{name}-v{version}`
 - [ ] `name` is a valid slug: lowercase alphanumeric characters and hyphens only (e.g., `point-cloud-segment`)
 - [ ] `version` follows semantic versioning (e.g., `1.0.0`)
@@ -796,7 +795,7 @@ Before considering a node complete, verify ALL of these:
 
 ```
 my_node/
-├── handler.py          # NodeDefinition + BaseNode subclass + app = Node().create_app()
+├── handler.py          # WorkflowNodeManifest + BaseNode subclass + app = Node().create_app()
 ├── Dockerfile          # python:3.12-slim, SDK from GitHub Packages, uvicorn
 ├── pyproject.toml      # Dependencies including canvastekk-workflow-sdk
 ├── README.md           # Optional: node-specific documentation

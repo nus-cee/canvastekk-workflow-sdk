@@ -203,15 +203,15 @@ The SDK provides registry-level node definition tools and a local workflow build
 
 | SDK Type | Engine Type | Purpose |
 |----------|-------------|---------|
-| `NodeDefinition` | `WorkflowNodeManifest` | Registry-level node type (schemas, metadata, styles, invocation config) |
+| `WorkflowNodeManifest` | `WorkflowNodeManifest` | Registry-level node type (schemas, metadata, styles, invocation config) |
 | `workflow.WorkflowDefinitionNode` | `WorkflowDefinitionNode` | Node instance within a workflow definition (inputs, position, edges) |
 | `workflow.WorkflowDefinitionSpec` | `WorkflowDefinitionSpec` | Complete workflow definition (nodes + edges as a DAG) |
 
-Node authors define `NodeDefinition`. The engine handles `WorkflowDefinitionNode` internally when building workflow definitions.
+Node authors define `WorkflowNodeManifest`. The engine handles `WorkflowDefinitionNode` internally when building workflow definitions.
 
 The SDK's `workflow` module lets end users build, validate, and test-run complete workflow DAGs locally without the engine. `WorkflowDefinitionSpec.model_dump(mode="json")` produces JSON directly POSTable to the engine's `/api/workflows/definitions` endpoint.
 
-**Versioning:** `NodeDefinition.version` is the node's semantic version string (e.g., `"1.0.0"`). The engine uses this version directly and enforces immutability — re-registering with the same version and changed data is rejected. Bump the version for any schema or metadata changes.
+**Versioning:** `WorkflowNodeManifest.version` is the node's semantic version string (e.g., `"1.0.0"`). The engine uses this version directly and enforces immutability — re-registering with the same version and changed data is rejected. Bump the version for any schema or metadata changes.
 
 Project structure:
 
@@ -241,7 +241,7 @@ Each language SDK follows the same pattern:
 2. Initialize with language-appropriate package manager
 3. Mirror the same API surface as existing SDKs:
    - `BaseNode` class with `execute()` method
-   - `NodeDefinition` with schema validation
+   - `WorkflowNodeManifest` with schema validation
    - HTTP endpoints: `/execute`, `/health`, `/manifest`, `/hook`, `/metrics`
    - Error handling with structured error codes
 4. Add CI workflow at `.github/workflows/ci-<lang>.yml`
@@ -374,8 +374,8 @@ Key decisions recorded as the SDK evolves. See [`PLANS/PLAN-DA-894.md`](./PLANS/
 | Hard break — no backward compat | Not in production yet. Dual detection adds complexity for zero benefit |
 | `httpx` promoted to runtime dependency | Replaces `urllib.request` in `uploads.py` and `registry.py`. Async-capable, timeout/redirect support, already a de facto standard in FastAPI projects |
 | `python-multipart` removed | JSON-only `/execute` endpoint. File data never hits the SDK — engine sends presigned URLs, node downloads directly |
-| `NodeDefinition.model_validator` rejects `format: "binary"` | Definition-time validation. Node authors discover errors on app startup, not at runtime |
-| `validate_file_input()` helper on `NodeDefinition` | Validates downloaded files against `x-accept` (extensions) and `x-maxSizeBytes` (size). Node authors call after download |
+| `WorkflowNodeManifest.model_validator` rejects `format: "binary"` | Definition-time validation. Node authors discover errors on app startup, not at runtime |
+| `validate_file_input()` helper on `WorkflowNodeManifest` | Validates downloaded files against `x-accept` (extensions) and `x-maxSizeBytes` (size). Node authors call after download |
 | `x-*` JSON Schema extensions | Custom keys (`x-accept`, `x-maxSizeBytes`, `x-description`) ignored by `Draft7Validator`, consumed by frontend and node. Follows JSON Schema extension convention |
 | CLI `python -m canvastekk_workflow_sdk validate` | Offline manifest validation for node authors during development. Fast feedback without server startup |
 | Echo node example (`examples/echo_node/`) | Reference implementation showing file I/O, validation, CLI usage, Docker build |

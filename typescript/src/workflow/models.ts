@@ -29,8 +29,6 @@ export interface WorkflowEdgeDefinition {
   condition?: string | null;
 }
 
-export type WorkflowEdge = WorkflowEdgeDefinition;
-
 /**
  * Node instance within a workflow definition.
  *
@@ -56,8 +54,6 @@ export interface WorkflowDefinitionNode {
   config_schema?: Record<string, unknown> | null;
 }
 
-export type WorkflowNode = WorkflowDefinitionNode;
-
 /**
  * Complete workflow specification (DAG of nodes and edges).
  *
@@ -70,5 +66,3 @@ export interface WorkflowDefinitionSpec {
   edges: WorkflowEdgeDefinition[];
   metadata: Record<string, unknown>;
 }
-
-export type WorkflowSpec = WorkflowDefinitionSpec;

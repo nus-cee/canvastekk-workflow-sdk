@@ -72,11 +72,11 @@ Create a file (e.g. `handler.py`) and subclass `BaseNode`:
 
 ```python
 # handler.py
-from canvastekk_workflow_sdk import BaseNode, NodeDefinition, ExecutionContext
+from canvastekk_workflow_sdk import BaseNode, WorkflowNodeManifest, ExecutionContext
 
 
 class UppercaseNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="uppercase",
         version="1.0.0",
         title="Uppercase",
@@ -103,7 +103,7 @@ app = UppercaseNode().create_app()
 The four requirements:
 
 1. **Subclass `BaseNode`** — inherit from `canvastekk_workflow_sdk.BaseNode`
-2. **Define `definition`** — a `NodeDefinition` with all required fields (`name`, `version`, `title`, `description`, `input_schema`, `output_schema`). Note: `id` is auto-derived from `name` + `version` and must NOT be provided manually.
+2. **Define `definition`** — a `WorkflowNodeManifest` with all required fields (`name`, `version`, `title`, `description`, `input_schema`, `output_schema`). Note: `id` is auto-derived from `name` + `version` and must NOT be provided manually.
 3. **Implement `execute(inputs, context)`** — return a dict matching your `output_schema`
 4. **Call `.create_app()`** — get a ready-to-run FastAPI application
 
@@ -152,7 +152,6 @@ When you call `node.create_app()`, the SDK creates a FastAPI application with th
 | `/execute` | POST | `node.run(request)` | Execute the node's business logic |
 | `/health` | GET | `node.health_check()` | Health status |
 | `/manifest` | GET | `node.definition.to_dict()` | Node self-description |
-| `/definition` | GET | Redirects to `/manifest` | Deprecated |
 | `/hook` | POST | `node.hook(payload)` | Webhook/callback handler |
 | `/metrics` | GET | `node._metrics_collector.get_summary()` | Execution metrics |
 
@@ -259,12 +258,12 @@ Note: When raised inside `execute()`, the SDK catches them and returns `status: 
 Usage example:
 
 ```python
-from canvastekk_workflow_sdk import BaseNode, NodeDefinition, ExecutionContext
+from canvastekk_workflow_sdk import BaseNode, WorkflowNodeManifest, ExecutionContext
 from canvastekk_workflow_sdk.exceptions import NodeIOError, NodeExecutionError
 
 
 class FileProcessorNode(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="file-proc",
         version="1.0.0",
         title="File Processor",
@@ -296,7 +295,7 @@ app = FileProcessorNode().create_app()
 Mark input fields as files using `"format": "file"` in `input_schema`. Use `x-accept` and `x-maxSizeBytes` extensions to specify accepted file types and size limits:
 
 ```python
-definition = NodeDefinition(
+definition = WorkflowNodeManifest(
     name="segment",
     version="1.0.0",
     title="Segment",
@@ -389,7 +388,7 @@ def execute(self, inputs: dict, context: ExecutionContext) -> dict:
 The engine provides presigned PUT URLs via the `output_upload_url` field in the request. The SDK uploads file outputs automatically after successful execution:
 
 ```python
-definition = NodeDefinition(
+definition = WorkflowNodeManifest(
     name="converter",
     version="1.0.0",
     title="Converter",
@@ -430,12 +429,12 @@ After successful execution, the SDK uploads the file at `outputs["converted"]` t
 ### Complete Example
 
 ```python
-from canvastekk_workflow_sdk import BaseNode, NodeDefinition, ExecutionContext
+from canvastekk_workflow_sdk import BaseNode, WorkflowNodeManifest, ExecutionContext
 from pathlib import Path
 
 
 class PointCloudSegmenter(BaseNode):
-    definition = NodeDefinition(
+    definition = WorkflowNodeManifest(
         name="segment",
         version="1.0.0",
         title="Segment",
@@ -750,7 +749,7 @@ poetry run pytest tests/test_my_node.py
 
 ## SDK Components
 
-### NodeDefinition
+### WorkflowNodeManifest
 
 Defines what a node is. Maps to the engine's **registry-level node type** (`WorkflowNodeManifest` in engine terminology). This is distinct from `WorkflowDefinitionNode`, which the engine uses for node instances within a workflow definition.
 
@@ -759,10 +758,10 @@ Defines what a node is. Maps to the engine's **registry-level node type** (`Work
 **Versioning:** The `version` field is a semantic version string (e.g., `"1.0.0"`) validated against the X.Y.Z pattern. The engine uses this version directly and enforces immutability: re-registering with the same version and changed data is rejected. Bump the version for any schema or metadata changes.
 
 ```python
-from canvastekk_workflow_sdk import NodeDefinition, RetryConfig, WorkflowNodeStyles
+from canvastekk_workflow_sdk import WorkflowNodeManifest, RetryConfig, WorkflowNodeStyles
 from canvastekk_workflow_sdk.definition import ColorPreset
 
-definition = NodeDefinition(
+definition = WorkflowNodeManifest(
     name="my-node",
     version="1.0.0",
     title="My Node",
@@ -1005,11 +1004,11 @@ The SDK provides utilities for registering nodes with the CanvasTEKK Workflow En
 
 | SDK Type | Engine Type | Purpose |
 |----------|-------------|---------|
-| `NodeDefinition` | `WorkflowNodeManifest` | Registry-level node type (schemas, metadata, styles) |
+| `WorkflowNodeManifest` | `WorkflowNodeManifest` | Registry-level node type (schemas, metadata, styles) |
 | `workflow.WorkflowDefinitionNode` | `WorkflowDefinitionNode` | Node instance within a workflow (inputs, position, edges) |
 | `workflow.WorkflowDefinitionSpec` | `WorkflowDefinitionSpec` | Complete workflow definition (nodes + edges as a DAG) |
 
-Node authors only interact with `NodeDefinition`. The engine handles `WorkflowDefinitionNode` internally.
+Node authors only interact with `WorkflowNodeManifest`. The engine handles `WorkflowDefinitionNode` internally.
 
 The SDK's `workflow` module provides a local equivalent: `WorkflowBuilder` creates `WorkflowDefinitionSpec` objects that serialize to engine-compatible JSON, and `WorkflowRunner` executes them locally.
 
@@ -1029,15 +1028,15 @@ Old names still work as aliases and will not be removed:
 
 | Old Name | Current Name |
 |----------|-------------|
-| `NodeDefinition` | `WorkflowNodeManifest` |
-| `WorkflowNodeDefinition` | `WorkflowNodeManifest` |
+| `WorkflowNodeManifest` | `WorkflowNodeManifest` |
+| `WorkflowWorkflowNodeManifest` | `WorkflowNodeManifest` |
 | `WorkflowNode` | `WorkflowDefinitionNode` |
 | `WorkflowEdge` | `WorkflowEdgeDefinition` |
 | `WorkflowSpec` | `WorkflowDefinitionSpec` |
 
 ### Versioning
 
-The `NodeDefinition.version` field (semantic version string) is the node's authoritative version. The engine stores and enforces this version — re-registering with the same version and changed data is rejected (HTTP 409). Node authors must bump the version for any changes.
+The `WorkflowNodeManifest.version` field (semantic version string) is the node's authoritative version. The engine stores and enforces this version — re-registering with the same version and changed data is rejected (HTTP 409). Node authors must bump the version for any changes.
 
 ### `register_node()`
 
@@ -1091,7 +1090,7 @@ Supports dict-like access (`result["name"]`, `"name" in result`, `result.get("na
 
 ### `build_registry_payload()`
 
-Build a registry-compatible payload dict from a `NodeDefinition`. Used internally by both `register_node()` and `export_definition()` to ensure consistent field mapping:
+Build a registry-compatible payload dict from a `WorkflowNodeManifest`. Used internally by both `register_node()` and `export_definition()` to ensure consistent field mapping:
 
 ```python
 from canvastekk_workflow_sdk.registry import build_registry_payload
@@ -1117,7 +1116,7 @@ payload = build_registry_payload(
 
 ### `export_definition()`
 
-Export a `NodeDefinition` as a registry-compatible JSON file:
+Export a `WorkflowNodeManifest` as a registry-compatible JSON file:
 
 ```python
 from canvastekk_workflow_sdk.definition import export_definition
@@ -1479,7 +1478,7 @@ Middleware provides hooks around `execute()` for cross-cutting concerns:
 
 ```python
 from typing import Any
-from canvastekk_workflow_sdk import BaseNode, ExecutionContext, NodeDefinition
+from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest
 from canvastekk_workflow_sdk.middleware import NodeMiddleware
 
 
@@ -1528,7 +1527,7 @@ Override `health_check()` to report on external dependencies:
 
 ```python
 class ModelInferenceNode(BaseNode):
-    definition = NodeDefinition(...)
+    definition = WorkflowNodeManifest(...)
 
     def __init__(self):
         super().__init__()
@@ -1565,7 +1564,7 @@ Override `hook()` to handle async callbacks:
 
 ```python
 class AsyncTaskNode(BaseNode):
-    definition = NodeDefinition(...)
+    definition = WorkflowNodeManifest(...)
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
         # Start a long-running task, return immediately
@@ -1618,8 +1617,7 @@ Every node exposes these endpoints automatically:
 |----------|--------|---------|
 | `/execute` | POST | Run the node (JSON body) |
 | `/health` | GET | Health check |
-| `/manifest` | GET | Node self-description (NodeDefinition) + `sdk_version` + `mode` |
-| `/definition` | GET | Deprecated, redirects to `/manifest` |
+| `/manifest` | GET | Node self-description (WorkflowNodeManifest) + `sdk_version` + `mode` |
 | `/hook` | POST | Webhook/callback handler (override `hook()`) |
 | `/metrics` | GET | Execution metrics summary |
 | `/live` | GET | Liveness probe — returns 200 if the process is alive (Kubernetes) |

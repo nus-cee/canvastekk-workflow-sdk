@@ -77,12 +77,12 @@ Create a file (e.g. `handler.ts`) and extend `BaseNode`:
 ```typescript
 import {
   BaseNode,
-  NodeDefinition,
+  WorkflowNodeManifest,
   ExecutionContext,
 } from "canvastekk-workflow-sdk";
 
 class UppercaseNode extends BaseNode {
-  static override definition: NodeDefinition = {
+  static override definition: WorkflowNodeManifest = {
     name: "uppercase",
     version: "1.0.0",
     title: "Uppercase",
@@ -114,7 +114,7 @@ export default app;
 The four requirements:
 
 1. **Extend `BaseNode`** — inherit from `canvastekk-workflow-sdk`'s `BaseNode`
-2. **Define `definition`** — a `NodeDefinition` with all required fields (`name`, `version`, `title`, `description`, `input_schema`, `output_schema`). Note: `id` is auto-derived from `name` + `version` and must NOT be provided manually.
+2. **Define `definition`** — a `WorkflowNodeManifest` with all required fields (`name`, `version`, `title`, `description`, `input_schema`, `output_schema`). Note: `id` is auto-derived from `name` + `version` and must NOT be provided manually.
 3. **Implement `execute(inputs, context)`** — return an object matching your `output_schema`
 4. **Call `.createApp()`** — get a ready-to-run Express application
 
@@ -166,7 +166,6 @@ When you call `node.createApp()`, the SDK creates an Express application with th
 | `/execute` | POST | `node.run(request)` | Execute the node's business logic |
 | `/health` | GET | `node.healthCheck()` | Health status |
 | `/manifest` | GET | Node definition | Node self-description |
-| `/definition` | GET | Redirects to `/manifest` | Deprecated |
 | `/hook` | POST | `node.hook(payload)` | Webhook/callback handler |
 | `/metrics` | GET | Metrics summary | Execution metrics |
 | `/live` | GET | Liveness probe | Returns 200 if process is alive (Kubernetes) |
@@ -278,14 +277,14 @@ Usage example:
 ```typescript
 import {
   BaseNode,
-  NodeDefinition,
+  WorkflowNodeManifest,
   ExecutionContext,
   NodeIOError,
 } from "canvastekk-workflow-sdk";
 import { existsSync } from "node:fs";
 
 class FileProcessorNode extends BaseNode {
-  static override definition: NodeDefinition = {
+  static override definition: WorkflowNodeManifest = {
     name: "file-proc",
     version: "1.0.0",
     title: "File Processor",
@@ -325,7 +324,7 @@ class FileProcessorNode extends BaseNode {
 Mark input fields as files using `"format": "file"` in `input_schema`. Use `x-accept` and `x-maxSizeBytes` extensions to specify accepted file types and size limits:
 
 ```typescript
-const definition: NodeDefinition = {
+const definition: WorkflowNodeManifest = {
   name: "segment",
   version: "1.0.0",
   title: "Segment",
@@ -405,13 +404,13 @@ The engine provides presigned PUT URLs via the `output_upload_url` field in the 
 ```typescript
 import {
   BaseNode,
-  NodeDefinition,
+  WorkflowNodeManifest,
   ExecutionContext,
 } from "canvastekk-workflow-sdk";
 import { readFileSync, writeFileSync } from "node:fs";
 
 class PointCloudSegmenter extends BaseNode {
-  static override definition: NodeDefinition = {
+  static override definition: WorkflowNodeManifest = {
     name: "segment",
     version: "1.0.0",
     title: "Segment",
@@ -462,7 +461,7 @@ export default app;
 
 ## SDK Components
 
-### NodeDefinition
+### WorkflowNodeManifest
 
 Defines what a node is. Maps to the engine's **registry-level node type** (`WorkflowNodeManifest` in engine terminology).
 
@@ -471,9 +470,9 @@ Defines what a node is. Maps to the engine's **registry-level node type** (`Work
 **Versioning:** The `version` field is a semantic version string (e.g. `"1.0.0"`) validated against the X.Y.Z pattern. The engine enforces immutability: re-registering with the same version and changed data is rejected. Bump the version for any schema or metadata changes.
 
 ```typescript
-import { NodeDefinition } from "canvastekk-workflow-sdk";
+import { WorkflowNodeManifest } from "canvastekk-workflow-sdk";
 
-const definition: NodeDefinition = {
+const definition: WorkflowNodeManifest = {
   name: "my-node",
   version: "1.0.0",
   title: "My Node",
@@ -802,7 +801,7 @@ console.log(result.revision_id); // "rev-abc123"
 
 ### `exportDefinition()`
 
-Export a `NodeDefinition` as a registry-compatible JSON file:
+Export a `WorkflowNodeManifest` as a registry-compatible JSON file:
 
 ```typescript
 import { exportDefinition } from "canvastekk-workflow-sdk";
@@ -989,8 +988,8 @@ Old names are preserved as type aliases and continue to work:
 
 | Old Name | Current Name |
 |----------|-------------|
-| `NodeDefinition` | `WorkflowNodeManifest` |
-| `WorkflowNodeDefinition` | `WorkflowNodeManifest` |
+| `WorkflowNodeManifest` | `WorkflowNodeManifest` |
+| `WorkflowWorkflowNodeManifest` | `WorkflowNodeManifest` |
 | `WorkflowNode` | `WorkflowDefinitionNode` |
 | `WorkflowEdge` | `WorkflowEdgeDefinition` |
 | `WorkflowSpec` | `WorkflowDefinitionSpec` |

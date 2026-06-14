@@ -1,4 +1,4 @@
-export type { EdgeType, WorkflowEdgeDefinition, WorkflowEdge, WorkflowDefinitionNode, WorkflowNode, WorkflowDefinitionSpec, WorkflowSpec } from "./models.js";
+export type { EdgeType, WorkflowEdgeDefinition, WorkflowDefinitionNode, WorkflowDefinitionSpec } from "./models.js";
 export { WorkflowBuilder } from "./builder.js";
 export { InProcessExecutor, HttpExecutor } from "./executor.js";
 export type { NodeExecutor } from "./executor.js";

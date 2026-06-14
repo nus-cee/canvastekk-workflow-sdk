@@ -42,9 +42,6 @@ class WorkflowEdgeDefinition(BaseModel):
     condition: str | None = Field(default=None, description="CEL expression for conditional edges")
 
 
-WorkflowEdge = WorkflowEdgeDefinition
-
-
 class WorkflowDefinitionNode(BaseModel):
     """A node instance placed into a workflow definition.
 
@@ -63,9 +60,6 @@ class WorkflowDefinitionNode(BaseModel):
     config_schema: dict[str, Any] | None = Field(default=None, description="Node configuration schema")
 
 
-WorkflowNode = WorkflowDefinitionNode
-
-
 class WorkflowDefinitionSpec(BaseModel):
     """Complete workflow specification as a directed acyclic graph.
 
@@ -79,6 +73,3 @@ class WorkflowDefinitionSpec(BaseModel):
         default_factory=dict,
         description="Workflow metadata (e.g. {'version': '1.0.0'})",
     )
-
-
-WorkflowSpec = WorkflowDefinitionSpec

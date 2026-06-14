@@ -5,10 +5,7 @@ from canvastekk_workflow_sdk.workflow.models import (
     EdgeType,
     WorkflowDefinitionNode,
     WorkflowDefinitionSpec,
-    WorkflowEdge,
     WorkflowEdgeDefinition,
-    WorkflowNode,
-    WorkflowSpec,
 )
 
 
@@ -157,11 +154,6 @@ class TestWorkflowNode:
     def test_slug_optional(self) -> None:
         node = WorkflowDefinitionNode(id="n1")
         assert node.slug is None
-
-    def test_backwards_compat_aliases(self) -> None:
-        assert WorkflowNode is WorkflowDefinitionNode
-        assert WorkflowEdge is WorkflowEdgeDefinition
-        assert WorkflowSpec is WorkflowDefinitionSpec
 
 
 class TestWorkflowSpecComplete:

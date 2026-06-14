@@ -4,8 +4,7 @@ FastAPI App Factory
 Creates a FastAPI application with standard node endpoints:
 - POST /execute - Run the node
 - GET /health - Health check
-- GET /manifest - Node self-description (replaces /definition)
-- GET /definition - Deprecated, redirects to /manifest
+- GET /manifest - Node self-description
 - POST /hook - Webhook/callback handler (stub, 501 by default)
 """
 
@@ -18,7 +17,7 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import APIRouter, FastAPI, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse
 
 from canvastekk_workflow_sdk.exceptions import NodeExecutionError, NodeTimeoutError, get_http_status_for_error
 from canvastekk_workflow_sdk.logging import configure_logging
@@ -88,7 +87,6 @@ def create_node_app(
     - POST /execute - Execute the node with given inputs
     - GET /health - Return node health status
     - GET /manifest - Return node's self-description (WorkflowNodeManifest)
-    - GET /definition - Deprecated redirect to /manifest
     - POST /hook - Webhook/callback handler
 
     Args:
@@ -277,21 +275,6 @@ def create_node_app(
             mode = "production"
         content["mode"] = mode
         return JSONResponse(content=content)
-
-    @router.get(
-        "/definition",
-        deprecated=True,
-        summary="Node definition (deprecated)",
-        description="Deprecated: use GET /manifest instead. Redirects with 301.",
-        tags=["Discovery"],
-    )
-    async def definition() -> RedirectResponse:
-        """
-        Deprecated: use GET /manifest instead.
-
-        Redirects to /manifest with a 301 Moved Permanently status.
-        """
-        return RedirectResponse(url="/manifest", status_code=301)
 
     @router.post(
         "/hook",
