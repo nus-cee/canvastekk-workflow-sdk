@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.16.0] - 2026-06-14
+
+### Features
+
+- Remove backward-compat aliases and harden release pipeline [DA-1302] (#39) (**BREAKING**)
+
+
 ## [0.15.0] - 2026-06-09
 
 ### Features
 
 - SDK model renames with parent→child naming convention [DA-1230] (#38) (**BREAKING**)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.15.0
 
 
 ## [0.14.1] - 2026-05-29
