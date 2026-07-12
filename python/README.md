@@ -6,11 +6,20 @@ Node SDK for CanvasTEKK Workflow Engine. Handles HTTP endpoint boilerplate so no
 
 ## Installation
 
-### From GitHub Packages (recommended)
+### From GitHub Packages (requires PAT)
+
+> GitHub Packages PyPI requires a PAT with `read:packages` scope. See the [root README](../README.md#python) for setup instructions.
 
 ```bash
 pip install canvastekk-workflow-sdk \
-  --index-url https://pypi.pkg.github.com/nus-cee/
+  --index-url https://USERNAME:TOKEN@pypi.pkg.github.com/nus-cee/
+```
+
+### From GitHub Releases (no auth)
+
+```bash
+# Download the .whl from https://github.com/nus-cee/canvastekk-workflow-sdk/releases
+pip install canvastekk_workflow_sdk-VERSION-py3-none-any.whl
 ```
 
 ### For Development
@@ -64,8 +73,13 @@ poetry run pytest --cov=canvastekk_workflow_sdk --cov-report=term-missing
 ### Step 1: Install the SDK
 
 ```bash
+# From GitHub Packages (requires PAT with read:packages scope)
 pip install canvastekk-workflow-sdk \
-  --index-url https://pypi.pkg.github.com/nus-cee/
+  --index-url https://USERNAME:TOKEN@pypi.pkg.github.com/nus-cee/
+
+# Or from GitHub Releases (no auth — download the .whl first)
+# https://github.com/nus-cee/canvastekk-workflow-sdk/releases
+pip install canvastekk_workflow_sdk-VERSION-py3-none-any.whl
 ```
 
 Or for local development, see the [For Development](#for-development) section above.

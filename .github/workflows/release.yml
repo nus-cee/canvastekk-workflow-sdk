@@ -50,7 +50,7 @@ jobs:
 
       - name: Install Poetry
         if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
-        run: pip install poetry
+        run: pip install poetry==1.8.5
 
       - name: Update poetry.lock
         if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
@@ -141,21 +141,63 @@ jobs:
           # Upload wheel and hash (use --clobber to replace any existing asset)
           gh release upload "${NEW_VERSION}" dist/*.whl dist/*.whl.sha256 --clobber
 
+      - name: Pre-publish smoke test (local wheel install)
+        if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
+        working-directory: python
+        run: |
+          python3 -m venv /tmp/pre-publish-venv
+          WHEEL_FILE=$(ls dist/*.whl)
+          /tmp/pre-publish-venv/bin/pip install "${WHEEL_FILE}"
+
+          /tmp/pre-publish-venv/bin/python -c "
+          from canvastekk_workflow_sdk import (
+              WorkflowNodeManifest, WorkflowNodeStyles, WorkflowNodeRole,
+              RetryConfig, BaseNode, ExecutionContext,
+          )
+          from canvastekk_workflow_sdk.workflow.models import (
+              WorkflowDefinitionNode, WorkflowEdgeDefinition, WorkflowDefinitionSpec,
+          )
+          print('Pre-publish smoke test passed: wheel installs and imports correctly')
+          "
+
+      - name: Publish Python SDK to GitHub Packages
+        if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
+        working-directory: python
+        env:
+          POETRY_HTTP_BASIC_GITHUB_USERNAME: "nus-cee"
+          POETRY_HTTP_BASIC_GITHUB_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          poetry config repositories.github "https://pypi.pkg.github.com/nus-cee/"
+          poetry publish --repository github
+
       - name: Verify published wheel (post-publish smoke test)
         if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
-        continue-on-error: true
         env:
           NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION_NUM="${NEW_VERSION#v}"
 
           # Create clean virtualenv
           python3 -m venv /tmp/verify-venv
 
-          # Install from GitHub Packages (simulates real consumer experience)
-          /tmp/verify-venv/bin/pip install \
-            "canvastekk-workflow-sdk==${VERSION_NUM}" \
-            --index-url "https://pypi.pkg.github.com/nus-cee/"
+          # Install from GitHub Packages with auth + retry for propagation latency
+          INDEX_URL="https://nus-cee:${GITHUB_TOKEN}@pypi.pkg.github.com/nus-cee/"
+          INSTALL_SUCCESS=false
+          for i in 1 2 3; do
+            if /tmp/verify-venv/bin/pip install \
+              "canvastekk-workflow-sdk==${VERSION_NUM}" \
+              --index-url "${INDEX_URL}"; then
+              INSTALL_SUCCESS=true
+              break
+            fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          if [ "$INSTALL_SUCCESS" = false ]; then
+            echo "::error::Failed to install canvastekk-workflow-sdk==${VERSION_NUM} after 3 attempts"
+            exit 1
+          fi
 
           # Verify all canonical names import correctly from published wheel
           /tmp/verify-venv/bin/python -c "
@@ -164,7 +206,6 @@ jobs:
               RetryConfig, BaseNode, ExecutionContext,
           )
 
-          # Verify workflow model canonical names
           from canvastekk_workflow_sdk.workflow.models import (
               WorkflowDefinitionNode, WorkflowEdgeDefinition, WorkflowDefinitionSpec,
           )
