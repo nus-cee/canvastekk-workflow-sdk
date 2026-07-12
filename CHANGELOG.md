@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.18.2] - 2026-07-12
+
+### Bug Fixes
+
+- **ci**: Make PyPI publish non-blocking until org registry is enabled (#47)
+
+
 ## [0.18.1] - 2026-07-12
 
 ### Bug Fixes
 
 - **ci**: Switch to twine for GitHub Packages PyPI publish (poetry 404) (#46)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.18.1
 
 
 ## [0.18.0] - 2026-07-12
