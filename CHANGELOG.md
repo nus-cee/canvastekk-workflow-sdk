@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.17.2] - 2026-07-12
+
+### Bug Fixes
+
+- **ci**: Scope TS package name for GitHub Packages + make publish non-blocking (#44)
+
+
 ## [0.17.1] - 2026-07-12
 
 ### Bug Fixes
 
 - **ci**: Make post-publish smoke tests non-blocking (continue-on-error) (#43)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.17.1
 
 
 ## [0.17.0] - 2026-07-12
