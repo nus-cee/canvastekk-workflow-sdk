@@ -164,11 +164,15 @@ jobs:
         if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
         working-directory: python
         env:
-          POETRY_HTTP_BASIC_GITHUB_USERNAME: "nus-cee"
-          POETRY_HTTP_BASIC_GITHUB_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          poetry config repositories.github "https://pypi.pkg.github.com/nus-cee/"
-          poetry publish --repository github
+          pip install twine
+          python -m twine upload \
+            --repository-url "https://pypi.pkg.github.com/nus-cee/" \
+            --username "nus-cee" \
+            --password "${GITHUB_TOKEN}" \
+            --disable-progress-bar \
+            dist/canvastekk_workflow_sdk-*.whl
 
       - name: Verify published wheel (post-publish smoke test)
         if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
