@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.18.0] - 2026-07-12
+
+### Features
+
+- **ci**: Publish Python SDK to GitHub Packages PyPI registry (#45)
+
+
 ## [0.17.2] - 2026-07-12
 
 ### Bug Fixes
 
 - **ci**: Scope TS package name for GitHub Packages + make publish non-blocking (#44)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.17.2
 
 
 ## [0.17.1] - 2026-07-12
