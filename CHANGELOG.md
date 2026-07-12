@@ -2,11 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.17.0] - 2026-07-12
+
+### Features
+
+- **ts**: DA-1461 TypeScript SDK parity fixes — wire-format, security, resolver, robustness (#40) (**BREAKING**)
+
+
+### Bug Fixes
+
+- **ci**: Fix release.yml indentation + add TypeScript CI + multi-version matrix + TS publish (#41)
+- **ci**: Extract bump script to standalone file to fix indentation errors (#42)
+
+
 ## [0.16.0] - 2026-06-14
 
 ### Features
 
 - Remove backward-compat aliases and harden release pipeline [DA-1302] (#39) (**BREAKING**)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.16.0
 
 
 ## [0.15.0] - 2026-06-09
