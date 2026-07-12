@@ -20,8 +20,8 @@ export function computeLevels(spec: WorkflowDefinitionSpec): string[][] {
   }
 
   for (const edge of spec.edges) {
-    adj.get(edge.fromNode)!.push(edge.toNode);
-    inDegree.set(edge.toNode, (inDegree.get(edge.toNode) ?? 0) + 1);
+    adj.get(edge.from_node)!.push(edge.to_node);
+    inDegree.set(edge.to_node, (inDegree.get(edge.to_node) ?? 0) + 1);
   }
 
   const queue: string[] = nodeIds.filter((nid) => inDegree.get(nid) === 0).sort();

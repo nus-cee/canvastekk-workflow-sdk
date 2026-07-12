@@ -113,7 +113,7 @@ describe("WorkflowBuilder", () => {
       expect(spec.edges).toHaveLength(1);
     });
 
-    it("sets edge options (fromOutput, toInput, edgeType, condition)", async () => {
+    it("sets edge options (from_output, to_input, edge_type, condition)", async () => {
       const spec = await new WorkflowBuilder()
         .addStart("start")
         .addNode("n1", { slug: "test-v1" })
@@ -128,9 +128,9 @@ describe("WorkflowBuilder", () => {
         .build();
 
       const edge = spec.edges[0];
-      expect(edge.fromOutput).toBe("data");
-      expect(edge.toInput).toBe("input");
-      expect(edge.edgeType).toBe("success");
+      expect(edge.from_output).toBe("data");
+      expect(edge.to_input).toBe("input");
+      expect(edge.edge_type).toBe("success");
       expect(edge.condition).toBe("value > 0");
     });
 
@@ -147,7 +147,7 @@ describe("WorkflowBuilder", () => {
     expect(spec.metadata).toEqual({});
   });
 
-    it("defaults edge fromOutput/toInput to empty string when not provided", async () => {
+    it("defaults edge from_output/to_input to empty string when not provided", async () => {
       const spec = await new WorkflowBuilder()
         .addStart("start")
         .addNode("n1", { slug: "test-v1" })
@@ -156,11 +156,11 @@ describe("WorkflowBuilder", () => {
         .connect("n1", "end")
         .build();
 
-      expect(spec.edges[0].fromOutput).toBe("");
-      expect(spec.edges[0].toInput).toBe("");
+      expect(spec.edges[0].from_output).toBe("");
+      expect(spec.edges[0].to_input).toBe("");
     });
 
-    it("defaults edgeType when not provided", async () => {
+    it("defaults edge_type when not provided", async () => {
       const spec = await new WorkflowBuilder()
         .addStart("start")
         .addNode("n1", { slug: "test-v1" })
@@ -169,7 +169,7 @@ describe("WorkflowBuilder", () => {
         .connect("n1", "end")
         .build();
 
-      expect(spec.edges[0].edgeType).toBe("default");
+      expect(spec.edges[0].edge_type).toBe("default");
       expect(spec.edges[0].condition).toBe(null);
     });
 

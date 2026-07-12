@@ -93,6 +93,15 @@ export class WorkflowBuilder {
     return this;
   }
 
+  /**
+   * Connects two nodes with an edge.
+   *
+   * @param fromNode - Source node ID
+   * @param toNode - Target node ID
+   * @param opts - Connection options
+   * @returns This builder instance for chaining
+   * @throws {Error} If source or target node not found, or if connecting a node to itself
+   */
   connect(
     fromNode: string,
     toNode: string,
@@ -109,13 +118,16 @@ export class WorkflowBuilder {
     if (!this._nodeIds.has(toNode)) {
       throw new Error(`Unknown target node: '${toNode}'`);
     }
+    if (fromNode === toNode) {
+      throw new Error(`Self-loop detected: cannot connect '${fromNode}' to itself`);
+    }
     this._edges.push({
       id: crypto.randomUUID(),
-      fromNode,
-      toNode,
-      fromOutput: opts?.fromOutput ?? "",
-      toInput: opts?.toInput ?? "",
-      edgeType: opts?.edgeType ?? "default",
+      from_node: fromNode,
+      to_node: toNode,
+      from_output: opts?.fromOutput ?? "",
+      to_input: opts?.toInput ?? "",
+      edge_type: opts?.edgeType ?? "default",
       condition: opts?.condition ?? null,
     });
     return this;

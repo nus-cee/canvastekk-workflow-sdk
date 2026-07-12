@@ -33,6 +33,9 @@ poetry run ruff check canvastekk_workflow_sdk/ tests/
 
 # Test
 poetry run pytest -v
+
+# Test with coverage report
+poetry run pytest --cov=canvastekk_workflow_sdk --cov-report=term-missing
 ```
 
 ### Runtime Dependencies
@@ -51,6 +54,7 @@ poetry run pytest -v
 |---------|---------|---------|
 | pytest | ^9.0 | Test runner |
 | pytest-asyncio | ^1.3 | Async test support |
+| pytest-cov | ^7.1 | Coverage reporting |
 | ruff | ^0.15 | Linter & formatter |
 
 ---
@@ -826,6 +830,12 @@ Standard data formats for passing structured data between nodes:
 
 #### InstanceSet — Detected Objects
 
+Field constraints enforced at construction time:
+- `instance_id`, `class_id`: `ge=0` (non-negative)
+- `point_indices`: all values must be non-negative
+- `point_count`: `ge=0`
+- `BoundingBox3D`: `min_point <= max_point` on each axis (x, y, z)
+
 ```python
 from canvastekk_workflow_sdk.contracts import InstanceSet, Instance, BoundingBox3D, Point3D
 
@@ -1243,7 +1253,7 @@ The created `WorkflowDefinitionNode` includes:
 
 #### `connect(from_node, to_node, *, from_output="", to_input="", edge_type=EdgeType.DEFAULT, condition=None)`
 
-Add an edge connecting two nodes. Validates that both node IDs exist.
+Add an edge connecting two nodes. Validates that both node IDs exist and rejects self-loops (`from_node == to_node`).
 
 ```python
 builder.connect("start", "segment", from_output="point_cloud", to_input="input_file")

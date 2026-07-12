@@ -161,6 +161,17 @@ class _KeycloakAuth(_AuthBackend):
         audience: str | None = None,
         algorithm: str = "RS256",
     ) -> None:
+        """Initialize Keycloak authentication backend.
+
+        Args:
+            server_url: Keycloak base URL (or set CANVASTEKK_KEYCLOAK_SERVER_URL).
+            realm: Keycloak realm (or set CANVASTEKK_KEYCLOAK_REALM).
+            audience: Expected aud claim (or set CANVASTEKK_KEYCLOAK_AUDIENCE).
+            algorithm: JWT algorithm (default: RS256).
+
+        The instance maintains JWKS caching with refresh-on-miss behavior and
+        cooldown to prevent excessive retries during key rotation.
+        """
         self._server_url = server_url or os.environ.get("CANVASTEKK_KEYCLOAK_SERVER_URL", "")
         self._realm = realm or os.environ.get("CANVASTEKK_KEYCLOAK_REALM", "")
         self._audience = audience or os.environ.get("CANVASTEKK_KEYCLOAK_AUDIENCE")
@@ -169,6 +180,8 @@ class _KeycloakAuth(_AuthBackend):
         self._jwks_cache: Any = None
         self._jwks_fetched_at: float = 0.0
         self._jwks_ttl: float = 300.0
+        self._last_refresh_attempt: float = 0.0
+        self._refresh_cooldown: float = 10.0
 
     def _get_jwt(self) -> Any:
         if self._jwt_module is None:
@@ -209,6 +222,21 @@ class _KeycloakAuth(_AuthBackend):
         return jwks
 
     def authenticate(self, request: Request) -> dict[str, Any]:
+        """Authenticate a request using Keycloak-issued JWT tokens.
+
+        Implements refresh-on-miss with cooldown: if a token's kid is not found
+        in the cached JWKS, a refresh is attempted unless one occurred within
+        the last 10 seconds (preventing excessive retries during key rotation).
+
+        Args:
+            request: FastAPI request object
+
+        Returns:
+            Dict with auth_mode='keycloak' and decoded payload
+
+        Raises:
+            HTTPException: 401 if authentication fails, 503 if JWKS fetch fails
+        """
         if _is_dev_mode():
             logger.debug("Dev mode: skipping Keycloak authentication")
             return {"auth_mode": "dev_bypass"}
@@ -226,6 +254,11 @@ class _KeycloakAuth(_AuthBackend):
             raise HTTPException(status_code=401, detail="Invalid token header")
 
         kid = unverified_header.get("kid")
+        if not kid:
+            raise HTTPException(
+                status_code=401,
+                detail="Token header missing required 'kid' field",
+            )
         jwks = self._fetch_jwks()
 
         signing_key = None
@@ -235,7 +268,39 @@ class _KeycloakAuth(_AuthBackend):
                 break
 
         if not signing_key:
-            raise HTTPException(status_code=401, detail="Token signing key not found in JWKS")
+            now_mono = _time.monotonic()
+            if (now_mono - self._last_refresh_attempt) < self._refresh_cooldown:
+                logger.warning(
+                    "kid '%s' not found in JWKS — refresh skipped (cooldown %.1fs remaining)",
+                    kid,
+                    self._refresh_cooldown - (now_mono - self._last_refresh_attempt),
+                )
+                raise HTTPException(
+                    status_code=401,
+                    detail=f"Token signing key (kid='{kid}') not found in JWKS",
+                )
+            logger.info(
+                "kid '%s' not found in cached JWKS — forcing refresh (available: %s)",
+                kid,
+                [k.key_id for k in jwks.keys],
+            )
+            self._last_refresh_attempt = now_mono
+            self._jwks_cache = None
+            self._jwks_fetched_at = 0.0
+            try:
+                jwks = self._fetch_jwks()
+            except HTTPException:
+                raise
+            for key in jwks.keys:
+                if key.key_id == kid:
+                    signing_key = key.key
+                    break
+
+        if not signing_key:
+            raise HTTPException(
+                status_code=401,
+                detail=f"Token signing key (kid='{kid}') not found in JWKS",
+            )
 
         try:
             decode_opts: dict[str, Any] = {"algorithms": [self._algorithm]}

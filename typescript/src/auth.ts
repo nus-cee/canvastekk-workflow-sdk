@@ -46,8 +46,7 @@ export class NodeAuth {
    * @returns Express middleware function
    */
   static apiKey(keyEnvVar = "CANVASTEKK_API_KEY"): AuthMiddleware {
-    return (_req: Request, res: Response, next: NextFunction) => {
-      const req = _req as Request;
+    return (req: Request, res: Response, next: NextFunction) => {
       if (isDevMode()) {
         next();
         return;
@@ -125,6 +124,12 @@ export class NodeAuth {
 
   /**
    * Creates Keycloak JWT authentication middleware.
+   *
+   * Note: Only JWK keys containing an `x5c` (X.509 certificate chain) field
+   * are supported. Keys with only RSA `n`/`e` parameters are not parsed.
+   * If your Keycloak realm issues non-x5c keys, consider migrating to the
+   * `jose` library for full JWK format support.
+   *
    * @param opts - Keycloak options including server URL and realm
    * @returns Express middleware function
    */
@@ -142,6 +147,8 @@ export class NodeAuth {
     let jwksKeys: Map<string, string> | null = null;
     let jwksFetchedAt = 0;
     const jwksTtl = 300_000;
+    let lastRefreshAttempt = 0;
+    const refreshCooldown = 10_000;
 
     function b64ToPem(b64: string): string {
       const lines: string[] = [];
@@ -151,6 +158,16 @@ export class NodeAuth {
       return `-----BEGIN CERTIFICATE-----\n${lines.join("\n")}\n-----END CERTIFICATE-----`;
     }
 
+    /**
+     * Fetches JWKS from Keycloak endpoint.
+     *
+     * Only keys containing an x5c (X.509 certificate chain) field are parsed.
+     * Keys with only RSA n/e parameters are ignored.
+     *
+     * @returns Map of key ID to PEM certificate string
+     * @throws {Error} If server URL or realm not configured
+     * @throws {Error} If network fetch fails (thrown as JwksNetworkError)
+     */
     async function fetchJwks(): Promise<Map<string, string>> {
       if (!serverUrl || !realm) {
         throw new Error("Keycloak server URL and realm must be configured");
@@ -210,13 +227,45 @@ export class NodeAuth {
         const decoded = jwt.decode(token, { complete: true });
         const kid = decoded?.header?.kid;
 
-        let signingKey: string;
-        if (kid && jwksKeys.has(kid)) {
-          signingKey = jwksKeys.get(kid)!;
-        } else if (jwksKeys.size > 0) {
-          signingKey = jwksKeys.values().next().value!;
-        } else {
-          unauthorized(res, "No signing keys available from JWKS");
+        if (!kid) {
+          unauthorized(res, "Token header missing required 'kid' field");
+          return;
+        }
+
+        let signingKey: string | undefined;
+        if (jwksKeys.has(kid)) {
+          signingKey = jwksKeys.get(kid);
+        }
+
+        if (!signingKey) {
+          if (now - lastRefreshAttempt < refreshCooldown) {
+            console.warn(
+              `[auth] Token kid '${kid}' not found in JWKS — refresh skipped (cooldown ${Math.ceil((refreshCooldown - (now - lastRefreshAttempt)) / 1000)}s remaining)`,
+            );
+            unauthorized(res, `Token signing key (kid='${kid}') not found in JWKS`);
+            return;
+          }
+          console.warn(
+            `[auth] Token kid '${kid}' not found in cached JWKS — forcing refresh (available: ${[...jwksKeys.keys()].join(", ")})`,
+          );
+          lastRefreshAttempt = now;
+          jwksKeys = null;
+          jwksFetchedAt = 0;
+          try {
+            jwksKeys = await fetchJwks();
+            jwksFetchedAt = now;
+          } catch (err) {
+            if (err instanceof Error && err.name === "JwksNetworkError") throw err;
+            unauthorized(res, `Token signing key (kid='${kid}') not found in JWKS`);
+            return;
+          }
+          if (jwksKeys.has(kid)) {
+            signingKey = jwksKeys.get(kid);
+          }
+        }
+
+        if (!signingKey) {
+          unauthorized(res, `Token signing key (kid='${kid}') not found in JWKS`);
           return;
         }
 

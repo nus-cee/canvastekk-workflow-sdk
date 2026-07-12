@@ -36,6 +36,9 @@ npm test
 # Test (watch mode)
 npm run test:watch
 
+# Test with coverage report
+npx vitest run --coverage
+
 # Build
 npm run build
 ```
@@ -57,6 +60,7 @@ npm run build
 | TypeScript | ^5.8 | Compiler (strict mode) |
 | tsup | ^8 | Bundler (ESM + CJS dual output) |
 | Vitest | ^3 | Test runner |
+| @vitest/coverage-v8 | ^3.2.4 | Coverage reporting |
 | Supertest | ^7 | HTTP integration testing |
 | ESLint | ^9 | Linter |
 
@@ -850,9 +854,9 @@ executor.register("measurement-v1.0.0", {
 const runner = new WorkflowRunner(executor);
 const result = await runner.run(spec, { point_cloud: "/data/scan.las" });
 
-console.log(result.status);        // "completed" or "failed"
-console.log(result.finalOutputs);   // { result: ... }
-console.log(result.durationMs);     // total execution time
+console.log(result.status);          // "completed" or "failed"
+console.log(result.final_outputs);    // { result: ... }
+console.log(result.duration_ms);      // total execution time
 ```
 
 ### WorkflowBuilder
@@ -883,7 +887,7 @@ builder.addNode("segment", { slug: "segmentation-v1.0.0", inputs: { method: "dbs
 
 #### `connect(fromNode, toNode, opts?)`
 
-Add an edge connecting two nodes. Validates that both node IDs exist.
+Add an edge connecting two nodes. Validates that both node IDs exist and rejects self-loops (`fromNode === toNode`).
 
 ```typescript
 builder.connect("start", "segment", {
@@ -938,10 +942,10 @@ const result = await runner.run(spec, { point_cloud: "/data/scan.las" });
 | Field | Type | Description |
 |-------|------|-------------|
 | `status` | `"completed" \| "failed"` | Overall workflow status |
-| `finalOutputs` | `Record<string, unknown>` | Outputs collected from END nodes |
-| `nodeResults` | `NodeResult[]` | Per-node execution results |
-| `durationMs` | `number` | Total execution time |
-| `outputDir` | `string \| null` | Output directory path |
+| `final_outputs` | `Record<string, unknown>` | Outputs collected from END nodes |
+| `node_results` | `NodeResult[]` | Per-node execution results |
+| `duration_ms` | `number` | Total execution time |
+| `output_dir` | `string \| null` | Output directory path |
 
 ### Graph Validation
 
@@ -970,7 +974,9 @@ How `fromOutput` is resolved against source node outputs:
 
 | Strategy | Behavior |
 |----------|----------|
-| `AUTO` | Default strategy — flat key lookup first; dot-path traversal as fallback |
+| `AUTO` | Default strategy — flat key lookup first (for ALL keys including dotted ones); dot-path traversal as fallback; throws `ResolverError` if not found |
+
+`ResolverError` is a typed error with a discriminating `code` field (`NODE_NOT_FOUND`, `KEY_NOT_FOUND`, `INVALID_PATH`, `TRAVERSAL_ERROR`) and optional `nodeId` for programmatic error handling.
 
 ### Naming Convention Table
 
@@ -982,7 +988,57 @@ How `fromOutput` is resolved against source node outputs:
 | Edge in DAG | `WorkflowEdgeDefinition` | `WorkflowDefinition` |
 | Full spec | `WorkflowDefinitionSpec` | `WorkflowDefinition` |
 
-### Backward-Compatible Type Aliases
+### Wire-Format Convention (snake_case)
+
+The TypeScript SDK uses a **dual-layer naming convention**:
+
+- **Builder API** (`connect()`, `addNode()`, etc.) uses **camelCase** parameters — idiomatic TypeScript
+- **Wire-format types** (`WorkflowEdgeDefinition`, `Instance`, `BoundingBox3D`, etc.) use **snake_case** fields — matching the Python SDK and the CanvasTEKK Workflow Engine's `SaveWorkflowRequest.spec` schema
+
+The builder translates camelCase API parameters to snake_case wire-format objects automatically. This ensures workflow definitions built with the TS SDK are accepted by the engine and interoperate with Python nodes.
+
+### Migration Guide: Field Renames (0.13.0 → 0.16.0)
+
+Exported TypeScript interfaces renamed their fields from camelCase to snake_case for engine wire-format compatibility. If you access these fields directly, update your code:
+
+#### `WorkflowEdgeDefinition`
+
+| Old Field | New Field |
+|----------|-----------|
+| `fromNode` | `from_node` |
+| `toNode` | `to_node` |
+| `fromOutput` | `from_output` |
+| `toInput` | `to_input` |
+| `edgeType` | `edge_type` |
+
+#### `Instance`
+
+| Old Field | New Field |
+|----------|-----------|
+| `instanceId` | `instance_id` |
+| `classId` | `class_id` |
+| `className` | `class_name` |
+| `pointIndices` | `point_indices` |
+
+#### `InstanceSetData`
+
+| Old Field | New Field |
+|----------|-----------|
+| `classNames` | `class_names` |
+| `pointCount` | `point_count` |
+| `semanticLabels` | `semantic_labels` |
+| `instanceLabels` | `instance_labels` |
+
+#### `BoundingBox3D`
+
+| Old Field | New Field |
+|----------|-----------|
+| `minPoint` | `min_point` |
+| `maxPoint` | `max_point` |
+
+> **Note:** The `WorkflowBuilder.connect()` method API is unchanged — it still accepts camelCase parameters (`fromOutput`, `toInput`, `edgeType`). Only the resulting wire-format objects use snake_case.
+
+---
 
 Old names are preserved as type aliases and continue to work:
 
@@ -1068,9 +1124,13 @@ const app = node.createApp({
 
 ### Keycloak
 
+Uses RS256 JWT validation with JWKS key fetching. When a token's `kid` header doesn't match any cached key, the SDK force-refreshes the JWKS cache once before rejecting — this handles Keycloak key rotation gracefully without a service outage window.
+
+> **Note:** Only JWK keys containing an `x5c` (X.509 certificate chain) field are supported. If your Keycloak realm issues non-x5c keys, consider migrating to the `jose` library.
+
 ```typescript
 const app = node.createApp({
-  auth: NodeAuth.keycloak({ jwksUrl: "https://keycloak.example.com/realms/my-realm/protocol/openid-connect/certs" }),
+  auth: NodeAuth.keycloak({ serverUrl: "https://keycloak.example.com", realm: "my-realm" }),
 });
 ```
 

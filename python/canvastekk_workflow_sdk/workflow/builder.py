@@ -141,10 +141,30 @@ class WorkflowBuilder:
         edge_type: EdgeType = EdgeType.DEFAULT,
         condition: str | None = None,
     ) -> WorkflowBuilder:
+        """Connects two nodes with an edge.
+
+        Args:
+            from_node: Source node ID
+            to_node: Target node ID
+            from_output: Output field name from source node (supports dot-notation)
+            to_input: Input field name on target node
+            edge_type: Edge type for conditional routing
+            condition: Optional CEL expression for conditional edges
+
+        Returns:
+            Self for chaining
+
+        Raises:
+            ValueError: If source or target node not found, or if connecting a node to itself
+        """
         if from_node not in self._node_ids:
             raise ValueError(f"Unknown source node: '{from_node}'")
         if to_node not in self._node_ids:
             raise ValueError(f"Unknown target node: '{to_node}'")
+        if from_node == to_node:
+            raise ValueError(
+                f"Self-loop detected: cannot connect '{from_node}' to itself"
+            )
 
         self._edges.append(
             WorkflowEdgeDefinition(

@@ -52,6 +52,7 @@ jobs:
               "python": "python/pyproject.toml",
               "python_init": "python/canvastekk_workflow_sdk/__init__.py",
               "typescript": "typescript/package.json",
+              "typescript_version": "typescript/src/version.ts",
               "dotnet": "dotnet/Directory.Build.props",
           }
 
@@ -105,15 +106,30 @@ jobs:
                   bumped.append(lang)
                   print(f"BUMPED: {path} -> {version}")
 
-              elif path.endswith(".props"):
-                  import xml.etree.ElementTree as ET
-                  tree = ET.parse(path)
-                  root = tree.getroot()
-                  for elem in root.iter("Version"):
-                      elem.text = version
-                  tree.write(path, xml_declaration=True, encoding="utf-8")
-                  bumped.append(lang)
-                  print(f"BUMPED: {path} -> {version}")
+               elif path.endswith(".props"):
+                   import xml.etree.ElementTree as ET
+                   tree = ET.parse(path)
+                   root = tree.getroot()
+                   for elem in root.iter("Version"):
+                       elem.text = version
+                   tree.write(path, xml_declaration=True, encoding="utf-8")
+                   bumped.append(lang)
+                   print(f"BUMPED: {path} -> {version}")
+
+               elif path.endswith(".ts"):
+                   new_content, n = re.subn(
+                       r'export\s+const\s+VERSION\s*=\s*"[^"]*"',
+                       f'export const VERSION = "{version}"',
+                       content,
+                       count=1,
+                   )
+                   if n == 0:
+                       print(f"WARNING: Could not find VERSION pattern in {path}")
+                   else:
+                       with open(path, "w") as f:
+                           f.write(new_content)
+                       bumped.append(lang)
+                       print(f"BUMPED: {path} -> {version}")
 
           if not bumped:
               print("WARNING: No version files were bumped!")
@@ -146,6 +162,7 @@ jobs:
           for f in python/pyproject.toml python/poetry.lock \
                    python/canvastekk_workflow_sdk/__init__.py \
                    typescript/package.json typescript/package-lock.json \
+                   typescript/src/version.ts \
                    dotnet/Directory.Build.props; do
             [ -f "$f" ] && git add "$f"
           done

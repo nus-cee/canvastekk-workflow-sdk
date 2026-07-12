@@ -83,7 +83,7 @@ def execute(self, inputs, context):
 
 ### Test Utilities (`LocalFileServer`)
 
-Test the full presigned URL download pipeline without S3 or mocking:
+Test the full presigned URL download pipeline without S3 or mocking. Uses `ThreadingHTTPServer` for concurrent request support:
 
 ```python
 from canvastekk_workflow_sdk import LocalFileServer, NodeExecutionRequest
@@ -172,7 +172,7 @@ from canvastekk_workflow_sdk.workflow.executor import InProcessExecutor
 
 # Build a workflow
 spec = (
-    WorkflowBuilder("my-pipeline")
+    WorkflowBuilder()
     .add_start("start", outputs=["point_cloud"])
     .add_node("segment", slug="segmentation-v1.0.0", inputs={"method": "dbscan"})
     .add_end("end")
@@ -196,6 +196,15 @@ spec.model_dump(mode="json")  # POSTable to /api/workflows/definitions
 ```
 
 See [`python/README.md`](./python/) for the full workflow builder guide.
+
+### Wire-Format Convention (snake_case)
+
+Both SDKs use **snake_case** for wire-format field names — matching the CanvasTEKK Workflow Engine's `SaveWorkflowRequest.spec` schema. The TypeScript SDK uses a dual-layer approach:
+
+- **Builder API** (`connect()`, `addNode()`, etc.) uses **camelCase** parameters — idiomatic TypeScript
+- **Wire-format types** (`WorkflowEdgeDefinition`, `Instance`, `BoundingBox3D`, etc.) use **snake_case** fields — matching the Python SDK and engine
+
+See [`typescript/README.md`](./typescript/) for the full migration guide with old → new field name tables.
 
 ## Architecture
 
@@ -416,4 +425,4 @@ Key decisions recorded as the SDK evolves. See [`PLANS/PLAN-DA-894.md`](./PLANS/
 
 ## Versioning
 
-All languages share a single version counter (PEP 440). Releases are automated via git-cliff on conventional commits merged to `main`. Only language directories with changes get their version bumped and published. See [`python/README.md`](./python/) for details.
+All languages share a single version counter (PEP 440). Releases are automated via git-cliff on conventional commits merged to `main`. The release pipeline auto-bumps version files across all languages: `pyproject.toml`, `__init__.py`, `package.json`, `version.ts`, and `Directory.Build.props`. See [`python/README.md`](./python/) for details.

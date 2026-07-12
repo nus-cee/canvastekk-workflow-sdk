@@ -10,8 +10,8 @@ describe("validate", () => {
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "e2", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "start", to_node: "n1", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "e2", from_node: "n1", to_node: "end", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -29,7 +29,7 @@ describe("validate", () => {
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "n1", to_node: "end", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -46,8 +46,8 @@ describe("validate", () => {
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "e2", fromNode: "start2", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "start1", to_node: "end", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "e2", from_node: "start2", to_node: "end", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -63,7 +63,7 @@ describe("validate", () => {
         { id: "n1", slug: "node-v1", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "start", to_node: "n1", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -81,8 +81,8 @@ describe("validate", () => {
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "e2", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "start", to_node: "n1", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "e2", from_node: "n1", to_node: "end", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -99,8 +99,8 @@ describe("validate", () => {
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "ghost", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "e2", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "start", to_node: "ghost", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "e2", from_node: "n1", to_node: "end", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -118,10 +118,10 @@ describe("validate", () => {
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "e2", fromNode: "n1", toNode: "n2", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "e3", fromNode: "n2", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "e4", fromNode: "n2", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "start", to_node: "n1", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "e2", from_node: "n1", to_node: "n2", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "e3", from_node: "n2", to_node: "n1", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "e4", from_node: "n2", to_node: "end", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -139,8 +139,8 @@ describe("validate", () => {
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "e2", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "start", to_node: "n1", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "e2", from_node: "n1", to_node: "end", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -159,8 +159,8 @@ describe("validate", () => {
         { id: "end2", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "e2", fromNode: "n1", toNode: "end1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "start", to_node: "n1", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "e2", from_node: "n1", to_node: "end1", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -178,8 +178,8 @@ describe("validate", () => {
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "n1", toNode: "start", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "e2", fromNode: "start", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "n1", to_node: "start", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "e2", from_node: "start", to_node: "end", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -196,8 +196,8 @@ describe("validate", () => {
         { id: "n1", slug: "node-v1", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "e2", fromNode: "end", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "start", to_node: "end", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "e2", from_node: "end", to_node: "n1", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -214,8 +214,8 @@ describe("validate", () => {
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "e1", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "start", to_node: "n1", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "e1", from_node: "n1", to_node: "end", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };

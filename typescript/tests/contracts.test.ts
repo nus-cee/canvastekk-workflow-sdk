@@ -31,8 +31,8 @@ describe("Point3D", () => {
 
 describe("BoundingBox3D", () => {
   const box: BoundingBox3D = {
-    minPoint: { x: 0, y: 0, z: 0 },
-    maxPoint: { x: 10, y: 20, z: 30 },
+    min_point: { x: 0, y: 0, z: 0 },
+    max_point: { x: 10, y: 20, z: 30 },
   };
 
   it("computes center", () => {
@@ -48,15 +48,15 @@ describe("BoundingBox3D", () => {
 
 describe("Instance", () => {
   const inst: Instance = {
-    instanceId: 1,
-    classId: 4,
-    className: "vent",
+    instance_id: 1,
+    class_id: 4,
+    class_name: "vent",
     confidence: 0.95,
-    pointIndices: [0, 1, 2, 3, 4],
+    point_indices: [0, 1, 2, 3, 4],
     metadata: {},
   };
 
-  it("numPoints returns pointIndices length", () => {
+  it("numPoints returns point_indices length", () => {
     expect(instanceNumPoints(inst)).toBe(5);
   });
 });
@@ -65,25 +65,25 @@ describe("InstanceSet helpers", () => {
   const set: InstanceSetData = {
     contract_version: "1.0.0",
     instances: [
-      { instanceId: 1, classId: 4, className: "vent", confidence: 0.9, pointIndices: [0, 1], metadata: {} },
-      { instanceId: 2, classId: 2, className: "wall", confidence: 0.8, pointIndices: [2, 3], metadata: {} },
-      { instanceId: 3, classId: 4, className: "vent", confidence: 0.7, pointIndices: [4], metadata: {} },
+      { instance_id: 1, class_id: 4, class_name: "vent", confidence: 0.9, point_indices: [0, 1], metadata: {} },
+      { instance_id: 2, class_id: 2, class_name: "wall", confidence: 0.8, point_indices: [2, 3], metadata: {} },
+      { instance_id: 3, class_id: 4, class_name: "vent", confidence: 0.7, point_indices: [4], metadata: {} },
     ],
-    classNames: ["floor", "ceiling", "wall", "door", "vent"],
-    pointCount: 5,
+    class_names: ["floor", "ceiling", "wall", "door", "vent"],
+    point_count: 5,
   };
 
   it("getInstancesByClass filters correctly", () => {
     const vents = getInstancesByClass(set, "vent");
     expect(vents).toHaveLength(2);
-    expect(vents[0].instanceId).toBe(1);
-    expect(vents[1].instanceId).toBe(3);
+    expect(vents[0].instance_id).toBe(1);
+    expect(vents[1].instance_id).toBe(3);
   });
 
   it("getInstancesByClassId filters correctly", () => {
     const items = getInstancesByClassId(set, 2);
     expect(items).toHaveLength(1);
-    expect(items[0].className).toBe("wall");
+    expect(items[0].class_name).toBe("wall");
   });
 });
 
@@ -133,7 +133,7 @@ describe("PlaneSet helpers", () => {
 
 describe("BaseContract saveJson/loadJson round-trip", () => {
   it("round-trips data correctly", () => {
-    const data = { contract_version: "1.0.0", instances: [], classNames: [], pointCount: 0 };
+    const data = { contract_version: "1.0.0", instances: [], class_names: [], point_count: 0 };
     const path = "/tmp/sdk-test-contract.json";
     saveJson(data, path);
     const loaded = loadJson(path);

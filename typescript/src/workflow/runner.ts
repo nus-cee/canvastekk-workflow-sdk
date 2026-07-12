@@ -48,6 +48,16 @@ export class WorkflowRunner {
     this._cleanup = opts?.cleanup ?? true;
   }
 
+  /**
+   * Executes a workflow specification with the given inputs.
+   *
+   * Nodes are executed in topological order (levels). The output directory
+   * is cleaned up automatically if created by the runner (when `cleanup: true`).
+   *
+   * @param spec - Workflow specification to execute
+   * @param inputs - Initial inputs for the START node
+   * @returns Execution result with status, outputs, and node results
+   */
   async run(
     spec: WorkflowDefinitionSpec,
     inputs?: Record<string, unknown>,
@@ -133,7 +143,7 @@ export class WorkflowRunner {
 
         for (const nid of userIds) {
           const upstreamFailed = spec.edges.some(
-            (e) => e.toNode === nid && failedNodes.has(e.fromNode),
+            (e) => e.to_node === nid && failedNodes.has(e.from_node),
           );
           if (upstreamFailed || failedNodes.has(nid)) {
             const node = nodeMap.get(nid)!;
@@ -215,7 +225,8 @@ export class WorkflowRunner {
       if (autoCreated && this._cleanup) {
         try {
           rmSync(runOutputDir, { recursive: true, force: true });
-        } catch {
+        } catch (e) {
+          console.warn(`[workflow-runner] Failed to clean up temp dir '${runOutputDir}': ${e}`);
         }
         result_output_dir = null;
       } else {
