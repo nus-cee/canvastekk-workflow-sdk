@@ -1,10 +1,12 @@
 /**
  * 3D point with x, y, z coordinates.
+ *
+ * All fields are readonly.
  */
 export interface Point3D {
-  x: number;
-  y: number;
-  z: number;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
 }
 
 /**
@@ -27,10 +29,14 @@ export function point3DFromList(coords: number[]): Point3D {
 
 /**
  * 3D axis-aligned bounding box.
+ *
+ * All fields are readonly. The min_point must be <= max_point on each axis.
+ *
+ * Field names match the Python SDK (min_point, max_point).
  */
 export interface BoundingBox3D {
-  minPoint: Point3D;
-  maxPoint: Point3D;
+  readonly min_point: Point3D;
+  readonly max_point: Point3D;
 }
 
 /**
@@ -40,9 +46,9 @@ export interface BoundingBox3D {
  */
 export function boundingBoxCenter(box: BoundingBox3D): Point3D {
   return {
-    x: (box.minPoint.x + box.maxPoint.x) / 2,
-    y: (box.minPoint.y + box.maxPoint.y) / 2,
-    z: (box.minPoint.z + box.maxPoint.z) / 2,
+    x: (box.min_point.x + box.max_point.x) / 2,
+    y: (box.min_point.y + box.max_point.y) / 2,
+    z: (box.min_point.z + box.max_point.z) / 2,
   };
 }
 
@@ -53,8 +59,8 @@ export function boundingBoxCenter(box: BoundingBox3D): Point3D {
  */
 export function boundingBoxSize(box: BoundingBox3D): Point3D {
   return {
-    x: box.maxPoint.x - box.minPoint.x,
-    y: box.maxPoint.y - box.minPoint.y,
-    z: box.maxPoint.z - box.minPoint.z,
+    x: box.max_point.x - box.min_point.x,
+    y: box.max_point.y - box.min_point.y,
+    z: box.max_point.z - box.min_point.z,
   };
 }

@@ -28,14 +28,19 @@ class EdgeType(StrEnum):
 
 
 class WorkflowEdgeDefinition(BaseModel):
-    """An edge connecting two nodes in a workflow graph.
+    """
+    An edge connecting two nodes in a workflow graph.
 
     Uses engine-compatible field names (``from_node``, ``to_node``).
+
+    Constraints:
+        from_node: Must be non-empty (min_length=1)
+        to_node: Must be non-empty (min_length=1)
     """
 
     id: str = Field(default_factory=lambda: str(uuid4()))
-    from_node: str = Field(description="Source node instance ID")
-    to_node: str = Field(description="Target node instance ID")
+    from_node: str = Field(min_length=1, description="Source node instance ID")
+    to_node: str = Field(min_length=1, description="Target node instance ID")
     from_output: str = Field(default="", description="Output field from source (supports dot-notation)")
     to_input: str = Field(default="", description="Input field name on target node")
     edge_type: EdgeType = Field(default=EdgeType.DEFAULT, description="Routing type")
@@ -43,13 +48,17 @@ class WorkflowEdgeDefinition(BaseModel):
 
 
 class WorkflowDefinitionNode(BaseModel):
-    """A node instance placed into a workflow definition.
+    """
+    A node instance placed into a workflow definition.
 
     Uses engine-compatible field names. Outputs are NOT stored here —
     they flow through edges at runtime.
+
+    Constraints:
+        id: Must be non-empty (min_length=1)
     """
 
-    id: str = Field(description="Unique node instance ID within the workflow")
+    id: str = Field(min_length=1, description="Unique node instance ID within the workflow")
     workflow_node_id: str | None = Field(default=None, description="Registry node type ID reference")
     slug: str | None = Field(default=None, description="Node type slug from registry (e.g. '__start__', 'segmentation-v1.0.0')")
     version: str | None = Field(default=None, description="Pinned node version")

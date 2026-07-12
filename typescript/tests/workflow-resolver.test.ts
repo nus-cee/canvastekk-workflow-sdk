@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveInputs } from "../src/workflow/resolver.js";
+import { resolveInputs, ResolverError } from "../src/workflow/resolver.js";
 
 describe("resolveInputs", () => {
   it("resolves from static node inputs", () => {
@@ -22,7 +22,7 @@ describe("resolveInputs", () => {
         { id: "dest", slug: "node-dest", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "src", toNode: "dest", fromOutput: "result", toInput: "input", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "src", to_node: "dest", from_output: "result", to_input: "input", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -33,22 +33,22 @@ describe("resolveInputs", () => {
     expect(resolved).toEqual({ input: 99 });
   });
 
-  it("flat key returns undefined when fromOutput does not exist", () => {
+  it("flat key throws when from_output does not exist", () => {
     const spec = {
       nodes: [
         { id: "src", slug: "node-src", inputs: {} },
         { id: "dest", slug: "node-dest", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "src", toNode: "dest", fromOutput: "missing", toInput: "input", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "src", to_node: "dest", from_output: "missing", to_input: "input", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
     const nodeOutputs = {
       src: { result: 99 },
     };
-    const resolved = resolveInputs("dest", spec, nodeOutputs);
-    expect(resolved).toEqual({ input: undefined });
+    expect(() => resolveInputs("dest", spec, nodeOutputs)).toThrow("Cannot resolve from_output 'missing'");
+    expect(() => resolveInputs("dest", spec, nodeOutputs)).toThrow(ResolverError);
   });
 
   it("dot-path resolves nested values", () => {
@@ -58,7 +58,7 @@ describe("resolveInputs", () => {
         { id: "dest", slug: "node-dest", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "src", toNode: "dest", fromOutput: "nested.key", toInput: "input", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "src", to_node: "dest", from_output: "nested.key", to_input: "input", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -76,7 +76,7 @@ describe("resolveInputs", () => {
         { id: "dest", slug: "node-dest", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "src", toNode: "dest", fromOutput: "invalid.path", toInput: "input", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "src", to_node: "dest", from_output: "invalid.path", to_input: "input", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -86,6 +86,7 @@ describe("resolveInputs", () => {
     expect(() => resolveInputs("dest", spec, nodeOutputs)).toThrow(
       "Cannot walk dot-path 'invalid.path': segment 'path' hits non-dict"
     );
+    expect(() => resolveInputs("dest", spec, nodeOutputs)).toThrow(ResolverError);
   });
 
   it("dot-path throws on missing segment", () => {
@@ -95,7 +96,7 @@ describe("resolveInputs", () => {
         { id: "dest", slug: "node-dest", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "src", toNode: "dest", fromOutput: "missing.segment", toInput: "input", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "src", to_node: "dest", from_output: "missing.segment", to_input: "input", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -105,6 +106,7 @@ describe("resolveInputs", () => {
     expect(() => resolveInputs("dest", spec, nodeOutputs)).toThrow(
       "Dot-path 'missing.segment': segment 'missing' not found"
     );
+    expect(() => resolveInputs("dest", spec, nodeOutputs)).toThrow(ResolverError);
   });
 
   it("dot-path throws on empty segment", () => {
@@ -114,13 +116,14 @@ describe("resolveInputs", () => {
         { id: "dest", slug: "node-dest", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "src", toNode: "dest", fromOutput: "..", toInput: "input", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "src", to_node: "dest", from_output: "..", to_input: "input", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
     expect(() => resolveInputs("dest", spec, {})).toThrow(
       "Invalid dot-path '..' (empty segment)"
     );
+    expect(() => resolveInputs("dest", spec, {})).toThrow(ResolverError);
   });
 
   it("flat lookup for simple keys, dot-path for dotted keys", () => {
@@ -131,8 +134,8 @@ describe("resolveInputs", () => {
         { id: "dest2", slug: "node-dest2", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "src", toNode: "dest1", fromOutput: "result", toInput: "flat", edgeType: "default" as const, condition: null },
-        { id: "e2", fromNode: "src", toNode: "dest2", fromOutput: "nested.key", toInput: "dot", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "src", to_node: "dest1", from_output: "result", to_input: "flat", edge_type: "default" as const, condition: null },
+        { id: "e2", from_node: "src", to_node: "dest2", from_output: "nested.key", to_input: "dot", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -145,14 +148,14 @@ describe("resolveInputs", () => {
     expect(resolved2).toEqual({ dot: "value" });
   });
 
-  it("empty fromOutput returns entire source outputs", () => {
+  it("empty from_output returns entire source outputs", () => {
     const spec = {
       nodes: [
         { id: "src", slug: "node-src", inputs: {} },
         { id: "dest", slug: "node-dest", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "src", toNode: "dest", fromOutput: "", toInput: "input", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "src", to_node: "dest", from_output: "", to_input: "input", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -171,8 +174,8 @@ describe("resolveInputs", () => {
         { id: "dest", slug: "node-dest", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "src1", toNode: "dest", fromOutput: "out1", toInput: "in1", edgeType: "default" as const, condition: null },
-        { id: "e2", fromNode: "src2", toNode: "dest", fromOutput: "out2", toInput: "in2", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "src1", to_node: "dest", from_output: "out1", to_input: "in1", edge_type: "default" as const, condition: null },
+        { id: "e2", from_node: "src2", to_node: "dest", from_output: "out2", to_input: "in2", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -184,14 +187,14 @@ describe("resolveInputs", () => {
     expect(resolved).toEqual({ in1: "a", in2: "b" });
   });
 
-  it("when toInput is omitted, spreads object output into resolved inputs", () => {
+  it("when to_input is omitted, spreads object output into resolved inputs", () => {
     const spec = {
       nodes: [
         { id: "src", slug: "node-src", inputs: {} },
         { id: "dest", slug: "node-dest", inputs: {} },
       ],
       edges: [
-        { id: "e1", fromNode: "src", toNode: "dest", fromOutput: "result", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "src", to_node: "dest", from_output: "result", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -211,6 +214,7 @@ describe("resolveInputs", () => {
     expect(() => resolveInputs("unknown", spec, {})).toThrow(
       "Node not found: unknown"
     );
+    expect(() => resolveInputs("unknown", spec, {})).toThrow(ResolverError);
   });
 
   it("preserves static inputs alongside resolved edge inputs", () => {
@@ -220,7 +224,7 @@ describe("resolveInputs", () => {
         { id: "dest", slug: "node-dest", inputs: { static: "kept" } },
       ],
       edges: [
-        { id: "e1", fromNode: "src", toNode: "dest", fromOutput: "result", toInput: "dynamic", edgeType: "default" as const, condition: null },
+        { id: "e1", from_node: "src", to_node: "dest", from_output: "result", to_input: "dynamic", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -229,5 +233,107 @@ describe("resolveInputs", () => {
     };
     const resolved = resolveInputs("dest", spec, nodeOutputs);
     expect(resolved).toEqual({ static: "kept", dynamic: 42 });
+  });
+
+  it("flat key takes priority over dot-path for keys containing dots", () => {
+    const spec = {
+      nodes: [
+        { id: "src", slug: "node-src", inputs: {} },
+        { id: "dest", slug: "node-dest", inputs: {} },
+      ],
+      edges: [
+        { id: "e1", from_node: "src", to_node: "dest", from_output: "metadata.version", to_input: "input", edge_type: "default" as const, condition: null },
+      ],
+      metadata: {},
+    };
+    const nodeOutputs = {
+      src: { "metadata.version": "1.0.0" },
+    };
+    const resolved = resolveInputs("dest", spec, nodeOutputs);
+    expect(resolved).toEqual({ input: "1.0.0" });
+  });
+
+  it("falls back to dot-path when dotted key is not a flat key", () => {
+    const spec = {
+      nodes: [
+        { id: "src", slug: "node-src", inputs: {} },
+        { id: "dest", slug: "node-dest", inputs: {} },
+      ],
+      edges: [
+        { id: "e1", from_node: "src", to_node: "dest", from_output: "nested.key", to_input: "input", edge_type: "default" as const, condition: null },
+      ],
+      metadata: {},
+    };
+    const nodeOutputs = {
+      src: { nested: { key: "deep_value" } },
+    };
+    const resolved = resolveInputs("dest", spec, nodeOutputs);
+    expect(resolved).toEqual({ input: "deep_value" });
+  });
+
+  it("ResolverError has correct code for missing key", () => {
+    const spec = {
+      nodes: [
+        { id: "src", slug: "node-src", inputs: {} },
+        { id: "dest", slug: "node-dest", inputs: {} },
+      ],
+      edges: [
+        { id: "e1", from_node: "src", to_node: "dest", from_output: "nonexistent", to_input: "input", edge_type: "default" as const, condition: null },
+      ],
+      metadata: {},
+    };
+    const nodeOutputs = { src: { existing: 1 } };
+
+    try {
+      resolveInputs("dest", spec, nodeOutputs);
+      expect.fail("Should have thrown");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ResolverError);
+      const err = e as ResolverError;
+      expect(err.code).toBe("KEY_NOT_FOUND");
+      expect(err.nodeId).toBe("src");
+      expect(err.message).toContain("available keys");
+    }
+  });
+
+  it("ResolverError has correct code for node not found", () => {
+    const spec = {
+      nodes: [{ id: "n1", slug: "node-v1", inputs: {} }],
+      edges: [],
+      metadata: {},
+    };
+    try {
+      resolveInputs("ghost", spec, {});
+      expect.fail("Should have thrown");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ResolverError);
+      const err = e as ResolverError;
+      expect(err.code).toBe("NODE_NOT_FOUND");
+      expect(err.nodeId).toBe("ghost");
+    }
+  });
+
+  it("error message includes source node context and available keys", () => {
+    const spec = {
+      nodes: [
+        { id: "producer", slug: "node-src", inputs: {} },
+        { id: "dest", slug: "node-dest", inputs: {} },
+      ],
+      edges: [
+        { id: "e1", from_node: "producer", to_node: "dest", from_output: "typo_key", to_input: "input", edge_type: "default" as const, condition: null },
+      ],
+      metadata: {},
+    };
+    const nodeOutputs = { producer: { correct_key: 42 } };
+
+    try {
+      resolveInputs("dest", spec, nodeOutputs);
+      expect.fail("Should have thrown");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ResolverError);
+      const msg = (e as Error).message;
+      expect(msg).toContain("producer");
+      expect(msg).toContain("correct_key");
+    }
   });
 });

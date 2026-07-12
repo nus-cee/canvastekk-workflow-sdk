@@ -5,6 +5,6 @@ export type { NodeExecutor } from "./executor.js";
 export { WorkflowRunner } from "./runner.js";
 export type { ErrorPolicy, NodeResult, WorkflowRunResult } from "./runner.js";
 export { computeLevels } from "./level.js";
-export { resolveInputs } from "./resolver.js";
+export { resolveInputs, ResolverError } from "./resolver.js";
 export { validate } from "./validation.js";
 export type { ValidationResult } from "./validation.js";

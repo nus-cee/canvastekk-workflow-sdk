@@ -33,6 +33,7 @@ keycloak = ["PyJWT", "cryptography"]
 pytest = "^9.0"
 pytest-asyncio = "^1.3"
 ruff = "^0.15.12"
+pytest-cov = "^7.1.0"
 
 [tool.ruff]
 target-version = "py312"

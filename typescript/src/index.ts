@@ -124,6 +124,7 @@ export {
   WorkflowRunner,
   computeLevels,
   resolveInputs,
+  ResolverError,
   validate,
 } from "./workflow/index.js";
 export type {

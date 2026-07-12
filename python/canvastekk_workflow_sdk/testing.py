@@ -11,6 +11,7 @@ import http.server
 import threading
 from collections.abc import Generator
 from contextlib import contextmanager
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 
@@ -33,6 +34,8 @@ def _make_handler(directory: str) -> type[_Handler]:
 
 class LocalFileServer:
     """Serve files from a local directory over HTTP.
+
+    Uses ThreadingHTTPServer for concurrent request handling.
 
     Designed for testing nodes that download files via presigned URLs.
     The SDK's built-in ``_prepare_file_inputs`` only triggers on
@@ -69,7 +72,7 @@ class LocalFileServer:
         self._directory = str(Path(directory).resolve())
         self._host = host
         self._port = port
-        self._server: http.server.HTTPServer | None = None
+        self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._actual_port: int = 0
         self._lock = threading.Lock()
@@ -100,7 +103,7 @@ class LocalFileServer:
 
             handler = _make_handler(self._directory)
             try:
-                self._server = http.server.HTTPServer((self._host, self._port), handler)
+                self._server = ThreadingHTTPServer((self._host, self._port), handler)
             except OSError:
                 self._server = None
                 raise

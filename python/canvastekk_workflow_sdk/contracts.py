@@ -31,7 +31,7 @@ import json
 from pathlib import Path
 from typing import Any, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # =============================================================================
 # Contract Version
@@ -106,10 +106,34 @@ class Point3D(BaseModel):
 
 
 class BoundingBox3D(BaseModel):
-    """Axis-aligned 3D bounding box."""
+    """
+    Axis-aligned 3D bounding box.
+
+    Constraints:
+        min_point must be <= max_point on each axis
+    """
 
     min_point: Point3D = Field(description="Minimum corner (x, y, z)")
     max_point: Point3D = Field(description="Maximum corner (x, y, z)")
+
+    @model_validator(mode="after")
+    def _validate_min_le_max(self) -> BoundingBox3D:
+        """Ensure min_point <= max_point on each axis.
+
+        Returns:
+            Self for chaining
+
+        Raises:
+            ValueError: If any axis has min > max
+        """
+        for axis in ("x", "y", "z"):
+            min_val = getattr(self.min_point, axis)
+            max_val = getattr(self.max_point, axis)
+            if min_val > max_val:
+                raise ValueError(
+                    f"BoundingBox3D min_point.{axis} ({min_val}) > max_point.{axis} ({max_val})"
+                )
+        return self
 
     @property
     def center(self) -> Point3D:
@@ -153,10 +177,15 @@ class Instance(BaseModel):
     - Other detection algorithms
 
     Consumers should not assume the source - just use the data.
+
+    Constraints:
+        instance_id: Must be >= 0
+        class_id: Must be >= 0
+        point_indices: All values must be >= 0
     """
 
-    instance_id: int = Field(description="Unique ID within this instance set")
-    class_id: int = Field(description="Numeric class identifier")
+    instance_id: int = Field(ge=0, description="Unique ID within this instance set")
+    class_id: int = Field(ge=0, description="Numeric class identifier")
     class_name: str = Field(description="Human-readable class name")
     confidence: float = Field(
         default=1.0,
@@ -178,6 +207,24 @@ class Instance(BaseModel):
         description="Additional instance-specific metadata",
     )
 
+    @field_validator("point_indices")
+    @classmethod
+    def _validate_indices_non_negative(cls, v: list[int]) -> list[int]:
+        """Ensure all point indices are non-negative.
+
+        Args:
+            v: List of point indices
+
+        Returns:
+            The validated list
+
+        Raises:
+            ValueError: If any index is negative
+        """
+        if any(idx < 0 for idx in v):
+            raise ValueError("point_indices must be non-negative integers")
+        return v
+
     @property
     def num_points(self) -> int:
         """Number of points belonging to this instance."""
@@ -191,6 +238,9 @@ class InstanceSet(BaseContract):
     This is the standard format for passing instance data between nodes.
     Any node that detects/identifies objects should output this format.
     Any node that processes instances should accept this format.
+
+    Constraints:
+        point_count: Must be >= 0
     """
 
     instances: list[Instance] = Field(
@@ -203,6 +253,7 @@ class InstanceSet(BaseContract):
     )
     point_count: int = Field(
         default=0,
+        ge=0,
         description="Total number of points in the source point cloud",
     )
     semantic_labels: list[int] | None = Field(

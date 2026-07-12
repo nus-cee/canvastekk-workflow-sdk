@@ -10,8 +10,8 @@ describe("computeLevels", () => {
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "2", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "1", from_node: "start", to_node: "n1", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "2", from_node: "n1", to_node: "end", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -28,10 +28,10 @@ describe("computeLevels", () => {
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "1", fromNode: "start", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "2", fromNode: "start", toNode: "n2", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "3", fromNode: "n1", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "4", fromNode: "n2", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "1", from_node: "start", to_node: "n1", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "2", from_node: "start", to_node: "n2", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "3", from_node: "n1", to_node: "end", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "4", from_node: "n2", to_node: "end", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -60,9 +60,9 @@ describe("computeLevels", () => {
         { id: "n3", slug: "node-v3", inputs: {} },
       ],
       edges: [
-        { id: "1", fromNode: "n1", toNode: "n2", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "2", fromNode: "n2", toNode: "n3", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "3", fromNode: "n3", toNode: "n1", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "1", from_node: "n1", to_node: "n2", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "2", from_node: "n2", to_node: "n3", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "3", from_node: "n3", to_node: "n1", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -80,12 +80,12 @@ describe("computeLevels", () => {
         { id: "end", slug: "__end__", name: "END", inputs: {} },
       ],
       edges: [
-        { id: "1", fromNode: "start", toNode: "a", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "2", fromNode: "start", toNode: "b", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "3", fromNode: "a", toNode: "c", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "4", fromNode: "b", toNode: "d", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "5", fromNode: "c", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "6", fromNode: "d", toNode: "end", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "1", from_node: "start", to_node: "a", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "2", from_node: "start", to_node: "b", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "3", from_node: "a", to_node: "c", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "4", from_node: "b", to_node: "d", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "5", from_node: "c", to_node: "end", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "6", from_node: "d", to_node: "end", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };
@@ -105,8 +105,8 @@ describe("computeLevels", () => {
         { id: "b", slug: "node-b", inputs: {} },
       ],
       edges: [
-        { id: "1", fromNode: "a", toNode: "b", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
-        { id: "2", fromNode: "a", toNode: "z", fromOutput: "", toInput: "", edgeType: "default" as const, condition: null },
+        { id: "1", from_node: "a", to_node: "b", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
+        { id: "2", from_node: "a", to_node: "z", from_output: "", to_input: "", edge_type: "default" as const, condition: null },
       ],
       metadata: {},
     };

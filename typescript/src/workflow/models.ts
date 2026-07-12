@@ -11,28 +11,35 @@ export type EdgeType = "default" | "success" | "failure" | "conditional";
 /**
  * Edge connecting two workflow nodes.
  *
+ * Uses engine-compatible field names (from_node, to_node) matching the
+ * Python SDK and CanvasTEKK Workflow Engine's SaveWorkflowRequest.spec schema.
+ *
+ * All fields are readonly.
+ *
  * @property id - Unique edge identifier
- * @property fromNode - Source node ID
- * @property toNode - Target node ID
- * @property fromOutput - Output field name on the source node
- * @property toInput - Input field name on the target node
- * @property edgeType - Edge type for conditional routing
+ * @property from_node - Source node ID (non-empty)
+ * @property to_node - Target node ID (non-empty)
+ * @property from_output - Output field name on the source node
+ * @property to_input - Input field name on the target node
+ * @property edge_type - Edge type for conditional routing
  * @property condition - Optional condition expression for conditional edges
  */
 export interface WorkflowEdgeDefinition {
-  id: string;
-  fromNode: string;
-  toNode: string;
-  fromOutput: string;
-  toInput: string;
-  edgeType: EdgeType;
-  condition?: string | null;
+  readonly id: string;
+  readonly from_node: string;
+  readonly to_node: string;
+  readonly from_output: string;
+  readonly to_input: string;
+  readonly edge_type: EdgeType;
+  readonly condition?: string | null;
 }
 
 /**
  * Node instance within a workflow definition.
  *
- * @property id - Unique node identifier within the workflow
+ * All fields are readonly.
+ *
+ * @property id - Unique node identifier within the workflow (non-empty)
  * @property workflow_node_id - Optional reference to a registered node
  * @property slug - Node type slug (e.g., "segmentation-v1.0.0")
  * @property version - Optional version override
@@ -43,26 +50,28 @@ export interface WorkflowEdgeDefinition {
  * @property config_schema - Optional node configuration schema
  */
 export interface WorkflowDefinitionNode {
-  id: string;
-  workflow_node_id?: string | null;
-  slug?: string | null;
-  version?: string | null;
-  name?: string | null;
-  x?: number | null;
-  y?: number | null;
-  inputs: Record<string, unknown>;
-  config_schema?: Record<string, unknown> | null;
+  readonly id: string;
+  readonly workflow_node_id?: string | null;
+  readonly slug?: string | null;
+  readonly version?: string | null;
+  readonly name?: string | null;
+  readonly x?: number | null;
+  readonly y?: number | null;
+  readonly inputs: Record<string, unknown>;
+  readonly config_schema?: Record<string, unknown> | null;
 }
 
 /**
  * Complete workflow specification (DAG of nodes and edges).
+ *
+ * All fields are readonly.
  *
  * @property nodes - Ordered list of workflow nodes
  * @property edges - List of connections between nodes
  * @property metadata - Arbitrary metadata for the workflow
  */
 export interface WorkflowDefinitionSpec {
-  nodes: WorkflowDefinitionNode[];
-  edges: WorkflowEdgeDefinition[];
-  metadata: Record<string, unknown>;
+  readonly nodes: WorkflowDefinitionNode[];
+  readonly edges: WorkflowEdgeDefinition[];
+  readonly metadata: Record<string, unknown>;
 }

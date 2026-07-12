@@ -77,12 +77,12 @@ function checkEdgeReferences(edges: WorkflowDefinitionSpec["edges"], nodeIds: Se
     }
     edgeIds.add(edge.id);
 
-    if (!nodeIds.has(edge.fromNode)) {
-      result.errors.push(`Edge references non-existent from_node: '${edge.fromNode}'`);
+    if (!nodeIds.has(edge.from_node)) {
+      result.errors.push(`Edge references non-existent from_node: '${edge.from_node}'`);
       result.isValid = false;
     }
-    if (!nodeIds.has(edge.toNode)) {
-      result.errors.push(`Edge references non-existent to_node: '${edge.toNode}'`);
+    if (!nodeIds.has(edge.to_node)) {
+      result.errors.push(`Edge references non-existent to_node: '${edge.to_node}'`);
       result.isValid = false;
     }
   }
@@ -132,8 +132,8 @@ function checkStartEnd(
   const outDegree = new Map(nodes.map((n) => [n.id, 0]));
 
   for (const edge of edges) {
-    if (inDegree.has(edge.toNode)) inDegree.set(edge.toNode, inDegree.get(edge.toNode)! + 1);
-    if (outDegree.has(edge.fromNode)) outDegree.set(edge.fromNode, outDegree.get(edge.fromNode)! + 1);
+    if (inDegree.has(edge.to_node)) inDegree.set(edge.to_node, inDegree.get(edge.to_node)! + 1);
+    if (outDegree.has(edge.from_node)) outDegree.set(edge.from_node, outDegree.get(edge.from_node)! + 1);
   }
 
   if (inDegree.get(startId) !== 0) {
@@ -169,8 +169,8 @@ function checkCycles(nodes: WorkflowDefinitionSpec["nodes"], edges: WorkflowDefi
   }
 
   for (const edge of edges) {
-    adj.get(edge.fromNode)!.push(edge.toNode);
-    inDegree.set(edge.toNode, (inDegree.get(edge.toNode) ?? 0) + 1);
+    adj.get(edge.from_node)!.push(edge.to_node);
+    inDegree.set(edge.to_node, (inDegree.get(edge.to_node) ?? 0) + 1);
   }
 
   const queue = [...nodeIds].filter((nid) => inDegree.get(nid) === 0);
@@ -217,8 +217,8 @@ function checkConnectivity(nodes: WorkflowDefinitionSpec["nodes"], edges: Workfl
     revAdj.set(n.id, []);
   }
   for (const edge of edges) {
-    adj.get(edge.fromNode)!.push(edge.toNode);
-    revAdj.get(edge.toNode)!.push(edge.fromNode);
+    adj.get(edge.from_node)!.push(edge.to_node);
+    revAdj.get(edge.to_node)!.push(edge.from_node);
   }
 
   const allIds = new Set(nodes.map((n) => n.id));
