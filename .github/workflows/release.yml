@@ -97,14 +97,14 @@ jobs:
                   bumped.append(lang)
                   print(f"BUMPED: {path} -> {version}")
 
-              elif path.endswith(".json"):
-                  data = json.loads(content)
-                  data["version"] = version
-                  with open(path, "w") as f:
-                      json.dump(data, f, indent=2)
-                      f.write("\n")
-                  bumped.append(lang)
-                  print(f"BUMPED: {path} -> {version}")
+               elif path.endswith(".json"):
+                   data = json.loads(content)
+                   data["version"] = version
+                   with open(path, "w") as f:
+                       json.dump(data, f, indent=2)
+                       f.write("\n")
+                   bumped.append(lang)
+                   print(f"BUMPED: {path} -> {version}")
 
                elif path.endswith(".props"):
                    import xml.etree.ElementTree as ET
@@ -262,4 +262,56 @@ jobs:
           )
 
           print('Post-publish verification passed: all canonical names resolve correctly')
+          "
+
+      # ─── TypeScript SDK: Build + Publish ───────────────────────────
+
+      - name: Set up Node.js
+        if: steps.git-cliff.outputs.version != '' && hashFiles('typescript/package.json') != ''
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@nus-cee'
+
+      - name: Install TypeScript dependencies
+        if: steps.git-cliff.outputs.version != '' && hashFiles('typescript/package.json') != ''
+        working-directory: typescript
+        run: npm ci --legacy-peer-deps
+
+      - name: Build TypeScript SDK
+        if: steps.git-cliff.outputs.version != '' && hashFiles('typescript/package.json') != ''
+        working-directory: typescript
+        run: npm run build
+
+      - name: Publish TypeScript SDK to GitHub Packages
+        if: steps.git-cliff.outputs.version != '' && hashFiles('typescript/package.json') != ''
+        working-directory: typescript
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish
+
+      - name: Verify published TypeScript package
+        if: steps.git-cliff.outputs.version != '' && hashFiles('typescript/package.json') != ''
+        env:
+          NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION_NUM="${NEW_VERSION#v}"
+          TEMP_DIR=$(mktemp -d)
+          cd "$TEMP_DIR"
+
+          npm init -y > /dev/null 2>&1
+          echo "@nus-cee:registry=https://npm.pkg.github.com" > .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> .npmrc
+
+          npm install "canvastekk-workflow-sdk@${VERSION_NUM}" --legacy-peer-deps 2>&1
+
+          node -e "
+          const { VERSION, WorkflowBuilder, ResolverError } = require('canvastekk-workflow-sdk');
+          if (VERSION !== '${VERSION_NUM}') {
+            console.error('Version mismatch: expected ${VERSION_NUM}, got ' + VERSION);
+            process.exit(1);
+          }
+          console.log('Post-publish TS verification passed: version ' + VERSION + ' resolved correctly');
           "
