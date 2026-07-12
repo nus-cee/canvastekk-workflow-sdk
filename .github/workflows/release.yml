@@ -194,6 +194,7 @@ jobs:
 
       - name: Publish TypeScript SDK to GitHub Packages
         if: steps.git-cliff.outputs.version != '' && hashFiles('typescript/package.json') != ''
+        continue-on-error: true
         working-directory: typescript
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -214,10 +215,10 @@ jobs:
           echo "@nus-cee:registry=https://npm.pkg.github.com" > .npmrc
           echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> .npmrc
 
-          npm install "canvastekk-workflow-sdk@${VERSION_NUM}" --legacy-peer-deps 2>&1
+          npm install "@nus-cee/canvastekk-workflow-sdk@${VERSION_NUM}" --legacy-peer-deps 2>&1
 
           node -e "
-          const { VERSION, WorkflowBuilder, ResolverError } = require('canvastekk-workflow-sdk');
+          const { VERSION, WorkflowBuilder, ResolverError } = require('@nus-cee/canvastekk-workflow-sdk');
           if (VERSION !== '${VERSION_NUM}') {
             console.error('Version mismatch: expected ${VERSION_NUM}, got ' + VERSION);
             process.exit(1);
