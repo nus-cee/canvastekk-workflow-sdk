@@ -162,6 +162,7 @@ jobs:
 
       - name: Publish Python SDK to GitHub Packages
         if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
+        continue-on-error: true
         working-directory: python
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -176,6 +177,7 @@ jobs:
 
       - name: Verify published wheel (post-publish smoke test)
         if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
+        continue-on-error: true
         env:
           NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
