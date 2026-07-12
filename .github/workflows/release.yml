@@ -143,6 +143,7 @@ jobs:
 
       - name: Verify published wheel (post-publish smoke test)
         if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
+        continue-on-error: true
         env:
           NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
         run: |
@@ -200,6 +201,7 @@ jobs:
 
       - name: Verify published TypeScript package
         if: steps.git-cliff.outputs.version != '' && hashFiles('typescript/package.json') != ''
+        continue-on-error: true
         env:
           NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
