@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.17.1] - 2026-07-12
+
+### Bug Fixes
+
+- **ci**: Make post-publish smoke tests non-blocking (continue-on-error) (#43)
+
+
 ## [0.17.0] - 2026-07-12
 
 ### Features
@@ -13,6 +20,11 @@ All notable changes to this project will be documented in this file.
 
 - **ci**: Fix release.yml indentation + add TypeScript CI + multi-version matrix + TS publish (#41)
 - **ci**: Extract bump script to standalone file to fix indentation errors (#42)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.17.0
 
 
 ## [0.16.0] - 2026-06-14
