@@ -121,11 +121,28 @@ After engine resolution: `"13/runs/abc-123/output/zip/"`. See [EXTERNAL-AUTHOR-G
 
 ### Python
 
-**Install from GitHub Packages:**
+**Option A — `pip install` from GitHub Packages (requires PAT):**
+
+> GitHub Packages PyPI registry requires a Personal Access Token (PAT) with `read:packages` scope even for public packages. Create one at [GitHub Settings > Developer settings > Personal access tokens](https://github.com/settings/tokens).
 
 ```bash
+# URL-embedded credentials (quick start)
+pip install canvastekk-workflow-sdk \
+  --index-url https://USERNAME:TOKEN@pypi.pkg.github.com/nus-cee/
+
+# Or use ~/.netrc (recommended for repeated use):
+# machine pypi.pkg.github.com
+#   login USERNAME
+#   password TOKEN
 pip install canvastekk-workflow-sdk \
   --index-url https://pypi.pkg.github.com/nus-cee/
+```
+
+**Option B — Direct wheel download from GitHub Releases (no auth):**
+
+```bash
+# Download from https://github.com/nus-cee/canvastekk-workflow-sdk/releases
+pip install canvastekk_workflow_sdk-VERSION-py3-none-any.whl
 ```
 
 **Develop locally:**

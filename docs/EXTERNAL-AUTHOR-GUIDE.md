@@ -33,9 +33,20 @@ After registration, the engine can discover your node and include it in workflow
 
 ## Step 1: Install the SDK
 
+**Option A — `pip install` from GitHub Packages (requires PAT):**
+
+> GitHub Packages PyPI registry requires a PAT with `read:packages` scope even for public packages. Create one at [GitHub Settings > Developer settings > Personal access tokens](https://github.com/settings/tokens).
+
 ```bash
 pip install canvastekk-workflow-sdk \
-  --index-url https://pypi.pkg.github.com/nus-cee/
+  --index-url https://USERNAME:TOKEN@pypi.pkg.github.com/nus-cee/
+```
+
+**Option B — Direct wheel download from GitHub Releases (no auth):**
+
+```bash
+# Download the .whl from https://github.com/nus-cee/canvastekk-workflow-sdk/releases
+pip install canvastekk_workflow_sdk-VERSION-py3-none-any.whl
 ```
 
 For local development:
@@ -217,15 +228,41 @@ Exit code `0` = valid, `1` = errors.
 
 ## Step 3: Containerize
 
-Create a `Dockerfile`:
+Create a `Dockerfile`. Choose one of two approaches for installing the SDK:
+
+**Option A — GitHub Packages (pass PAT as build arg):**
 
 ```dockerfile
 FROM python:3.12-slim
 
 WORKDIR /app
 
+ARG SDK_PAT
 COPY pyproject.toml handler.py ./
-RUN pip install . --index-url https://pypi.pkg.github.com/nus-cee/
+RUN pip install . --index-url https://nus-cee:${SDK_PAT}@pypi.pkg.github.com/nus-cee/
+
+EXPOSE 8001
+
+CMD ["uvicorn", "handler:app", "--host", "0.0.0.0", "--port", "8001"]
+```
+
+Build with: `docker build --build-arg SDK_PAT=ghp_xxx -t my-node .`
+
+> **Warning:** Never hardcode the PAT in the Dockerfile. Note that build args are visible in `docker history` — for production images, use Docker BuildKit secrets (`--mount=type=secret`) or a multi-stage build. Alternatively, use Option B (pre-downloaded wheel) to avoid embedding any token.
+
+**Option B — Pre-downloaded wheel (no auth in Docker):**
+
+```dockerfile
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Download the wheel from GitHub Releases first:
+# https://github.com/nus-cee/canvastekk-workflow-sdk/releases
+COPY canvastekk_workflow_sdk-VERSION-py3-none-any.whl ./
+COPY . ./
+
+RUN pip install canvastekk_workflow_sdk-VERSION-py3-none-any.whl && pip install .
 
 EXPOSE 8001
 
@@ -418,7 +455,7 @@ jobs:
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
       - name: Install SDK
-        run: pip install canvastekk-workflow-sdk --index-url https://pypi.pkg.github.com/nus-cee/
+        run: pip install canvastekk-workflow-sdk --index-url https://nus-cee:${{ secrets.GITHUB_TOKEN }}@pypi.pkg.github.com/nus-cee/
 
       - name: Register node with engine
         env:

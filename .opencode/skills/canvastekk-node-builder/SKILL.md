@@ -307,7 +307,7 @@ app = MyNode().create_app(dependencies=[Depends(auth)])
 ### Package Installation
 
 ```bash
-pip install canvastekk-workflow-sdk --index-url https://pypi.pkg.github.com/nus-cee/
+pip install canvastekk-workflow-sdk --index-url https://USERNAME:TOKEN@pypi.pkg.github.com/nus-cee/
 ```
 
 Optional extras: `canvastekk-workflow-sdk[jwt]` or `canvastekk-workflow-sdk[keycloak]`
@@ -477,7 +477,7 @@ WORKDIR /app
 # Install SDK from GitHub Packages
 COPY pyproject.toml ./
 RUN pip install canvastekk-workflow-sdk>=0.5.2 \
-    --index-url https://pypi.pkg.github.com/nus-cee/
+    --index-url https://nus-cee:${SDK_PAT}@pypi.pkg.github.com/nus-cee/
 
 # Copy node code
 COPY handler.py .
@@ -497,7 +497,7 @@ WORKDIR /app
 # Install all dependencies
 COPY pyproject.toml ./
 RUN pip install . \
-    --index-url https://pypi.pkg.github.com/nus-cee/ \
+    --index-url https://nus-cee:${SDK_PAT}@pypi.pkg.github.com/nus-cee/ \
     --extra-index-url https://pypi.org/simple/
 
 COPY handler.py .
@@ -756,7 +756,7 @@ Before considering a node complete, verify ALL of these:
 
 ### Dockerfile
 - [ ] Based on `python:3.12-slim`
-- [ ] Installs SDK from GitHub Packages: `pip install canvastekk-workflow-sdk --index-url https://pypi.pkg.github.com/nus-cee/`
+- [ ] Installs SDK from GitHub Packages: `pip install canvastekk-workflow-sdk --index-url https://USERNAME:TOKEN@pypi.pkg.github.com/nus-cee/` (requires PAT)
 - [ ] Uses `uvicorn handler:app --host 0.0.0.0 --port 8001`
 - [ ] Exposes port 8001
 

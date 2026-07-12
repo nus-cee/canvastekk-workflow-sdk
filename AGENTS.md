@@ -49,7 +49,7 @@ This is **intentionally local-only** — no Temporal, no S3, no distributed orch
 
 When creating CanvasTEKK workflow nodes, always follow these rules:
 
-1. **Use `canvastekk-workflow-sdk` from GitHub Packages**: `pip install canvastekk-workflow-sdk --index-url https://pypi.pkg.github.com/nus-cee/`
+1. **Use `canvastekk-workflow-sdk` from GitHub Packages or GitHub Releases**: `pip install canvastekk-workflow-sdk --index-url https://USERNAME:TOKEN@pypi.pkg.github.com/nus-cee/` (requires PAT with `read:packages` scope), OR download the wheel directly from [GitHub Releases](https://github.com/nus-cee/canvastekk-workflow-sdk/releases) — see [README](./README.md#python) for both methods
 2. **File fields use `format: "file"` with `type: "string"`**: Never use `format: "binary"` or `type: "object"` on file fields — the SDK's model_validator rejects them
 3. **Include `x-accept` and `x-maxSizeBytes`** on every file input field — the SDK auto-validates downloaded files against these constraints
 4. **File inputs are auto-downloaded by the SDK**: The SDK downloads presigned URL file inputs to `context.downloads_dir` before calling `execute()`. Node authors receive local file paths, not URLs. Manual download with `httpx.stream()` is only needed for non-file URLs or opt-out scenarios.
@@ -105,4 +105,4 @@ When working on the TypeScript SDK (`typescript/` directory):
 - To trigger a patch release, use `fix:` commit type
 - To trigger a minor release, use `feat:` commit type
 - `docs:` / `chore:` / `ci:` commits alone do NOT trigger a release
-- The released wheel is published to GitHub Packages at `https://pypi.pkg.github.com/nus-cee/`
+- The released wheel is published to GitHub Packages at `https://pypi.pkg.github.com/nus-cee/` (requires PAT with `read:packages` scope) and also attached as a downloadable asset on the [GitHub Release](https://github.com/nus-cee/canvastekk-workflow-sdk/releases) page (no auth)
