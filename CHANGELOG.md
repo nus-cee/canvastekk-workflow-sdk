@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.18.1] - 2026-07-12
+
+### Bug Fixes
+
+- **ci**: Switch to twine for GitHub Packages PyPI publish (poetry 404) (#46)
+
+
 ## [0.18.0] - 2026-07-12
 
 ### Features
 
 - **ci**: Publish Python SDK to GitHub Packages PyPI registry (#45)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.18.0
 
 
 ## [0.17.2] - 2026-07-12
