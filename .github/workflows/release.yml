@@ -272,3 +272,90 @@ jobs:
           }
           console.log('Post-publish TS verification passed: version ' + VERSION + ' resolved correctly');
           "
+
+      # ─── Phase 5 [DA-1546]: Post-release dispatch to Nodes ──────────
+
+      - name: Detect breaking changes
+        id: detect-breaking
+        if: steps.git-cliff.outputs.version != ''
+        run: |
+          set -euo pipefail
+          # Find the previous tag (before this release)
+          PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed -n '2p' || true)
+          if [ -z "$PREV_TAG" ]; then
+            # No previous tag — scan all commits
+            RANGE="HEAD"
+          else
+            RANGE="${PREV_TAG}..HEAD"
+          fi
+
+          echo "Scanning commits in range: $RANGE"
+
+          # Collect breaking changes:
+          # 1. Subjects with `!:` marker (e.g., `feat(api)!: ...`)
+          # 2. Bodies with `BREAKING CHANGE:` footer
+          BREAKING_SUBJECTS=$(git log "$RANGE" --format='%s' | grep -E '^[a-z]+(\([^)]+\))?!:' || true)
+          BREAKING_FOOTERS=$(git log "$RANGE" --format='%B' | grep -E '^BREAKING[ -]CHANGE:' -i || true)
+
+          BREAKING_LIST=""
+          if [ -n "$BREAKING_SUBJECTS" ]; then
+            BREAKING_LIST="$BREAKING_SUBJECTS"
+          fi
+          if [ -n "$BREAKING_FOOTERS" ]; then
+            if [ -n "$BREAKING_LIST" ]; then
+              BREAKING_LIST="$BREAKING_LIST"$'\n'"$BREAKING_FOOTERS"
+            else
+              BREAKING_LIST="$BREAKING_FOOTERS"
+            fi
+          fi
+
+          if [ -n "$BREAKING_LIST" ]; then
+            IS_BREAKING="true"
+            echo "::warning::Breaking changes detected — Nodes rebuild will be mandatory"
+          else
+            IS_BREAKING="false"
+          fi
+
+          # Convert list to JSON array (one entry per line, properly escaped)
+          if [ -n "$BREAKING_LIST" ]; then
+            BREAKING_JSON=$(echo "$BREAKING_LIST" | python3 -c "
+          import sys, json
+          lines = [l.strip() for l in sys.stdin.read().splitlines() if l.strip()]
+          print(json.dumps(lines))
+          ")
+          else
+            BREAKING_JSON='[]'
+          fi
+
+          echo "breaking=$IS_BREAKING" >> "$GITHUB_OUTPUT"
+          echo "breaking_changes_json=$BREAKING_JSON" >> "$GITHUB_OUTPUT"
+          echo "Breaking: $IS_BREAKING"
+          echo "Changes: $BREAKING_JSON"
+
+      - name: Generate Nodes dispatch token
+        id: nodes-token
+        if: success() && steps.git-cliff.outputs.version != ''
+        continue-on-error: true
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: nus-cee
+          repositories: canvastekk-workflow-nodes
+
+      - name: Notify Nodes repo of SDK release (dispatch rebuild)
+        if: success() && steps.git-cliff.outputs.version != ''
+        continue-on-error: true
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ steps.nodes-token.outputs.token }}
+          repository: nus-cee/canvastekk-workflow-nodes
+          event-type: sdk-released
+          client-payload: |
+            {
+              "sdk_version": "${{ steps.git-cliff.outputs.version }}",
+              "environment": "prod",
+              "breaking": ${{ steps.detect-breaking.outputs.breaking }},
+              "breaking_changes": ${{ steps.detect-breaking.outputs.breaking_changes_json || '[]' }},
+              "released_at": "${{ github.run_id }}"
+            }
