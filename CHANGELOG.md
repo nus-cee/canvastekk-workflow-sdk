@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.0] - 2026-07-20
+
+### Features
+
+- **ci**: DA-1546 dispatch sdk-released to nodes repo on release (#48)
+
+
 ## [0.18.2] - 2026-07-12
 
 ### Bug Fixes
 
 - **ci**: Make PyPI publish non-blocking until org registry is enabled (#47)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.18.2
 
 
 ## [0.18.1] - 2026-07-12
