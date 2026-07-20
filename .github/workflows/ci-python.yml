@@ -50,3 +50,95 @@ jobs:
         with:
           name: python-coverage
           path: python/coverage.xml
+
+  # ─── Phase 10.1 [DA-1546]: Manifest Schema Stability ───────────────
+  # Detects breaking Pydantic model schema changes on PRs that modify
+  # the SDK's public models. Breaking changes require the 'major' label.
+
+  schema-stability:
+    name: Manifest schema stability
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+
+    steps:
+      - name: Check path filter
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            schema_files:
+              - 'python/canvastekk_workflow_sdk/definition.py'
+              - 'python/canvastekk_workflow_sdk/workflow/models.py'
+              - 'python/canvastekk_workflow_sdk/workflow/__init__.py'
+              - 'python/canvastekk_workflow_sdk/__init__.py'
+
+      - name: Skip (no schema files changed)
+        if: steps.filter.outputs.schema_files != 'true'
+        run: echo "No schema-relevant files changed — skipping stability check."
+
+      - name: Checkout base
+        if: steps.filter.outputs.schema_files == 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.base_ref }}
+          path: base
+
+      - name: Checkout PR
+        if: steps.filter.outputs.schema_files == 'true'
+        uses: actions/checkout@v6
+        with:
+          path: pr
+
+      - name: Set up Python
+        if: steps.filter.outputs.schema_files == 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        if: steps.filter.outputs.schema_files == 'true'
+        run: pip install poetry
+
+      - name: Install dependencies (base)
+        if: steps.filter.outputs.schema_files == 'true'
+        working-directory: base/python
+        run: poetry install --no-interaction
+
+      - name: Install dependencies (PR)
+        if: steps.filter.outputs.schema_files == 'true'
+        working-directory: pr/python
+        run: poetry install --no-interaction
+
+      - name: Generate schema (base)
+        if: steps.filter.outputs.schema_files == 'true'
+        working-directory: base/python
+        run: poetry run python scripts/check_schema_stability.py dump > /tmp/schema-base.json
+
+      - name: Generate schema (PR)
+        if: steps.filter.outputs.schema_files == 'true'
+        working-directory: pr/python
+        run: poetry run python scripts/check_schema_stability.py dump > /tmp/schema-pr.json
+
+      - name: Diff and classify
+        id: diff
+        if: steps.filter.outputs.schema_files == 'true'
+        working-directory: pr/python
+        run: python3 scripts/check_schema_stability.py diff /tmp/schema-base.json /tmp/schema-pr.json
+
+      - name: Enforce 'major' label requirement
+        if: steps.filter.outputs.schema_files == 'true' && steps.diff.outputs.breaking == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name')
+          if echo "$LABELS" | grep -qw 'major'; then
+            echo "::warning::Breaking schema changes detected — 'major' label is present, proceeding."
+          else
+            echo "::error::Breaking schema changes detected without 'major' label."
+            echo "::error::Add the 'major' label to acknowledge, or revert the breaking changes."
+            exit 1
+          fi
