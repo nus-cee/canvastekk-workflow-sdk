@@ -106,3 +106,36 @@ When working on the TypeScript SDK (`typescript/` directory):
 - To trigger a minor release, use `feat:` commit type
 - `docs:` / `chore:` / `ci:` commits alone do NOT trigger a release
 - The released wheel is published to GitHub Packages at `https://pypi.pkg.github.com/nus-cee/` (requires PAT with `read:packages` scope) and also attached as a downloadable asset on the [GitHub Release](https://github.com/nus-cee/canvastekk-workflow-sdk/releases) page (no auth)
+
+## Cross-repo Deployment Coordination (DA-1546)
+
+This repo is the **origin** of the dispatch chain — after publishing a release, dispatches `sdk-released` to `canvastekk-workflow-nodes` to trigger a Lambda rebuild.
+
+### Dispatch chain
+
+```
+THIS REPO ──sdk-released──► Nodes deploy-lambda.yml ──nodes-deployed──► CWE reseed.yml
+```
+
+### Event table (this repo's participation only)
+
+| Event | Direction | Counterparty | Payload |
+|---|---|---|---|
+| `sdk-released` | **Send** | canvastekk-workflow-nodes | `{sdk_version, environment: "prod", breaking, breaking_changes[], released_at}` |
+
+### Breaking-change detection (Phase 5.2)
+
+`release.yml` scans commits since the last tag for:
+
+- `BREAKING CHANGE:` footer (Conventional Commits spec)
+- `!:` in type scope (e.g., `feat(api)!: ...`)
+
+Populates `breaking` boolean + `breaking_changes` array in the dispatch payload. Both the token-generation and dispatch steps use `continue-on-error: true` — a dispatch failure never fails the release.
+
+### Credentials
+
+GitHub App credentials (`GH_APP_ID` variable + `GH_APP_PRIVATE_KEY` secret) are required for the dispatch step. If missing, the dispatch fails silently (`continue-on-error: true`). See `canvastekk-devops/canvastekk-shared-infra` for provisioning.
+
+### Canonical source
+
+Full dispatch pattern template + MAJOR-bump policy: [canvastekk-workflow-engine/AGENTS.md](https://github.com/nus-cee/canvastekk-workflow-engine/blob/dev/AGENTS.md#cross-repo-deployment-coordination-da-1546)
