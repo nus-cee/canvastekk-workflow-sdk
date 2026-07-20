@@ -2,11 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.20.0] - 2026-07-20
+
+### Features
+
+- **ci**: DA-1546 manifest schema stability check (#50)
+
+
+### Documentation
+
+- DA-1546 add dispatch contract to AGENTS.md (#49)
+
+
 ## [0.19.0] - 2026-07-20
 
 ### Features
 
 - **ci**: DA-1546 dispatch sdk-released to nodes repo on release (#48)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.19.0
 
 
 ## [0.18.2] - 2026-07-12
