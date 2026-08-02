@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.21.0] - 2026-08-02
+
+### Features
+
+- Add deprecation metadata field to WorkflowNodeManifest (DA-1582) (#51)
+
+
 ## [0.20.0] - 2026-07-20
 
 ### Features
@@ -12,6 +19,11 @@ All notable changes to this project will be documented in this file.
 ### Documentation
 
 - DA-1546 add dispatch contract to AGENTS.md (#49)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.20.0
 
 
 ## [0.19.0] - 2026-07-20
