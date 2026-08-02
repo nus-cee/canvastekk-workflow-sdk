@@ -131,6 +131,8 @@ def build_registry_payload(
         payload["invoke_config"] = invoke_config
     if constraints is not None:
         payload["constraints"] = constraints
+    if definition.deprecation is not None:
+        payload["deprecation"] = definition.deprecation.model_dump(mode="json")
 
     return payload
 

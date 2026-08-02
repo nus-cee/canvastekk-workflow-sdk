@@ -93,6 +93,9 @@ export function buildRegistryPayload(
   if (constraints !== undefined) {
     payload.constraints = constraints;
   }
+  if (definition.deprecation != null) {
+    payload.deprecation = definition.deprecation;
+  }
 
   return payload;
 }

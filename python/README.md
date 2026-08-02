@@ -810,6 +810,41 @@ Optional fields with defaults:
 | `timeout_seconds` | 30 | Max execution time |
 | `role` | `WorkflowNodeRole.OPERATION` | Node role (`start`, `end`, `error_gate`, `operation`) |
 | `styles` | `None` | Icon/color for UI |
+| `deprecation` | `None` | Optional `DeprecationInfo` — advisory migration signal (RFC 9745/8594). Omitted from serialization when `None`. Distinct from the registry's `node_status`; a deprecated node stays `active` until retired. |
+
+### DeprecationInfo
+
+Mark a node deprecated so workflow-definition authors get a migration signal.
+`deprecation` is **additive metadata** — setting it does not change the node's
+behavior and does not require a `major` version bump (a `patch`/`minor` bump is
+sufficient, since engine version-immutability only rejects *changed data* on
+the same version — adding the field on a new version is a normal registration).
+
+```python
+from canvastekk_workflow_sdk import DeprecationInfo, WorkflowNodeManifest
+from datetime import date
+
+definition = WorkflowNodeManifest(
+    name="floor-flatness-assessment",
+    version="1.4.2",
+    # ...required fields...
+    deprecation=DeprecationInfo(
+        deprecated_at=date(2026, 8, 1),          # RFC 9745 — when deprecation took effect
+        sunset_date=date(2027, 1, 1),            # RFC 8594 — planned removal date
+        replacement_slug="floor-flatness-per-check-assessment",
+        migration_url="https://docs.example.com/ff-migration",
+        notice="Use floor-flatness-per-check-assessment for per-check-type outputs.",
+    ),
+)
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `deprecated_at` | `None` | Date deprecation took effect (RFC 9745) |
+| `sunset_date` | `None` | Planned removal date (RFC 8594); `None` = no firm date |
+| `replacement_slug` | `None` | Slug of the replacement node |
+| `migration_url` | `None` | URL to migration docs (RFC 9745 §3 / RFC 8594 §6) |
+| `notice` | *(required)* | Human-readable notice shown to workflow-def authors |
 
 ### ExecutionContext
 

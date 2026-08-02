@@ -18,6 +18,7 @@ export {
   RetryConfigSchema,
   WorkflowNodeManifestSchema,
   WorkflowNodeRoleSchema,
+  DeprecationInfoSchema,
   getNodeId,
   getFileInputFields,
   getFileOutputFields,
@@ -27,6 +28,7 @@ export {
   type RetryConfig,
   type WorkflowNodeManifest,
   type WorkflowNodeRole,
+  type DeprecationInfo,
 } from "./definition.js";
 export {
   NodeExecutionError,

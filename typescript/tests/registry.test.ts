@@ -63,6 +63,32 @@ describe("buildRegistryPayload", () => {
     const payload = buildRegistryPayload(testDef);
     expect(payload.node_role).toBe("operation");
   });
+
+  it("omits deprecation when null (DA-1582)", () => {
+    const payload = buildRegistryPayload(testDef);
+    expect(payload).not.toHaveProperty("deprecation");
+  });
+
+  it("includes deprecation when set (DA-1582)", () => {
+    const deprecated = {
+      ...testDef,
+      deprecation: {
+        deprecated_at: "2026-08-01",
+        sunset_date: "2027-01-01",
+        replacement_slug: "echo-v2",
+        migration_url: "https://example.com/migrate",
+        notice: "use echo-v2",
+      },
+    };
+    const payload = buildRegistryPayload(deprecated);
+    expect(payload.deprecation).toEqual({
+      deprecated_at: "2026-08-01",
+      sunset_date: "2027-01-01",
+      replacement_slug: "echo-v2",
+      migration_url: "https://example.com/migrate",
+      notice: "use echo-v2",
+    });
+  });
 });
 
 describe("extractNodeData", () => {

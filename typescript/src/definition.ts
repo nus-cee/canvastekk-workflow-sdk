@@ -57,6 +57,25 @@ export const WorkflowNodeRoleSchema = z.enum(["start", "end", "error_gate", "ope
 
 export type WorkflowNodeRole = z.infer<typeof WorkflowNodeRoleSchema>;
 
+/**
+ * Advisory deprecation metadata for a node manifest (DA-1582).
+ *
+ * Migration signal, orthogonal to `node_status` (the operational routing
+ * lever). Mirrors RFC 9745 (Deprecation) / RFC 8594 (Sunset) semantics at the
+ * data-model level. Dates are ISO 8601 strings (not `Date`) to stay
+ * JSON-round-trip compatible with the Python SDK and the engine wire format.
+ */
+export const DeprecationInfoSchema = z.object({
+  deprecated_at: z.string().nullable().default(null),
+  sunset_date: z.string().nullable().default(null),
+  replacement_slug: z.string().nullable().default(null),
+  migration_url: z.string().nullable().default(null),
+  notice: z.string(),
+});
+
+/** Deprecation metadata for a node manifest. */
+export type DeprecationInfo = z.infer<typeof DeprecationInfoSchema>;
+
 function validateFileFieldFormats(
   schema: Record<string, unknown>,
 ): void {
@@ -101,6 +120,7 @@ export const WorkflowNodeManifestSchema = z
     timeout_seconds: z.number().int().min(1).default(30),
     role: WorkflowNodeRoleSchema,
     styles: WorkflowNodeStylesSchema.nullable().default(null),
+    deprecation: DeprecationInfoSchema.nullable().default(null),
   })
   .transform((data, ctx) => {
     const { id: _id, ...rest } = data;
