@@ -10,6 +10,7 @@ from __future__ import annotations
 import enum
 import json
 import re
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -211,7 +212,9 @@ class WorkflowNodeManifest(BaseModel):
     )
 
     @model_serializer(mode="wrap")
-    def _drop_deprecation_when_none(self, handler):  # type: ignore[no-untyped-def]
+    def _drop_deprecation_when_none(
+        self, handler: Callable[[WorkflowNodeManifest], dict[str, Any]]
+    ) -> dict[str, Any]:
         """Serialize the manifest, omitting ``deprecation`` when it is None.
 
         Non-deprecated nodes then serialize byte-identically to the pre-deprecation

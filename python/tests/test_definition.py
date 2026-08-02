@@ -932,6 +932,53 @@ class TestExportDefinitionNoId:
             assert data["name"] == "test"
             assert data["version"] == "1.0.0"
 
+    def test_export_omits_deprecation_when_none(self) -> None:
+        """DA-1582 hardening: export_definition routes through build_registry_payload (CR3)."""
+        definition = WorkflowNodeManifest(
+            name="test",
+            version="1.0.0",
+            title="Test",
+            description="Test",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test.json"
+            export_definition(definition, output_path)
+            data = json.loads(output_path.read_text())
+            assert "deprecation" not in data
+
+    def test_export_includes_deprecation_when_set(self) -> None:
+        """DA-1582 hardening: export_definition writes the deprecation field (CR3)."""
+        from datetime import date
+
+        definition = WorkflowNodeManifest(
+            name="test",
+            version="1.0.0",
+            title="Test",
+            description="Test",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+            deprecation=DeprecationInfo(
+                deprecated_at=date(2026, 8, 1),
+                sunset_date=date(2027, 1, 1),
+                replacement_slug="test-v2",
+                migration_url="https://example.com/migrate",
+                notice="use test-v2",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "test.json"
+            export_definition(definition, output_path)
+            data = json.loads(output_path.read_text())
+            assert data["deprecation"] == {
+                "deprecated_at": "2026-08-01",
+                "sunset_date": "2027-01-01",
+                "replacement_slug": "test-v2",
+                "migration_url": "https://example.com/migrate",
+                "notice": "use test-v2",
+            }
+
 
 class TestDeprecationInfo:
     """Tests for DeprecationInfo model (DA-1582)."""
@@ -1022,3 +1069,45 @@ class TestManifestDeprecationSerialization:
             "migration_url": None,
             "notice": "retire soon",
         }
+
+    def test_model_dump_json_roundtrips_deprecation(self) -> None:
+        """DA-1582 hardening: model_dump_json round-trips a deprecated manifest."""
+        import json
+        from datetime import date
+
+        manifest = self._minimal().model_copy(
+            update={
+                "deprecation": DeprecationInfo(
+                    deprecated_at=date(2026, 8, 1),
+                    sunset_date=date(2027, 1, 1),
+                    replacement_slug="echo-v2",
+                    migration_url="https://example.com/migrate",
+                    notice="use echo-v2",
+                )
+            }
+        )
+        dumped = json.loads(manifest.model_dump_json())
+        assert dumped["deprecation"] == {
+            "deprecated_at": "2026-08-01",
+            "sunset_date": "2027-01-01",
+            "replacement_slug": "echo-v2",
+            "migration_url": "https://example.com/migrate",
+            "notice": "use echo-v2",
+        }
+
+    def test_nested_dates_serialize_as_iso_strings(self) -> None:
+        """DA-1582 hardening: dates serialize as ISO strings on the json path (CR2/PR2)."""
+        from datetime import date
+
+        manifest = self._minimal().model_copy(
+            update={"deprecation": DeprecationInfo(sunset_date=date(2027, 1, 1), notice="x")}
+        )
+        sunset = manifest.to_dict()["deprecation"]["sunset_date"]
+        assert sunset == "2027-01-01"
+        assert isinstance(sunset, str)
+
+    def test_model_json_schema_lists_deprecation_as_optional(self) -> None:
+        """DA-1582 hardening: stability-gate invariant — schema lists deprecation, not required (CR4)."""
+        schema = WorkflowNodeManifest.model_json_schema()
+        assert "deprecation" in schema["properties"]
+        assert "deprecation" not in schema.get("required", [])
