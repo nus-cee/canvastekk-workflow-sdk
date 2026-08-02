@@ -10,10 +10,11 @@ from __future__ import annotations
 import enum
 import json
 import re
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_serializer, model_validator
 
 from canvastekk_workflow_sdk.exceptions import NodeValidationError
 
@@ -92,6 +93,41 @@ class WorkflowNodeRole(str, enum.Enum):  # noqa: UP042
     OPERATION = "operation"
 
 
+class DeprecationInfo(BaseModel):
+    """Advisory deprecation metadata for a node manifest.
+
+    This is a *migration* signal, orthogonal to ``node_status`` (which is the
+    operational routing lever — ``active | inactive | dead``). A deprecated node
+    stays ``active`` until it is retired; ``deprecation`` only tells
+    workflow-definition authors to move off the node. Mirrors RFC 9745
+    (Deprecation) / RFC 8594 (Sunset) semantics at the data-model level.
+    """
+
+    deprecated_at: date | None = Field(
+        default=None,
+        description="Date deprecation took effect (RFC 9745 Deprecation). "
+        "None = deprecated but the start date is unknown/not recorded.",
+    )
+    sunset_date: date | None = Field(
+        default=None,
+        description="Planned removal date (RFC 8594 Sunset). "
+        "None = deprecated but no firm removal date yet.",
+    )
+    replacement_slug: str | None = Field(
+        default=None,
+        description="Slug of the node that replaces this one, if any. "
+        "The engine resolves the slug to the node registry record.",
+    )
+    migration_url: str | None = Field(
+        default=None,
+        description="URL to migration documentation (RFC 9745 §3 "
+        "Link rel=\"deprecation\" / RFC 8594 §6 Link rel=\"sunset\").",
+    )
+    notice: str = Field(
+        description="Human-readable deprecation notice shown to workflow-definition authors.",
+    )
+
+
 class WorkflowNodeManifest(BaseModel):
     """
     Standard definition that every node must provide.
@@ -165,6 +201,28 @@ class WorkflowNodeManifest(BaseModel):
         default=None,
         description="Icon and color for the workflow builder UI",
     )
+
+    # Deprecation (optional — advisory migration signal; NOT node_status)
+    deprecation: DeprecationInfo | None = Field(
+        default=None,
+        description="If set, this node is deprecated. Surfaced to workflow-definition "
+        "authors as a migration signal; orthogonal to node_status (a deprecated node "
+        "stays active until retired).",
+    )
+
+    @model_serializer(mode="wrap")
+    def _drop_deprecation_when_none(self, handler):  # type: ignore[no-untyped-def]
+        """Serialize the manifest, omitting ``deprecation`` when it is None.
+
+        Non-deprecated nodes then serialize byte-identically to the pre-deprecation
+        shape, which protects the ``/manifest`` endpoint and contract/stability
+        consumers that compare serialized output. Covers every instance-serialization
+        path (``to_dict`` / ``model_dump``); does not affect ``model_json_schema``.
+        """
+        data = handler(self)
+        if data.get("deprecation") is None:
+            data.pop("deprecation", None)
+        return data
 
     @computed_field  # type: ignore[misc]
     @property

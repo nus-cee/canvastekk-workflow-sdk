@@ -506,6 +506,38 @@ Optional fields with defaults:
 | `category` | `"utility"` | Node category (`transform`, `inference`, `utility`, `control-flow`) |
 | `timeout_seconds` | `30` | Max execution time |
 | `styles` | `undefined` | Icon/color for UI |
+| `deprecation` | `undefined` | Optional `DeprecationInfo` — advisory migration signal (RFC 9745/8594). Omitted from the registry payload when unset. Distinct from the registry's `node_status`; a deprecated node stays `active` until retired. |
+
+### DeprecationInfo
+
+Mark a node deprecated so workflow-definition authors get a migration signal.
+`deprecation` is **additive metadata** — setting it does not change the node's
+behavior and does not require a `major` version bump.
+
+```typescript
+import { WorkflowNodeManifestSchema, type DeprecationInfo } from "canvastekk-workflow-sdk";
+
+const definition = WorkflowNodeManifestSchema.parse({
+  name: "floor-flatness-assessment",
+  version: "1.4.2",
+  // ...required fields...
+  deprecation: {
+    deprecated_at: "2026-08-01",                               // RFC 9745
+    sunset_date: "2027-01-01",                                 // RFC 8594
+    replacement_slug: "floor-flatness-per-check-assessment",
+    migration_url: "https://docs.example.com/ff-migration",
+    notice: "Use floor-flatness-per-check-assessment for per-check-type outputs.",
+  } satisfies DeprecationInfo,
+});
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `deprecated_at` | `null` | Date deprecation took effect, ISO 8601 (RFC 9745) |
+| `sunset_date` | `null` | Planned removal date, ISO 8601 (RFC 8594); `null` = no firm date |
+| `replacement_slug` | `null` | Slug of the replacement node |
+| `migration_url` | `null` | URL to migration docs (RFC 9745 §3 / RFC 8594 §6) |
+| `notice` | *(required)* | Human-readable notice shown to workflow-def authors |
 
 ### ExecutionContext
 

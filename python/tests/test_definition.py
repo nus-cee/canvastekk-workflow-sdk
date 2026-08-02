@@ -6,7 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from canvastekk_workflow_sdk import RetryConfig, WorkflowNodeManifest, WorkflowNodeRole, WorkflowNodeStyles
+from canvastekk_workflow_sdk import (
+    DeprecationInfo,
+    RetryConfig,
+    WorkflowNodeManifest,
+    WorkflowNodeRole,
+    WorkflowNodeStyles,
+)
 from canvastekk_workflow_sdk.definition import export_definition
 
 
@@ -925,3 +931,94 @@ class TestExportDefinitionNoId:
             assert "id" not in data
             assert data["name"] == "test"
             assert data["version"] == "1.0.0"
+
+
+class TestDeprecationInfo:
+    """Tests for DeprecationInfo model (DA-1582)."""
+
+    def test_notice_is_required(self) -> None:
+        """notice is the only required field."""
+        with pytest.raises(ValueError):
+            DeprecationInfo()  # type: ignore[call-arg]
+
+    def test_optional_fields_default_none(self) -> None:
+        info = DeprecationInfo(notice="use echo-v2")
+        assert info.deprecated_at is None
+        assert info.sunset_date is None
+        assert info.replacement_slug is None
+        assert info.migration_url is None
+        assert info.notice == "use echo-v2"
+
+    def test_full_population(self) -> None:
+        from datetime import date
+
+        info = DeprecationInfo(
+            deprecated_at=date(2026, 8, 1),
+            sunset_date=date(2027, 1, 1),
+            replacement_slug="echo-v2",
+            migration_url="https://example.com/migrate",
+            notice="use echo-v2",
+        )
+        assert info.deprecated_at == date(2026, 8, 1)
+        assert info.sunset_date == date(2027, 1, 1)
+        assert info.replacement_slug == "echo-v2"
+        assert info.migration_url == "https://example.com/migrate"
+
+
+class TestManifestDeprecationSerialization:
+    """DA-1582: deprecation is omitted when None on every serialization path."""
+
+    @staticmethod
+    def _minimal() -> WorkflowNodeManifest:
+        return WorkflowNodeManifest(
+            name="echo",
+            version="1.0.0",
+            title="Echo",
+            description="Test",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        )
+
+    def test_deprecation_defaults_to_none(self) -> None:
+        assert self._minimal().deprecation is None
+
+    def test_to_dict_omits_deprecation_when_none(self) -> None:
+        assert "deprecation" not in self._minimal().to_dict()
+
+    def test_model_dump_omits_deprecation_when_none(self) -> None:
+        assert "deprecation" not in self._minimal().model_dump(mode="json")
+
+    def test_to_dict_includes_deprecation_when_set(self) -> None:
+        from datetime import date
+
+        manifest = self._minimal().model_copy(
+            update={
+                "deprecation": DeprecationInfo(
+                    deprecated_at=date(2026, 8, 1),
+                    sunset_date=date(2027, 1, 1),
+                    replacement_slug="echo-v2",
+                    migration_url="https://example.com/migrate",
+                    notice="use echo-v2",
+                )
+            }
+        )
+        dep = manifest.to_dict()["deprecation"]
+        assert dep == {
+            "deprecated_at": "2026-08-01",
+            "sunset_date": "2027-01-01",
+            "replacement_slug": "echo-v2",
+            "migration_url": "https://example.com/migrate",
+            "notice": "use echo-v2",
+        }
+
+    def test_model_dump_includes_deprecation_when_set(self) -> None:
+        manifest = self._minimal().model_copy(
+            update={"deprecation": DeprecationInfo(notice="retire soon")}
+        )
+        assert manifest.model_dump(mode="json")["deprecation"] == {
+            "deprecated_at": None,
+            "sunset_date": None,
+            "replacement_slug": None,
+            "migration_url": None,
+            "notice": "retire soon",
+        }

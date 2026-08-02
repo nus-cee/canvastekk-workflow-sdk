@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   WorkflowNodeManifestSchema,
   WorkflowNodeRoleSchema,
+  DeprecationInfoSchema,
   getNodeId,
   getFileInputFields,
   getFileOutputFields,
@@ -284,5 +285,57 @@ describe("WorkflowNodeStylesSchema", () => {
     const { WorkflowNodeRoleSchema } = await import("../src/definition.js");
     expect(WorkflowNodeRoleSchema.parse("start")).toBe("start");
     expect(WorkflowNodeRoleSchema.parse(undefined)).toBe("operation");
+  });
+});
+
+describe("DeprecationInfoSchema (DA-1582)", () => {
+  it("notice is required", () => {
+    expect(() => DeprecationInfoSchema.parse({})).toThrow();
+  });
+
+  it("optional fields default to null", () => {
+    const info = DeprecationInfoSchema.parse({ notice: "use echo-v2" });
+    expect(info.notice).toBe("use echo-v2");
+    expect(info.deprecated_at).toBeNull();
+    expect(info.sunset_date).toBeNull();
+    expect(info.replacement_slug).toBeNull();
+    expect(info.migration_url).toBeNull();
+  });
+
+  it("parses a fully-populated deprecation (dates as ISO strings)", () => {
+    const info = DeprecationInfoSchema.parse({
+      deprecated_at: "2026-08-01",
+      sunset_date: "2027-01-01",
+      replacement_slug: "echo-v2",
+      migration_url: "https://example.com/migrate",
+      notice: "use echo-v2",
+    });
+    expect(info.deprecated_at).toBe("2026-08-01");
+    expect(info.sunset_date).toBe("2027-01-01");
+    expect(info.replacement_slug).toBe("echo-v2");
+    expect(info.migration_url).toBe("https://example.com/migrate");
+  });
+});
+
+describe("WorkflowNodeManifestSchema deprecation field (DA-1582)", () => {
+  it("defaults deprecation to null", () => {
+    const def = WorkflowNodeManifestSchema.parse(validDefinition);
+    expect(def.deprecation).toBeNull();
+  });
+
+  it("parses a manifest with deprecation set", () => {
+    const def = WorkflowNodeManifestSchema.parse({
+      ...validDefinition,
+      deprecation: {
+        deprecated_at: "2026-08-01",
+        sunset_date: "2027-01-01",
+        replacement_slug: "my-node-v2",
+        migration_url: "https://example.com/migrate",
+        notice: "use my-node-v2",
+      },
+    });
+    expect(def.deprecation?.notice).toBe("use my-node-v2");
+    expect(def.deprecation?.sunset_date).toBe("2027-01-01");
+    expect(def.deprecation?.replacement_slug).toBe("my-node-v2");
   });
 });

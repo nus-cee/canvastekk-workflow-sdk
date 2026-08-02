@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from canvastekk_workflow_sdk import WorkflowNodeManifest
+from canvastekk_workflow_sdk import DeprecationInfo, WorkflowNodeManifest
 from canvastekk_workflow_sdk.base import BaseNode
 from canvastekk_workflow_sdk.context import ExecutionContext
 from canvastekk_workflow_sdk.registry import (
@@ -516,6 +516,34 @@ class TestBuildRegistryPayload:
             "node_status",
         }
         assert expected_keys.issubset(payload.keys())
+
+    def test_deprecation_omitted_when_none(self) -> None:
+        """DA-1582: non-deprecated nodes never send the deprecation key."""
+        definition = self._make_definition()
+        payload = build_registry_payload(definition)
+        assert "deprecation" not in payload
+
+    def test_deprecation_included_when_set(self) -> None:
+        """DA-1582: deprecated nodes send the full nested object."""
+        from datetime import date
+
+        definition = self._make_definition(
+            deprecation=DeprecationInfo(
+                deprecated_at=date(2026, 8, 1),
+                sunset_date=date(2027, 1, 1),
+                replacement_slug="test-v2",
+                migration_url="https://example.com/migrate",
+                notice="use test-v2",
+            )
+        )
+        payload = build_registry_payload(definition)
+        assert payload["deprecation"] == {
+            "deprecated_at": "2026-08-01",
+            "sunset_date": "2027-01-01",
+            "replacement_slug": "test-v2",
+            "migration_url": "https://example.com/migrate",
+            "notice": "use test-v2",
+        }
 
 
 class TestExtractNodeDataNewFormat:

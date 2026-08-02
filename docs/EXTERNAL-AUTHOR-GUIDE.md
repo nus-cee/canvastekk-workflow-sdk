@@ -115,6 +115,47 @@ The `id` field is automatically derived from `name` + `version` as `{name}-v{ver
 
 > **Note on versioning:** The engine uses your `WorkflowNodeManifest.version` semantic version string directly. Versions are **immutable** — re-registering with the same version and changed data is rejected. You must bump the version for any schema or metadata changes.
 
+### Marking a node deprecated
+
+When a successor node exists and you want to steer workflow-definition authors away from an older node without breaking existing workflows, set the optional `deprecation` field. This is an **advisory migration signal** — it does not change the node's behavior and does **not** flip the registry's operational `node_status` (`active` / `inactive` / `dead`). A deprecated node stays `active` and keeps running until you separately retire it.
+
+Because `deprecation` is additive metadata (not a schema or behavior change), setting it requires only a **patch** or **minor** version bump, not a major one — the engine's version-immutability only rejects *changed data* on the same version, so adding the field on a new version is a normal re-registration.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `deprecated_at` | no | Date deprecation took effect (RFC 9745). ISO 8601. |
+| `sunset_date` | no | Planned removal date (RFC 8594). ISO 8601. Omit if there is no firm removal date yet. |
+| `replacement_slug` | no | Slug of the node that replaces this one (the engine resolves it). |
+| `migration_url` | no | URL to migration documentation (RFC 9745 §3 / RFC 8594 §6). |
+| `notice` | **yes** | Human-readable notice shown to workflow-definition authors. |
+
+```python
+from canvastekk_workflow_sdk import BaseNode, DeprecationInfo, WorkflowNodeManifest, ExecutionContext
+from datetime import date
+
+class FloorFlatnessNode(BaseNode):
+    definition = WorkflowNodeManifest(
+        name="floor-flatness-assessment",
+        version="1.4.2",  # bumped patch to register the deprecation metadata
+        title="Floor Flatness Assessment (deprecated)",
+        description="...",
+        input_schema={...},
+        output_schema={...},
+        deprecation=DeprecationInfo(
+            deprecated_at=date(2026, 8, 1),
+            sunset_date=date(2027, 1, 1),
+            replacement_slug="floor-flatness-per-check-assessment",
+            migration_url="https://docs.example.com/ff-migration",
+            notice="Use floor-flatness-per-check-assessment for per-check-type outputs.",
+        ),
+    )
+
+    def execute(self, inputs, context):  # unchanged — behavior is frozen
+        ...
+```
+
+> **`deprecation` vs `node_status`.** Use `deprecation` to *announce* a migration. Use the registry's `node_status` (managed by the platform, not node authors) to actually *retire* a node (`inactive`/`dead` stops routing). The two are orthogonal: announce first, retire later.
+
 ### SDK Types and Engine Terminology
 
 The SDK's `WorkflowNodeManifest` maps to the engine's **registry-level node type** (called `WorkflowNodeManifest` in the engine). This is distinct from `WorkflowDefinitionNode`, which the engine uses to represent a node instance within a specific workflow definition.

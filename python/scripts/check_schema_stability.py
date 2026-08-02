@@ -35,6 +35,7 @@ from typing import Any
 
 MODEL_IMPORTS = """
 from canvastekk_workflow_sdk import (
+    DeprecationInfo,
     RetryConfig,
     WorkflowNodeManifest,
     WorkflowNodeRole,
@@ -50,6 +51,7 @@ from canvastekk_workflow_sdk.workflow.models import (
 
 MODELS_TO_CHECK: list[tuple[str, str]] = [
     ("WorkflowNodeManifest", "WorkflowNodeManifest"),
+    ("DeprecationInfo", "DeprecationInfo"),
     ("WorkflowNodeStyles", "WorkflowNodeStyles"),
     ("WorkflowNodeRole", "WorkflowNodeRole"),
     ("RetryConfig", "RetryConfig"),
