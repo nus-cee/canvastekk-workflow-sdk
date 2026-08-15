@@ -1,20 +1,38 @@
 import type { EdgeType, WorkflowEdgeDefinition, WorkflowDefinitionNode, WorkflowDefinitionSpec } from "./models.js";
 import { validate } from "./validation.js";
 
+/**
+ * Builder for creating workflow specifications.
+ */
 export class WorkflowBuilder {
   private _nodes: WorkflowDefinitionNode[] = [];
   private _edges: WorkflowEdgeDefinition[] = [];
   private _nodeIds: Set<string> = new Set();
   private _hasStart = false;
 
+  /**
+   * Creates a new workflow builder.
+   */
   constructor() {}
 
+  /**
+   * Checks if a node ID is already used.
+   * @param nodeId - Node ID to check
+   * @throws {Error} If node ID is duplicate
+   */
   private checkDuplicate(nodeId: string): void {
     if (this._nodeIds.has(nodeId)) {
       throw new Error(`Duplicate node ID: '${nodeId}'`);
     }
   }
 
+  /**
+   * Adds a START node to the workflow.
+   * @param nodeId - Node ID (default: "start")
+   * @param opts - Start node options
+   * @returns This builder instance for chaining
+   * @throws {Error} If START node already exists
+   */
   addStart(
     nodeId = "start",
     opts?: {
@@ -50,6 +68,12 @@ export class WorkflowBuilder {
     return this;
   }
 
+  /**
+   * Adds an END node to the workflow.
+   * @param nodeId - Node ID (default: "end")
+   * @param opts - End node options
+   * @returns This builder instance for chaining
+   */
   addEnd(nodeId = "end", opts?: { workflowNodeId?: string }): this {
     this.checkDuplicate(nodeId);
     this._nodes.push({
@@ -63,6 +87,13 @@ export class WorkflowBuilder {
     return this;
   }
 
+  /**
+   * Adds a workflow node.
+   * @param nodeId - Unique node ID
+   * @param opts - Node configuration options
+   * @returns This builder instance for chaining
+   * @throws {Error} If node ID is duplicate or slug is reserved
+   */
   addNode(
     nodeId: string,
     opts: {
@@ -133,6 +164,12 @@ export class WorkflowBuilder {
     return this;
   }
 
+  /**
+   * Builds the workflow specification.
+   * @param opts - Build options
+   * @returns Workflow specification
+   * @throws {Error} If validation fails
+   */
   build(opts?: { validate?: boolean }): WorkflowDefinitionSpec {
     const spec: WorkflowDefinitionSpec = {
       nodes: [...this._nodes],

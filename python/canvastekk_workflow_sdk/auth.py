@@ -47,7 +47,16 @@ class _AuthBackend(ABC):
     """Base class for authentication backends."""
 
     @abstractmethod
-    def authenticate(self, request: Request) -> dict[str, Any]: ...
+    def authenticate(self, request: Request) -> dict[str, Any]:
+        """Authenticate the incoming request.
+
+        Args:
+            request: FastAPI request object.
+
+        Returns:
+            Dict with authentication context (e.g., auth_mode).
+        """
+        ...
 
     def as_dependency(self) -> Any:
         """Return a FastAPI ``Depends()`` callable for this backend."""
@@ -65,9 +74,11 @@ class _ApiKeyAuth(_AuthBackend):
     """
 
     def __init__(self, key_env_var: str = "CANVASTEKK_API_KEY") -> None:
+        """Initialize the backend, remembering the env var holding the expected key."""
         self._key_env_var = key_env_var
 
     def authenticate(self, request: Request) -> dict[str, Any]:
+        """Validate the ``X-API-Key`` header against the configured env var."""
         if _is_dev_mode():
             logger.debug("Dev mode: skipping API key authentication")
             return {"auth_mode": "dev_bypass"}
@@ -99,6 +110,7 @@ class _JwtAuth(_AuthBackend):
         algorithm: str = "HS256",
         audience: str | None = None,
     ) -> None:
+        """Initialize the backend with the secret env var, algorithm, and audience."""
         self._secret_env_var = secret_env_var
         self._algorithm = algorithm
         self._audience = audience
@@ -117,6 +129,7 @@ class _JwtAuth(_AuthBackend):
         return self._jwt_module
 
     def authenticate(self, request: Request) -> dict[str, Any]:
+        """Validate the ``Authorization: Bearer`` JWT token."""
         if _is_dev_mode():
             logger.debug("Dev mode: skipping JWT authentication")
             return {"auth_mode": "dev_bypass"}

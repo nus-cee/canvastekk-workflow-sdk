@@ -76,6 +76,12 @@ export const DeprecationInfoSchema = z.object({
 /** Deprecation metadata for a node manifest. */
 export type DeprecationInfo = z.infer<typeof DeprecationInfoSchema>;
 
+/**
+ * Validates that file fields in a schema have the correct format.
+ *
+ * @param schema - JSON Schema object to validate
+ * @throws {Error} If a field uses the deprecated 'binary' format or 'file' format without string type
+ */
 function validateFileFieldFormats(
   schema: Record<string, unknown>,
 ): void {
@@ -142,6 +148,11 @@ export const WorkflowNodeManifestSchema = z
 /** Complete node manifest including metadata, schemas, and configuration. */
 export type WorkflowNodeManifest = z.infer<typeof WorkflowNodeManifestSchema>;
 
+/**
+ * Generates a node ID from name and version.
+ * @param def - Object containing node name and version
+ * @returns Node ID in format "name-vX.Y.Z"
+ */
 export function getNodeId(def: Pick<WorkflowNodeManifest, "name" | "version">): string {
   return `${def.name}-v${def.version}`;
 }

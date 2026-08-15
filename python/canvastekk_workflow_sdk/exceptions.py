@@ -20,6 +20,13 @@ class NodeExecutionError(Exception):
         error_code: str = "EXECUTION_ERROR",
         details: dict[str, Any] | None = None,
     ) -> None:
+        """Initialize the exception with message and metadata.
+
+        Args:
+            message: Human-readable error message.
+            error_code: Structured error code.
+            details: Additional error context.
+        """
         super().__init__(message)
         self.message = message
         self.error_code = error_code
@@ -47,6 +54,12 @@ class NodeTimeoutError(NodeExecutionError):
         *,
         details: dict[str, Any] | None = None,
     ) -> None:
+        """Initialize the timeout exception.
+
+        Args:
+            timeout_seconds: Timeout value in seconds.
+            details: Additional error context.
+        """
         super().__init__(
             f"Node execution timed out after {timeout_seconds}s",
             error_code="TIMEOUT",
@@ -65,6 +78,13 @@ class NodeValidationError(NodeExecutionError):
         errors: list[dict[str, Any]] | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
+        """Initialize the validation exception.
+
+        Args:
+            message: Human-readable error message.
+            errors: List of validation error details.
+            details: Additional error context.
+        """
         super().__init__(
             message,
             error_code="VALIDATION_ERROR",
@@ -93,6 +113,13 @@ class NodeIOError(NodeExecutionError):
         path: str | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
+        """Initialize the I/O exception.
+
+        Args:
+            message: Human-readable error message.
+            path: File path that caused the error.
+            details: Additional error context.
+        """
         merged_details: dict[str, Any] = details or {}
         if path:
             merged_details["path"] = path
@@ -113,6 +140,12 @@ class NodeConfigurationError(NodeExecutionError):
         *,
         details: dict[str, Any] | None = None,
     ) -> None:
+        """Initialize the configuration exception.
+
+        Args:
+            message: Human-readable error message.
+            details: Additional error context.
+        """
         super().__init__(
             message,
             error_code="CONFIGURATION_ERROR",
@@ -130,6 +163,13 @@ class WorkflowExecutionError(NodeExecutionError):
         node_id: str | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
+        """Initialize the workflow execution exception.
+
+        Args:
+            message: Human-readable error message.
+            node_id: Node ID that caused the error.
+            details: Additional error context.
+        """
         merged_details: dict[str, Any] = details or {}
         if node_id:
             merged_details["node_id"] = node_id
@@ -151,6 +191,13 @@ class WorkflowValidationError(NodeExecutionError):
         errors: list[str] | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
+        """Initialize the workflow validation exception.
+
+        Args:
+            message: Human-readable error message.
+            errors: List of validation error strings.
+            details: Additional error context.
+        """
         super().__init__(
             message,
             error_code="WORKFLOW_VALIDATION_ERROR",
@@ -159,6 +206,11 @@ class WorkflowValidationError(NodeExecutionError):
         self.errors = errors or []
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize with an additional ``errors`` list.
+
+        Returns:
+            Dict with ``error_code``, ``message``, ``details``, and ``errors``.
+        """
         result = super().to_dict()
         result["errors"] = self.errors
         return result
@@ -174,6 +226,13 @@ class NodeOutputValidationError(NodeExecutionError):
         errors: list[dict[str, Any]] | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
+        """Initialize the output validation exception.
+
+        Args:
+            message: Human-readable error message.
+            errors: List of validation error details.
+            details: Additional error context.
+        """
         super().__init__(
             message,
             error_code="OUTPUT_VALIDATION_ERROR",
