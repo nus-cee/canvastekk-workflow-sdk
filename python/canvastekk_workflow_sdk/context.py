@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -29,6 +30,9 @@ class ExecutionContext:
     - Metadata dict for download tracking
     - Logger with context
     - Progress reporting (for long-running operations)
+    - Cooperative cancellation (``cancel_event``) — set by the server when
+      the request deadline expires; checked between download chunks.
+      ``execute()`` itself cannot be interrupted.
     """
 
     def __init__(
@@ -38,7 +42,17 @@ class ExecutionContext:
         *,
         run_id: str | None = None,
         node_id: str | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> None:
+        """Initialize execution context.
+
+        Args:
+            request: Node execution request (provides run_id, node_id).
+            output_dir: Override output directory (defaults to temp or env var).
+            run_id: Override workflow run ID.
+            node_id: Override node instance ID.
+            cancel_event: Cooperative cancellation event for downloads.
+        """
         self._request = request
         resolved_run_id = run_id or (request.run_id if request else "local")
         resolved_node_id = node_id or (request.node_id if request else "unknown")
@@ -58,6 +72,12 @@ class ExecutionContext:
         self._token_usage: dict[str, int] = {}
         self._metadata: dict[str, Any] = {}
         self._downloads_dir: Path | None = None
+        self._cancel_event = cancel_event if cancel_event is not None else threading.Event()
+
+    @property
+    def cancel_event(self) -> threading.Event:
+        """Cooperative cancellation event — set when the request deadline expires."""
+        return self._cancel_event
 
     @property
     def run_id(self) -> str:
@@ -95,8 +115,17 @@ class ExecutionContext:
 
         Returns:
             Full path in the output directory
+
+        Raises:
+            ValueError: If the filename escapes the output directory
+                (path traversal — absolute paths or ``..`` segments).
         """
-        return self._output_dir / filename
+        candidate = (self._output_dir / filename).resolve()
+        if not candidate.is_relative_to(self._output_dir.resolve()):
+            raise ValueError(
+                f"Output filename '{filename}' escapes the output directory"
+            )
+        return candidate
 
     @property
     def downloads_dir(self) -> Path:

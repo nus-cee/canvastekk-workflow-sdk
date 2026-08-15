@@ -933,3 +933,48 @@ class TestReadinessProbe:
         response = client.get("/ready")
         assert response.status_code == 503
         assert response.json()["status"] == "not_ready"
+
+
+class TestBodyLimitAndRedaction:
+    """DA-1711 3.2/3.3: body-limit middleware, 4xx body-parse mapping,
+    generic 500s."""
+
+    def test_oversized_body_rejected_413(self, echo_client, monkeypatch):
+        import json as jsonlib
+
+        monkeypatch.setenv("CANVASTEKK_MAX_BODY_BYTES", "1000")
+        big = "x" * 2000
+        resp = echo_client.post(
+            "/execute",
+            content=jsonlib.dumps({"run_id": "r1", "node_id": "n1", "inputs": {"msg": big}}),
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status_code == 413
+
+    def test_list_body_rejected_422(self, echo_client):
+        resp = echo_client.post(
+            "/execute",
+            content="[1,2,3]",
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status_code == 422
+
+    def test_invalid_fields_rejected_422(self, echo_client):
+        resp = echo_client.post(
+            "/execute",
+            content='{"run_id": "../../etc", "node_id": "n1"}',
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status_code == 422
+
+    def test_hook_invalid_json_400(self, echo_client):
+        resp = echo_client.post("/hook", content="not json", headers={"Content-Type": "application/json"})
+        assert resp.status_code == 400
+
+    def test_traversal_run_id_rejected_422(self, echo_client):
+        resp = echo_client.post(
+            "/execute",
+            content='{"run_id": "../../etc", "node_id": "n1", "inputs": {}}',
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status_code == 422

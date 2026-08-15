@@ -27,6 +27,13 @@ class RegistrationError(Exception):
     """Raised when node registration fails."""
 
     def __init__(self, message: str, *, status_code: int | None = None, body: str | None = None) -> None:
+        """Initialize the registration exception.
+
+        Args:
+            message: Human-readable error message.
+            status_code: HTTP status code from registry.
+            body: Response body from registry.
+        """
         super().__init__(message)
         self.status_code = status_code
         self.body = body
@@ -61,6 +68,15 @@ class RegisterNodeResult(BaseModel):
         return key in self.node
 
     def get(self, key: str, default: Any = None) -> Any:
+        """Get a value from the registered node data.
+
+        Args:
+            key: Key to look up.
+            default: Default value if key not found.
+
+        Returns:
+            Value from node data or default.
+        """
         return self.node.get(key, default)
 
 

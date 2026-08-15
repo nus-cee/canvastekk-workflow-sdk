@@ -13,6 +13,10 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import httpx
 
+# Explicit generous timeout for output uploads: httpx's implicit default
+# (5 s per operation) aborts legitimate multi-GB uploads on slower links.
+_UPLOAD_TIMEOUT_SECONDS = 600.0
+
 if TYPE_CHECKING:
     from canvastekk_workflow_sdk.response import NodeExecutionResponse
 
@@ -28,24 +32,38 @@ class OutputUploader(Protocol):
     after a successful execution when upload URLs are available.
     """
 
-    def upload_file(self, file_path: str, presigned_url: str) -> None: ...
+    def upload_file(self, file_path: str, presigned_url: str) -> None:
+        """Upload a single file to storage via pre-signed URL.
+
+        Args:
+            file_path: Local path to the file.
+            presigned_url: Pre-signed upload URL.
+        """
+        ...
 
     def upload_outputs(
         self,
         response: NodeExecutionResponse,
         upload_urls: dict[str, str],
         file_output_fields: list[str],
-    ) -> None: ...
+    ) -> None:
+        """Upload multiple output files to storage.
+
+        Args:
+            response: The node execution response.
+            upload_urls: Mapping of field name to pre-signed URL.
+            file_output_fields: List of output fields that produce files.
+        """
+        ...
 
 
 class S3PresignedUploader:
     """Upload binary outputs to S3 via pre-signed PUT URLs.
 
-    Uses httpx for HTTP requests.
-
-    If an individual upload fails, the error is **logged but not raised**,
-    so that one failed upload does not incorrectly report the entire
-    execution as failed.
+    Uses httpx for HTTP requests. A failed upload raises
+    :class:`OutputUploadError` so the caller can fail the execution —
+    silently reporting success with local-only paths would strand
+    downstream consumers (DA-1711 4.1).
     """
 
     def upload_file(self, file_path: str, presigned_url: str) -> None:
@@ -59,7 +77,12 @@ class S3PresignedUploader:
             httpx.HTTPStatusError: If the upload fails.
         """
         with open(file_path, "rb") as f:
-            resp = httpx.put(presigned_url, content=f, headers={"Content-Type": "application/octet-stream"})
+            resp = httpx.put(
+                presigned_url,
+                content=f,
+                headers={"Content-Type": "application/octet-stream"},
+                timeout=_UPLOAD_TIMEOUT_SECONDS,
+            )
             resp.raise_for_status()
 
     def upload_outputs(
@@ -91,11 +114,8 @@ class S3PresignedUploader:
                 continue
 
             presigned_url = upload_urls[field_name]
-            try:
-                self.upload_file(value, presigned_url)
-                logger.info("Uploaded output '%s' to S3 (%d bytes)", field_name, os.path.getsize(value))
-            except Exception as e:
-                logger.error("Failed to upload output '%s' to S3: %s", field_name, e)
+            self.upload_file(value, presigned_url)
+            logger.info("Uploaded output '%s' to S3 (%d bytes)", field_name, os.path.getsize(value))
 
 
 _default_uploader = S3PresignedUploader()

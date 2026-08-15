@@ -36,6 +36,7 @@ class WorkflowBuilder:
     """
 
     def __init__(self) -> None:
+        """Initialize workflow builder."""
         self._nodes: list[WorkflowDefinitionNode] = []
         self._edges: list[WorkflowEdgeDefinition] = []
         self._node_ids: set[str] = set()
@@ -53,6 +54,20 @@ class WorkflowBuilder:
         config_schema: dict[str, Any] | None = None,
         workflow_node_id: str | None = None,
     ) -> WorkflowBuilder:
+        """Add a START node to the workflow.
+
+        Args:
+            node_id: Unique ID for the node.
+            outputs: List of output field names or full schema.
+            config_schema: Configuration schema for the node.
+            workflow_node_id: Optional workflow node type ID.
+
+        Returns:
+            Self for chaining.
+
+        Raises:
+            ValueError: If START node already exists or ID is duplicate.
+        """
         if self._has_start:
             raise ValueError("Workflow already has a START node. Only one is allowed.")
         self._check_duplicate(node_id)
@@ -88,6 +103,18 @@ class WorkflowBuilder:
         *,
         workflow_node_id: str | None = None,
     ) -> WorkflowBuilder:
+        """Add an END node to the workflow.
+
+        Args:
+            node_id: Unique ID for the node.
+            workflow_node_id: Optional workflow node type ID.
+
+        Returns:
+            Self for chaining.
+
+        Raises:
+            ValueError: If ID is duplicate.
+        """
         self._check_duplicate(node_id)
         self._nodes.append(
             WorkflowDefinitionNode(
@@ -112,6 +139,23 @@ class WorkflowBuilder:
         workflow_node_id: str | None = None,
         config_schema: dict[str, Any] | None = None,
     ) -> WorkflowBuilder:
+        """Add a workflow node.
+
+        Args:
+            node_id: Unique ID for the node instance.
+            slug: Node type slug from registry.
+            name: Display name.
+            inputs: Static input values.
+            version: Pinned node version.
+            workflow_node_id: Optional workflow node type ID.
+            config_schema: Configuration schema.
+
+        Returns:
+            Self for chaining.
+
+        Raises:
+            ValueError: If ID is duplicate or reserved slug used.
+        """
         if slug in ("__start__", "__end__"):
             raise ValueError(
                 f"Cannot use reserved slug '{slug}'. Use add_start() or add_end() instead."
@@ -179,6 +223,17 @@ class WorkflowBuilder:
         return self
 
     def build(self, *, validate: bool = True) -> WorkflowDefinitionSpec:
+        """Build the workflow specification.
+
+        Args:
+            validate: Whether to run graph validation.
+
+        Returns:
+            WorkflowDefinitionSpec ready for execution.
+
+        Raises:
+            WorkflowValidationError: If validation fails.
+        """
         from canvastekk_workflow_sdk.workflow.validation import validate as validate_graph
 
         spec = WorkflowDefinitionSpec(

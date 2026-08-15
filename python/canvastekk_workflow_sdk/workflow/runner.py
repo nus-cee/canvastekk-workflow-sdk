@@ -47,6 +47,17 @@ class NodeResult:
         error: str | None = None,
         skipped_reason: str | None = None,
     ) -> None:
+        """Initialize node result.
+
+        Args:
+            node_id: Node instance ID.
+            slug: Node type slug.
+            status: Execution status (completed, failed, skipped).
+            outputs: Output values if successful.
+            duration_ms: Execution time.
+            error: Error message if failed.
+            skipped_reason: Reason if skipped.
+        """
         self.node_id = node_id
         self.slug = slug
         self.status = status
@@ -69,6 +80,15 @@ class WorkflowRunResult:
         duration_ms: int,
         output_dir: Path | None = None,
     ) -> None:
+        """Initialize workflow run result.
+
+        Args:
+            status: Overall workflow status (completed, failed).
+            final_outputs: Final output values.
+            node_results: Per-node execution results.
+            duration_ms: Total execution time.
+            output_dir: Output directory path.
+        """
         self.status = status
         self.final_outputs = final_outputs
         self.node_results = node_results
@@ -107,11 +127,33 @@ class WorkflowRunner:
         error_policy: ErrorPolicy = ErrorPolicy.FAIL_FAST,
         output_dir: Path | None = None,
         cleanup: bool = True,
+        max_concurrency: int = 8,
     ) -> None:
+        """Initialize workflow runner.
+
+        Args:
+            executor: Strategy for executing nodes.
+            error_policy: How to handle failures (fail_fast or continue).
+            output_dir: Shared output directory for nodes.
+            cleanup: Whether to clean up auto-created temp dirs.
+            max_concurrency: Cap on simultaneously executing nodes per
+                level (prevents overwhelming local/remote resources).
+        """
         self._executor = executor
         self._error_policy = error_policy
         self._output_dir = output_dir
         self._cleanup = cleanup
+        self._semaphore = asyncio.Semaphore(max_concurrency)
+
+    async def _execute_with_sem(
+        self,
+        slug: str,
+        resolved: dict[str, Any],
+        context: ExecutionContext,
+    ) -> dict[str, Any]:
+        """Run executor.execute under the per-level concurrency semaphore."""
+        async with self._semaphore:
+            return await self._executor.execute(slug, resolved, context)
 
     def run(
         self,
@@ -146,6 +188,7 @@ class WorkflowRunner:
         start_time = time.perf_counter()
         node_map = {n.id: n for n in spec.nodes}
         node_outputs: dict[str, dict[str, Any]] = {}
+        seeded_outputs: dict[str, dict[str, Any]] = {}
         node_results: list[NodeResult] = []
         failed_nodes: set[str] = set()
 
@@ -165,7 +208,9 @@ class WorkflowRunner:
             if inputs:
                 start_nodes = [n for n in spec.nodes if n.slug == "__start__"]
                 if start_nodes:
-                    node_outputs[start_nodes[0].id] = inputs
+                    # Seed outputs for downstream resolution; merged (not
+                    # clobbered) with static start inputs in the level loop.
+                    seeded_outputs[start_nodes[0].id] = dict(inputs)
 
             levels = compute_levels(spec)
 
@@ -183,9 +228,34 @@ class WorkflowRunner:
                 for nid in control_ids:
                     node = node_map[nid]
                     handler = CONTROL_FLOW_HANDLERS[node.slug]
-                    resolved = resolve_inputs(nid, spec, node_outputs)
+                    try:
+                        resolved = resolve_inputs(nid, spec, node_outputs)
+                    except Exception as exc:
+                        failed_nodes.add(nid)
+                        node_results.append(
+                            NodeResult(
+                                node_id=nid,
+                                slug=node.slug,
+                                status="failed",
+                                error=f"Input resolution failed: {exc}",
+                            )
+                        )
+                        continue
+                    # MERGE semantics: seeded run inputs (``run(spec, inputs)``)
+                    # win over the start node's static inputs — but static
+                    # inputs are preserved, and the __start__ NodeResult is
+                    # still recorded.
+                    if node.slug == "__start__" and nid in seeded_outputs:
+                        resolved = {**resolved, **seeded_outputs[nid]}
                     context = ExecutionContext(
-                        run_id="local", node_id=nid, output_dir=run_output_dir
+                        run_id="local",
+                        node_id=nid,
+                        # Per-node subdir prevents same-filename collisions
+                        # between parallel nodes. Inter-node file hand-off
+                        # works via absolute-path strings passed through edge
+                        # output values (context.output_path() returns an
+                        # absolute path), which per-node subdirs preserve.
+                        output_dir=run_output_dir / nid,
                     )
                     t0 = time.perf_counter()
                     try:
@@ -249,11 +319,34 @@ class WorkflowRunner:
                             break
                         continue
 
-                    resolved = resolve_inputs(nid, spec, node_outputs)
+                    try:
+                        resolved = resolve_inputs(nid, spec, node_outputs)
+                    except Exception as exc:
+                        failed_nodes.add(nid)
+                        node_results.append(
+                            NodeResult(
+                                node_id=nid,
+                                slug=node.slug,
+                                status="failed",
+                                error=f"Input resolution failed: {exc}",
+                            )
+                        )
+                        if self._error_policy == ErrorPolicy.FAIL_FAST:
+                            break
+                        continue
                     context = ExecutionContext(
-                        run_id="local", node_id=nid, output_dir=run_output_dir
+                        run_id="local",
+                        node_id=nid,
+                        # Per-node subdir prevents same-filename collisions
+                        # between parallel nodes. Inter-node file hand-off
+                        # works via absolute-path strings passed through edge
+                        # output values (context.output_path() returns an
+                        # absolute path), which per-node subdirs preserve.
+                        output_dir=run_output_dir / nid,
                     )
-                    tasks.append(self._executor.execute(node.slug, resolved, context))
+                    tasks.append(
+                        self._execute_with_sem(node.slug, resolved, context)
+                    )
                     task_node_ids.append(nid)
 
                 if tasks:

@@ -1,4 +1,5 @@
-import { readFileSync, statSync } from "node:fs";
+import { createReadStream, statSync } from "node:fs";
+import type { Readable } from "node:stream";
 import type { NodeExecutionResponse } from "./response.js";
 
 /**
@@ -13,22 +14,33 @@ export interface OutputUploader {
   ): Promise<void>;
 }
 
+// Explicit generous timeout for output uploads — without it, a large
+// multi-GB upload has no deadline at all; with it, slow links still get
+// 600 s. AbortSignal.timeout is a TOTAL deadline (matches the Py SDK).
+const UPLOAD_TIMEOUT_MS = 600_000;
+
 /**
  * Uploads output files to S3 using presigned URLs.
  */
 export class S3PresignedUploader implements OutputUploader {
   /**
    * Uploads a single file to S3 via presigned URL.
+   *
+   * Streams the file from disk (never buffers the whole body in memory —
+   * outputs in this domain are multi-GB point clouds).
+   *
    * @param filePath - Local file path
    * @param presignedUrl - S3 presigned upload URL
    * @throws Error if upload fails
    */
   async uploadFile(filePath: string, presignedUrl: string): Promise<void> {
-    const data = readFileSync(filePath);
+    const body = createReadStream(filePath) as Readable;
     const resp = await fetch(presignedUrl, {
       method: "PUT",
-      body: data,
+      // @ts-expect-error Node fetch accepts Node streams as bodies
+      body,
       headers: { "Content-Type": "application/octet-stream" },
+      signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
     });
     if (!resp.ok) {
       throw new Error(`Upload failed: HTTP ${resp.status} ${resp.statusText}`);
@@ -37,6 +49,11 @@ export class S3PresignedUploader implements OutputUploader {
 
   /**
    * Uploads all file outputs from a node response.
+   *
+   * Upload failures PROPAGATE so the caller can fail the execution —
+   * silently reporting success with local-only paths would strand
+   * downstream consumers (DA-1711 4.1).
+   *
    * @param response - Node execution response
    * @param uploadUrls - Mapping of field names to presigned URLs
    * @param fileOutputFields - Names of file output fields
@@ -61,14 +78,9 @@ export class S3PresignedUploader implements OutputUploader {
         continue;
       }
 
-      const presignedUrl = uploadUrls[fieldName];
-      try {
-        await this.uploadFile(value, presignedUrl);
-        const size = statSync(value).size;
-        console.info(`Uploaded output '${fieldName}' to S3 (${size} bytes)`);
-      } catch (err) {
-        console.error(`Failed to upload output '${fieldName}' to S3: ${err}`);
-      }
+      await this.uploadFile(value, uploadUrls[fieldName]);
+      const size = statSync(value).size;
+      console.info(`Uploaded output '${fieldName}' to S3 (${size} bytes)`);
     }
   }
 }

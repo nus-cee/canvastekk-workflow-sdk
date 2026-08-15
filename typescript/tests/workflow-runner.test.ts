@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { join } from "node:path";
 import { WorkflowBuilder } from "../src/workflow/builder.js";
 import { WorkflowRunner } from "../src/workflow/runner.js";
 import { InProcessExecutor } from "../src/workflow/executor.js";
@@ -207,7 +208,8 @@ describe("WorkflowRunner", () => {
 
     expect(result.status).toBe("completed");
     expect(result.output_dir).toMatch(/^\/tmp\/wf-runner-/);
-    expect(result.node_results.find((r) => r.node_id === "n1")?.outputs?.output).toBe(result.output_dir);
+    // Per-node subdirs: the node's output dir is a subdir of the run dir.
+    expect(result.node_results.find((r) => r.node_id === "n1")?.outputs?.output).toBe(join(result.output_dir, "n1"));
   });
 
   it("User-supplied outputDir is NOT cleaned up", async () => {
@@ -340,5 +342,50 @@ describe("WorkflowRunner", () => {
     expect(result.status).toBe("completed");
     // Note: input propagation behavior depends on runner implementation
     // This test documents current behavior
+  });
+});
+describe("WorkflowRunner start-input seeding (DA-1711)", () => {
+  it("seeded run inputs reach downstream nodes via wired edges", async () => {
+    const executor = new InProcessExecutor();
+    executor.register("echo-v1", {
+      execute: async (inputs) => ({ message: inputs.pointCloud }),
+    });
+
+    const spec = await new WorkflowBuilder()
+      .addStart("start")
+      .addNode("echo", { slug: "echo-v1" })
+      .addEnd("end")
+      .connect("start", "echo", { fromOutput: "point_cloud", toInput: "pointCloud" })
+      .connect("echo", "end", { fromOutput: "message", toInput: "result" })
+      .build();
+
+    const runner = new WorkflowRunner(executor);
+    const result = await runner.run(spec, { point_cloud: "/tmp/scan.ply" });
+
+    expect(result.status).toBe("completed");
+    expect(result.final_outputs).toEqual({ result: "/tmp/scan.ply" });
+  });
+
+  it("mis-wired edge fails one node instead of crashing run()", async () => {
+    const executor = new InProcessExecutor();
+    executor.register("echo-v1", {
+      execute: async (inputs) => ({ message: inputs.message ?? "none" }),
+    });
+
+    const spec = await new WorkflowBuilder()
+      .addStart("start")
+      .addNode("echo", { slug: "echo-v1" })
+      .addEnd("end")
+      .connect("start", "echo", { fromOutput: "missing_key", toInput: "message" })
+      .connect("echo", "end", { fromOutput: "message", toInput: "result" })
+      .build();
+
+    const runner = new WorkflowRunner(executor);
+    const result = await runner.run(spec, { other: "x" });
+
+    expect(result.status).toBe("failed");
+    const echoResult = result.node_results.find((r) => r.node_id === "echo");
+    expect(echoResult?.status).toBe("failed");
+    expect(echoResult?.error).toContain("Input resolution failed");
   });
 });

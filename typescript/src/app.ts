@@ -9,6 +9,7 @@ import type { BaseNode } from "./base-node.js";
 import { NodeExecutionRequestSchema } from "./request.js";
 import { HealthResponseSchema } from "./response.js";
 import { getDefaultUploader } from "./uploads.js";
+import { isDevMode } from "./url-policy.js";
 
 export interface CreateNodeAppOptions {
   dependencies?: Array<(req: Request, res: Response, next: NextFunction) => void>;
@@ -36,6 +37,22 @@ export function createNodeApp(
   app.use(express.json({ limit: "50mb" }));
 
   configureLogging();
+
+  // Loud auth-posture warnings (DA-1711 3.3): surface misconfiguration at
+  // startup instead of failing silently in production.
+  if (isDevMode()) {
+    console.warn(
+      "[canvastekk] CANVASTEKK_DEV_MODE is active: ALL authentication is bypassed " +
+        "and URL policy restrictions are lifted. Never enable in production.",
+    );
+  } else if (!opts.dependencies || opts.dependencies.length === 0) {
+    console.warn(
+      "[canvastekk] Node server starting with NO authentication configured. " +
+        "Every endpoint (incl. /execute, /metrics) is unauthenticated. " +
+        "Pass auth middleware via createNodeApp(opts.dependencies) or ensure " +
+        "the node is network-isolated.",
+    );
+  }
 
   const sdkVersion = new SDKVersionMiddleware(VERSION);
   app.use(sdkVersion.handler());
@@ -74,6 +91,9 @@ export function createNodeApp(
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeout * 1000);
         try {
+          // Thread the abort signal into the node so in-flight file
+          // downloads stop cooperatively when the deadline expires.
+          node.setCancelSignal(controller.signal);
           response = await Promise.race([
             node.run(execRequest),
             new Promise<never>((_, reject) =>
@@ -84,6 +104,7 @@ export function createNodeApp(
           ]);
         } finally {
           clearTimeout(timer);
+          node.setCancelSignal(null);
         }
       } else {
         response = await node.run(execRequest);
@@ -92,7 +113,20 @@ export function createNodeApp(
       if (execRequest.output_upload_url && response.status === "pass") {
         const fileOutputFields = getFileOutputFields(def);
         if (fileOutputFields.length > 0) {
-          await getDefaultUploader().uploadOutputs(response, execRequest.output_upload_url, fileOutputFields);
+          try {
+            await getDefaultUploader().uploadOutputs(response, execRequest.output_upload_url, fileOutputFields);
+          } catch (err) {
+            // A declared file output that could not be uploaded means the
+            // engine would receive a local path it cannot fetch — fail the
+            // execution instead of silently passing (DA-1711 4.1).
+            console.error("[canvastekk] Output upload failed:", err);
+            response = {
+              ...response,
+              status: "fail",
+              error: `Output upload failed: ${err}`,
+              error_code: "UPLOAD_FAILED",
+            };
+          }
         }
       }
 
@@ -214,8 +248,11 @@ export function createNodeApp(
       });
       return;
     }
+    // Unexpected exceptions: log full detail server-side; the client gets a
+    // generic message (no internals/paths/URLs leak to callers).
+    console.error("[canvastekk] Unhandled exception:", err);
     res.status(500).json({
-      detail: err.message ?? String(err),
+      detail: "Internal server error",
       error_type: err.constructor?.name ?? "Error",
     });
   });

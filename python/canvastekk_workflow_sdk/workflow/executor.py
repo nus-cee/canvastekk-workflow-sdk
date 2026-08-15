@@ -45,6 +45,7 @@ class InProcessExecutor(NodeExecutor):
     """
 
     def __init__(self) -> None:
+        """Initialize in-process executor with empty node registry."""
         self._registry: dict[str, BaseNode] = {}
 
     def register(self, slug: str, node: BaseNode) -> InProcessExecutor:
@@ -66,10 +67,28 @@ class InProcessExecutor(NodeExecutor):
         inputs: dict[str, Any],
         context: ExecutionContext,
     ) -> dict[str, Any]:
+        """Execute a node by calling BaseNode.execute() in a thread.
+
+        Args:
+            slug: Node type slug.
+            inputs: Input values for the node.
+            context: Execution context.
+
+        Returns:
+            Output values from the node.
+        """
         node = self._registry[slug]
         return await asyncio.to_thread(node.execute, inputs, context)
 
     def has(self, slug: str) -> bool:
+        """Check if a slug is registered.
+
+        Args:
+            slug: Node type slug.
+
+        Returns:
+            True if slug is in the registry.
+        """
         return slug in self._registry
 
 
@@ -86,9 +105,20 @@ class HttpExecutor(NodeExecutor):
         runner = WorkflowRunner(executor)
     """
 
-    def __init__(self, *, timeout: float = 300.0) -> None:
+    def __init__(self, *, timeout: float = 300.0, retries: int = 2) -> None:
+        """Initialize HTTP executor.
+
+        Args:
+            timeout: Request timeout in seconds.
+            retries: Retry attempts for transient failures (connection
+                errors, 502/503/504) with exponential backoff.
+        """
         self._urls: dict[str, str] = {}
         self._timeout = timeout
+        self._retries = retries
+        # Shared client: connection pooling + keep-alive instead of a new
+        # TCP+TLS handshake per node execution (DA-1711 4.3).
+        self._client: httpx.AsyncClient | None = None
 
     def register_url(self, slug: str, url: str) -> HttpExecutor:
         """Register a base URL for a slug.
@@ -109,21 +139,63 @@ class HttpExecutor(NodeExecutor):
         inputs: dict[str, Any],
         context: ExecutionContext,
     ) -> dict[str, Any]:
+        """Execute a node by POSTing to its HTTP endpoint.
+
+        Args:
+            slug: Node type slug.
+            inputs: Input values for the node.
+            context: Execution context.
+
+        Returns:
+            Output values from the node.
+
+        Raises:
+            RuntimeError: If the node returns failure status.
+        """
         url = self._urls[slug]
         payload = {
             "run_id": context.run_id,
             "node_id": context.node_id,
             "inputs": inputs,
         }
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            response = await client.post(f"{url}/execute", json=payload)
-            response.raise_for_status()
-            data = response.json()
-            if data.get("status") == "pass":
-                return data.get("outputs", {})
-            raise RuntimeError(
-                f"Node '{slug}' returned failure: {data.get('error', 'unknown')}"
-            )
+        if self._client is None:
+            self._client = httpx.AsyncClient(timeout=self._timeout)
+        client = self._client
+
+        response: httpx.Response | None = None
+        for attempt in range(self._retries + 1):
+            try:
+                response = await client.post(f"{url}/execute", json=payload)
+                response.raise_for_status()
+                break
+            except (httpx.TransportError, httpx.HTTPStatusError) as exc:
+                transient = isinstance(exc, httpx.TransportError) or (
+                    exc.response.status_code in (502, 503, 504)
+                )
+                if not transient or attempt == self._retries:
+                    raise
+                await asyncio.sleep(0.5 * (2**attempt))
+
+        assert response is not None
+        data = response.json()
+        if not isinstance(data, dict):
+            raise RuntimeError(f"Node '{slug}' returned malformed response (not an object)")
+        if data.get("status") == "pass":
+            outputs = data.get("outputs", {})
+            if not isinstance(outputs, dict):
+                raise RuntimeError(f"Node '{slug}' returned malformed outputs (not an object)")
+            return outputs
+        raise RuntimeError(
+            f"Node '{slug}' returned failure: {data.get('error', 'unknown')}"
+        )
 
     def has(self, slug: str) -> bool:
+        """Check if a slug is registered.
+
+        Args:
+            slug: Node type slug.
+
+        Returns:
+            True if slug is in the registry.
+        """
         return slug in self._urls

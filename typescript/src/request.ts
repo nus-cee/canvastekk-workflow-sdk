@@ -1,8 +1,20 @@
 import { z } from "zod";
 
+/**
+ * Slug charset for run_id/node_id — letters, digits, dot, underscore,
+ * hyphen. NOTE: the charset alone still permits `..` and `.` segments;
+ * the refinement rejects them (the ids flow into filesystem paths).
+ */
+const slugField = z
+  .string()
+  .regex(/^[A-Za-z0-9._-]+$/, "must contain only letters, digits, '.', '_', '-'")
+  .refine((v) => !v.includes("..") && !/^\.$/.test(v) && !/^\.\.+$/.test(v), {
+    message: "must not contain dot segments",
+  });
+
 export const NodeExecutionRequestSchema = z.object({
-  run_id: z.string(),
-  node_id: z.string(),
+  run_id: slugField,
+  node_id: slugField,
   inputs: z.record(z.unknown()).default({}),
   callback_url: z.string().nullable().optional(),
   output_upload_url: z

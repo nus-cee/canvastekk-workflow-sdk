@@ -56,6 +56,11 @@ class MetricsCollector:
     """
 
     def __init__(self, max_records: int = 10000) -> None:
+        """Initialize metrics collector.
+
+        Args:
+            max_records: Maximum number of metrics to keep (evicts oldest).
+        """
         self._metrics: list[ExecutionMetric] = []
         self._max_records = max_records
         self._lock = threading.Lock()

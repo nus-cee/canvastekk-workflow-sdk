@@ -19,6 +19,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
     """Silent HTTP handler that logs nothing to stderr/stdout."""
 
     def log_message(self, fmt, *args):
+        """Suppress HTTP server logging."""
         pass
 
 
@@ -27,6 +28,7 @@ def _make_handler(directory: str) -> type[_Handler]:
 
     class _DirHandler(_Handler):
         def __init__(self, *args, **kwargs):
+            """Initialize directory handler serving from a specific directory."""
             super().__init__(*args, directory=directory, **kwargs)
 
     return _DirHandler
@@ -69,6 +71,13 @@ class LocalFileServer:
         host: str = "127.0.0.1",
         port: int = 0,
     ) -> None:
+        """Initialize local file server.
+
+        Args:
+            directory: Directory to serve files from.
+            host: Interface to bind to.
+            port: Port to bind to (0 = auto-select).
+        """
         self._directory = str(Path(directory).resolve())
         self._host = host
         self._port = port

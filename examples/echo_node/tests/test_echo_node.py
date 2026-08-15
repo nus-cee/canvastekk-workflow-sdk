@@ -30,24 +30,18 @@ class TestEchoNodeUnit:
         assert props["x-accept"] == [".txt", ".csv", ".json"]
         assert props["x-maxSizeBytes"] == 10485760
 
-    @patch("handler.httpx.stream")
-    def test_execute_returns_output_path(self, mock_stream, tmp_path):
+    @patch("canvastekk_workflow_sdk.base.httpx.get")
+    def test_execute_returns_output_path(self, mock_get, tmp_path):
         input_content = b"hello world"
 
         class MockResponse:
-            def raise_for_status(self):
-                pass
+            status_code = 200
+            headers = {}
 
             def iter_bytes(self, chunk_size):
                 yield input_content
 
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                pass
-
-        mock_stream.return_value = MockResponse()
+        mock_get.return_value = MockResponse()
 
         node = EchoNode()
         request = NodeExecutionRequest(
@@ -81,24 +75,18 @@ class TestEchoNodeAPI:
         assert input_file["format"] == "file"
         assert input_file["x-accept"] == [".txt", ".csv", ".json"]
 
-    @patch("handler.httpx.stream")
-    def test_execute_json(self, mock_stream):
+    @patch("canvastekk_workflow_sdk.base.httpx.get")
+    def test_execute_json(self, mock_get):
         input_content = b"test content"
 
         class MockResponse:
-            def raise_for_status(self):
-                pass
+            status_code = 200
+            headers = {}
 
             def iter_bytes(self, chunk_size):
                 yield input_content
 
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                pass
-
-        mock_stream.return_value = MockResponse()
+        mock_get.return_value = MockResponse()
 
         resp = self.client.post(
             "/execute",

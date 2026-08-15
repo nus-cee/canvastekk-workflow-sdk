@@ -255,6 +255,18 @@ def execute(self, inputs: dict, context: ExecutionContext) -> dict:
 
 > **Note:** Manual download with `httpx.stream()` is only needed for non-file URLs or opt-out scenarios. Standard file inputs are handled automatically.
 
+### Download Security Policy (v0.22+)
+
+The auto-download pipeline enforces an SSRF protection policy:
+
+- **HTTPS required** in production (`http://` URLs are rejected unless `CANVASTEKK_DEV_MODE` is enabled — **breaking change** if you relied on plain-HTTP input URLs; migrate your storage endpoints to HTTPS).
+- **Blocked targets**: loopback, RFC1918 private, link-local (incl. cloud metadata `169.254.254.254`), CGNAT `100.64.0.0/10`, and reserved/multicast ranges — resolved before connecting, re-validated on every redirect hop (max 5).
+- **Size caps enforced mid-stream**: `x-maxSizeBytes` aborts the download as soon as it is exceeded (no more post-hoc checks). When absent, `CANVASTEKK_MAX_DOWNLOAD_BYTES` (default 10 GiB) applies.
+- **Total download deadline**: derived from `timeout_seconds` — a timed-out request stops in-flight downloads cooperatively (`context.cancel_event` / `context.cancelSignal`; `execute()` itself cannot be interrupted).
+- **Allowlist escape hatch**: `CANVASTEKK_URL_ALLOWLIST` (comma-separated host suffixes, e.g. `internal.minio.example.com`) bypasses IP checks for trusted internal storage.
+
+Uploads changed too: a failed output upload now **fails the execution** with `error_code: "UPLOAD_FAILED"` instead of silently passing with a local-only path.
+
 ### Validate Locally
 
 Before deploying, validate your node definition offline:

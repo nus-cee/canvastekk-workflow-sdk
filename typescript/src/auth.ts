@@ -150,6 +150,11 @@ export class NodeAuth {
     let lastRefreshAttempt = 0;
     const refreshCooldown = 10_000;
 
+    /**
+     * Converts a base64-encoded certificate to PEM format.
+     * @param b64 - Base64-encoded certificate
+     * @returns PEM-formatted certificate
+     */
     function b64ToPem(b64: string): string {
       const lines: string[] = [];
       for (let i = 0; i < b64.length; i += 64) {

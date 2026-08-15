@@ -11,7 +11,6 @@ Demonstrates:
 
 from pathlib import Path
 
-import httpx
 from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest
 
 definition = WorkflowNodeManifest(
@@ -51,12 +50,11 @@ class EchoNode(BaseNode):
     definition = definition
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-        url = inputs["input_file"]
-        context.report_progress(0.1, "Downloading input file")
-
-        suffix = Path(url.split("?")[0]).suffix or ".txt"
-        local_path = context.output_dir / f"input_download{suffix}"
-        self._download(url, local_path)
+        # The SDK's auto-download pipeline has already fetched the file-input
+        # URL and replaced the value with a LOCAL path — consume it directly
+        # (the old manual httpx download double-downloaded and contradicted
+        # the SDK contract).
+        local_path = Path(inputs["input_file"])
 
         context.report_progress(0.5, "Validating input file")
         definition.validate_file_input("input_file", local_path)
@@ -67,14 +65,6 @@ class EchoNode(BaseNode):
 
         context.report_progress(1.0, "Done")
         return {"output_file": str(output_path)}
-
-    @staticmethod
-    def _download(url: str, dest: Path) -> None:
-        with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
-            resp.raise_for_status()
-            with open(dest, "wb") as f:
-                for chunk in resp.iter_bytes(chunk_size=65536):
-                    f.write(chunk)
 
 
 app = EchoNode().create_app()

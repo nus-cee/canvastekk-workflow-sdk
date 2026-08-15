@@ -45,3 +45,41 @@ describe("NodeExecutionRequestSchema", () => {
     expect(req.output_upload_url).toBeNull();
   });
 });
+
+describe("NodeExecutionRequest slug validation (DA-1711)", () => {
+  it("rejects run_id with dot segments", () => {
+    const parsed = NodeExecutionRequestSchema.safeParse({
+      run_id: "../../etc",
+      node_id: "n1",
+      inputs: {},
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects dot-only node_id", () => {
+    const parsed = NodeExecutionRequestSchema.safeParse({
+      run_id: "r1",
+      node_id: "..",
+      inputs: {},
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects absolute-ish ids", () => {
+    const parsed = NodeExecutionRequestSchema.safeParse({
+      run_id: "/abs/path",
+      node_id: "n1",
+      inputs: {},
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("accepts valid slugs", () => {
+    const parsed = NodeExecutionRequestSchema.safeParse({
+      run_id: "run-abc.123_x",
+      node_id: "node.1-y",
+      inputs: {},
+    });
+    expect(parsed.success).toBe(true);
+  });
+});

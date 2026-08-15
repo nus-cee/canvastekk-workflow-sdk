@@ -12,19 +12,75 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import shutil
+import threading
 from collections.abc import Sequence
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
+from canvastekk_workflow_sdk._url import is_dev_mode as _is_dev_mode
 from canvastekk_workflow_sdk.exceptions import NodeExecutionError, NodeTimeoutError, get_http_status_for_error
 from canvastekk_workflow_sdk.logging import configure_logging
 from canvastekk_workflow_sdk.middleware import SDKVersionMiddleware
 from canvastekk_workflow_sdk.request import NodeExecutionRequest
 from canvastekk_workflow_sdk.response import HealthResponse, NodeExecutionResponse
 from canvastekk_workflow_sdk.uploads import get_default_uploader
+
+# Registry of cancel events for in-flight timed executions (cooperative
+# cancellation — see BaseNode._set_cancel_event / context.cancel_event).
+_ACTIVE_CANCELS: dict[str, threading.Event] = {}
+
+# Default request body limit — parity with the TypeScript SDK's 50 MB
+# express.json limit. Override with CANVASTEKK_MAX_BODY_BYTES.
+DEFAULT_MAX_BODY_BYTES = 50 * 1024 * 1024
+
+
+class _BodySizeLimitMiddleware:  # ASGI middleware (Starlette style)
+    """Reject request bodies larger than CANVASTEKK_MAX_BODY_BYTES (413).
+
+    Applies to every JSON endpoint (``/execute``, ``/hook``) — mirrors the
+    TS SDK's global ``express.json({ limit: "50mb" })`` behavior.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        try:
+            max_bytes = int(os.environ.get("CANVASTEKK_MAX_BODY_BYTES", DEFAULT_MAX_BODY_BYTES))
+        except ValueError:
+            max_bytes = DEFAULT_MAX_BODY_BYTES
+
+        from starlette.responses import JSONResponse as JsonResponseBody
+
+        content_length = 0
+        for header_name, header_value in scope.get("headers", []):
+            if header_name == b"content-length":
+                try:
+                    content_length = int(header_value)
+                except ValueError:
+                    content_length = 0
+                break
+
+        if content_length > max_bytes:
+            response = JsonResponseBody(
+                status_code=413,
+                content={"detail": f"Request body exceeds limit ({max_bytes} bytes)"},
+            )
+            await response(scope, receive, send)
+            return
+
+        await self.app(scope, receive, send)
 
 if TYPE_CHECKING:
     from canvastekk_workflow_sdk.base import BaseNode
@@ -124,6 +180,20 @@ def create_node_app(
     @asynccontextmanager
     async def _node_lifespan(app: Any) -> Any:
         configure_logging()
+        # Loud auth-posture warnings (DA-1711 3.3): surface misconfiguration
+        # at startup instead of failing silently in production.
+        if _is_dev_mode():
+            logging.getLogger(__name__).warning(
+                "CANVASTEKK_DEV_MODE is active: ALL authentication is bypassed "
+                "and URL policy restrictions are lifted. Never enable in production."
+            )
+        elif not dependencies:
+            logging.getLogger(__name__).warning(
+                "Node server starting with NO authentication configured. "
+                "Every endpoint (incl. /execute, /metrics) is unauthenticated. "
+                "Pass an auth dependency via create_node_app(dependencies=[...]) "
+                "or ensure the node is network-isolated."
+            )
         async with node._lifespan():
             if base_lifespan:
                 async with base_lifespan(app):
@@ -133,6 +203,7 @@ def create_node_app(
 
     app = FastAPI(lifespan=_node_lifespan, **default_kwargs)
     app.add_middleware(SDKVersionMiddleware)
+    app.add_middleware(_BodySizeLimitMiddleware)
 
     router_dependencies = list(dependencies) if dependencies else []
 
@@ -178,29 +249,84 @@ def create_node_app(
                 status_code=400,
                 content={"detail": "Invalid JSON body"},
             )
-        exec_request = NodeExecutionRequest(**body)
+        if not isinstance(body, dict):
+            return JSONResponse(
+                status_code=422,
+                content={"detail": "Request body must be a JSON object"},
+            )
+        try:
+            exec_request = NodeExecutionRequest(**body)
+        except ValidationError:
+            return JSONResponse(
+                status_code=422,
+                content={"detail": "Request body failed validation"},
+            )
 
         timeout = node.definition.timeout_seconds
         if timeout and timeout > 0:
+            cancel_event = threading.Event()
+            cancel_key = id(exec_request)
+
+            def _run_with_cancel() -> Any:
+                # Publish the cancel event on a module-level registry so the
+                # BaseNode run() inside the worker thread can pick it up.
+                _ACTIVE_CANCELS[cancel_key] = cancel_event
+                try:
+                    node._set_cancel_event(cancel_event)
+                    return node.run(exec_request)
+                finally:
+                    _ACTIVE_CANCELS.pop(cancel_key, None)
+                    node._set_cancel_event(None)
+
             try:
                 response = await asyncio.wait_for(
-                    asyncio.to_thread(node.run, exec_request),
+                    asyncio.to_thread(_run_with_cancel),
                     timeout=timeout,
                 )
             except TimeoutError:
+                cancel_event.set()
                 raise NodeTimeoutError(timeout)
+            finally:
+                _ACTIVE_CANCELS.pop(cancel_key, None)
         else:
             response = await asyncio.to_thread(node.run, exec_request)
 
         if exec_request.output_upload_url and response.status == "pass":
             file_output_fields = node.definition.file_output_fields
             if file_output_fields:
-                await asyncio.to_thread(
-                    _upload_outputs_to_s3,
-                    response,
-                    exec_request.output_upload_url,
-                    file_output_fields,
-                )
+                try:
+                    await asyncio.to_thread(
+                        _upload_outputs_to_s3,
+                        response,
+                        exec_request.output_upload_url,
+                        file_output_fields,
+                    )
+                except Exception as exc:
+                    # A declared file output that could not be uploaded means
+                    # the engine would receive a local path it cannot fetch —
+                    # fail the execution instead of silently passing (4.1).
+                    logging.getLogger(__name__).error(
+                        "Output upload failed: %s", exc
+                    )
+                    response = response.model_copy(
+                        update={
+                            "status": "fail",
+                            "error": f"Output upload failed: {exc}",
+                            "error_code": "UPLOAD_FAILED",
+                        }
+                    )
+
+        # Clean up the per-execution temp dir AFTER uploads have completed —
+        # long-running node servers otherwise accumulate downloads/outputs
+        # in /tmp until disk exhaustion (DA-1711 4.4).
+        try:
+            output_dir = Path("/tmp") / exec_request.run_id / exec_request.node_id
+            if output_dir.is_dir() and output_dir.exists():
+                shutil.rmtree(output_dir, ignore_errors=True)
+        except Exception:
+            logging.getLogger(__name__).debug(
+                "Post-execution temp cleanup skipped", exc_info=True
+            )
 
         return response
 
@@ -293,7 +419,18 @@ def create_node_app(
 
         Returns 501 Not Implemented if the node has not overridden hook().
         """
-        body: dict[str, Any] = await request.json()
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Invalid JSON body"},
+            )
+        if not isinstance(body, dict):
+            return JSONResponse(
+                status_code=422,
+                content={"detail": "Request body must be a JSON object"},
+            )
         result = node.hook(body)
         if result is None:
             return JSONResponse(
@@ -366,11 +503,16 @@ def create_node_app(
 
     @app.exception_handler(Exception)
     async def exception_handler(request: object, exc: Exception) -> JSONResponse:
-        """Handle unexpected exceptions."""
+        """Handle unexpected exceptions.
+
+        The exception detail is logged server-side; the client receives a
+        generic message (no internals/paths/URLs leak to callers).
+        """
+        logging.getLogger(__name__).exception("Unhandled exception on %s", request)
         return JSONResponse(
             status_code=500,
             content={
-                "detail": str(exc),
+                "detail": "Internal server error",
                 "error_type": type(exc).__name__,
             },
         )
