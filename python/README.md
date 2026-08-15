@@ -401,6 +401,16 @@ def execute(self, inputs: dict, context: ExecutionContext) -> dict:
 
 `context.output_dir` is created automatically at `/tmp/{run_id}/{node_id}`.
 
+#### v0.22+ security & behavior changes
+
+- **SSRF policy**: file-input URLs must be `https://` (production); loopback/private/link-local/metadata/CGNAT IPs are blocked, re-validated per redirect hop. Escape hatches: `CANVASTEKK_URL_ALLOWLIST` (trusted host suffixes), `CANVASTEKK_DEV_MODE` (dev only — also lifts auth).
+- **Mid-stream size caps**: `x-maxSizeBytes` aborts downloads as soon as exceeded; undeclared fields fall back to `CANVASTEKK_MAX_DOWNLOAD_BYTES` (default 10 GiB).
+- **Download deadlines**: derived from `timeout_seconds`; timed-out requests cancel in-flight downloads cooperatively (`context.cancel_event`).
+- **Upload failures fail the execution** (`error_code: "UPLOAD_FAILED"`) instead of silently passing.
+- **Body limits & validation**: request bodies are capped (50 MB default, `CANVASTEKK_MAX_BODY_BYTES`); `run_id`/`node_id` must be slug-safe (no `..`); `context.output_path()` rejects path traversal.
+- **Auth posture**: startup logs warn loudly when no auth is configured or dev-mode is active.
+- **Local `WorkflowRunner` (BREAKING)**: each node now gets `run_output_dir/<node_id>/` for outputs/downloads (previously all nodes shared the run root). Inter-node file hand-off via absolute-path strings is unchanged; code globbing the run root must adapt. Seeded `run(spec, inputs={...})` START inputs now merge with (not clobber) static start inputs, and mis-wired edges fail one node instead of crashing the run.
+
 ### Output Upload
 
 The engine provides presigned PUT URLs via the `output_upload_url` field in the request. The SDK uploads file outputs automatically after successful execution:

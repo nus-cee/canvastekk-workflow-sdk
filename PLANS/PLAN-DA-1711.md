@@ -4,7 +4,7 @@
 **Branch**: `DA-1711`
 **Created**: 2026-08-15
 **Amended**: 2026-08-15 — applied plan-review findings PLAN-1..PLAN-12 (architecture review of this plan)
-**Status**: Not started
+**Status**: Complete
 
 ## Review Basis
 
@@ -131,25 +131,29 @@ Three-way review of main @ `1036831` (v0.21.0): architecture review, Python revi
 
 ### Phase 5 — Example, docs, parity, release
 
-- [ ] **5.1** Fix `examples/echo_node/handler.py:53-59` to consume `inputs["input_file"]` directly (it's already a local path post-auto-download) and fix its tests to not hit the real network (`tests/test_echo_node.py:33-58,84-114`).
+- [x] **5.1** Fix `examples/echo_node/handler.py:53-59` to consume `inputs["input_file"]` directly (it's already a local path post-auto-download) and fix its tests to not hit the real network (`tests/test_echo_node.py:33-58,84-114`).
     — **Why:** The canonical example contradicts the SDK's auto-download contract — it double-downloads and would fail without mocks (PY-20/ARCH-16); it's what every external author copies.
     — **Done when:** Echo tests pass with network access disabled (`httpx` transport blocked in test).
     — **Consumers affected:** all readers of `examples/echo_node/`, external authors.
+    — **Done:** handler consumes inputs["input_file"] directly (SDK auto-download already localizes); manual httpx.stream double-download removed; tests now patch SDK base.httpx.get (7/7 green, zero real-network requests); files: examples/echo_node/handler.py, examples/echo_node/tests/test_echo_node.py; fixes: none
 
-- [ ] **5.2** Sync `docs/EXTERNAL-AUTHOR-GUIDE.md`, `python/README.md`, `typescript/README.md` for behavior changes: URL policy (allowlist hook) + release-notes line that https-only-in-production (1.1) breaks existing `http://` input URLs, default size cap (`CANVASTEKK_MAX_DOWNLOAD_BYTES`), per-node output subdirs (2.3), upload-failure response semantics (4.1), auth startup warnings; add release-notes breaking-change notice for 2.3.
+- [x] **5.2** Sync `docs/EXTERNAL-AUTHOR-GUIDE.md`, `python/README.md`, `typescript/README.md` for behavior changes: URL policy (allowlist hook) + release-notes line that https-only-in-production (1.1) breaks existing `http://` input URLs, default size cap (`CANVASTEKK_MAX_DOWNLOAD_BYTES`), per-node output subdirs (2.3), upload-failure response semantics (4.1), auth startup warnings; add release-notes breaking-change notice for 2.3.
     — **Why:** AGENTS.md mandates doc sync for SDK changes; 2.3 changes observable runner behavior and needs a `BREAKING CHANGE:` footer or migration note.
     — **Done when:** Docs mention each new behavior; grep finds no stale claims contradicting new defaults.
     — **Consumers affected:** external node authors, engine consumers.
+    — **Done:** EXTERNAL-AUTHOR-GUIDE new 'Download Security Policy' section; python/README + typescript/README 'v0.22+ security & behavior changes' sections covering URL policy (+https-breaks-http migration note), size caps, deadlines, UPLOAD_FAILED, body limits, auth warnings, per-node-subdir BREAKING notice; files: docs/EXTERNAL-AUTHOR-GUIDE.md, python/README.md, typescript/README.md; fixes: none
 
-- [ ] **5.3** Add cross-language parity test suite: same scenarios (SSRF block, size-cap abort, traversal reject, START-inputs run, upload-failure surfacing) asserted in both `python/tests/` and `typescript/tests/`. Optional improvement: land each scenario per-phase alongside its implementation rather than all at the end, to catch drift earlier.
+- [x] **5.3** Add cross-language parity test suite: same scenarios (SSRF block, size-cap abort, traversal reject, START-inputs run, upload-failure surfacing) asserted in both `python/tests/` and `typescript/tests/`. Optional improvement: land each scenario per-phase alongside its implementation rather than all at the end, to catch drift earlier.
     — **Why:** Reviews repeatedly found the weaker language exploited (TS RAM buffering vs Py streaming; body-limit gap) — parity tests prevent regression drift (ARCH-16).
     — **Done when:** Both suites green; parity scenario list checked into `PLANS/` or test helper comment.
     — **Consumers affected:** future SDK contributors.
+    — **Done:** parity scenarios verified in both langs (SSRF, size-cap, traversal, START-inputs, upload-failure); NEW TS app-level UPLOAD_FAILED test (mocked PUT 500); manifest checked in at PLANS/PARITY-DA-1711.md; files: typescript/tests/app.test.ts, PLANS/PARITY-DA-1711.md; fixes: test mock initially intercepted the test's own POST — narrowed to PUT-only
 
-- [ ] **5.4** Final gate: `poetry run ruff check canvastekk_workflow_sdk/ tests/`, `poetry run pytest -v`, `npx tsc --noEmit`, `npx vitest run`, `npx tsup` all green; conventional commits with `fix:`/`feat!:` per the automated release flow (2.3 likely `feat!:` or `BREAKING CHANGE:` footer).
+- [x] **5.4** Final gate: `poetry run ruff check canvastekk_workflow_sdk/ tests/`, `poetry run pytest -v`, `npx tsc --noEmit`, `npx vitest run`, `npx tsup` all green; conventional commits with `fix:`/`feat!:` per the automated release flow (2.3 likely `feat!:` or `BREAKING CHANGE:` footer).
     — **Why:** AGENTS.md verification gates + git-cliff derives the release version from commit types — wrong type = wrong version.
     — **Done when:** All five commands pass on the PR branch; commit messages reviewed for correct types.
     — **Consumers affected:** release pipeline, downstream `canvastekk-workflow-nodes` rebuild (DA-1546 dispatch chain).
+    — **Done:** full gate green — ruff clean + pytest 592; tsc + vitest 247/247 + tsup build; commit types correct per Delivery strategy (fix: Ph1/3/4, fix:+feat!: Ph2, docs/test for Ph5); files: (this commit); fixes: none
 
 ---
 

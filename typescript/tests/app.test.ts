@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import { createNodeApp } from "../src/app.js";
+import { writeFileSync } from "node:fs";
 import { BaseNode } from "../src/base-node.js";
 import type { WorkflowNodeManifest } from "../src/definition.js";
 import type { ExecutionContext } from "../src/context.js";
@@ -198,5 +199,63 @@ describe("Auth middleware", () => {
     expect(resp.status).toBe(200);
     delete process.env.CANVASTEKK_API_KEY;
     delete process.env.CANVASTEKK_DEV_MODE;
+  });
+});
+
+describe("POST /execute upload failure (DA-1711 parity)", () => {
+  class FileOutputNode extends BaseNode {
+    definition: WorkflowNodeManifest = {
+      name: "file-out-node",
+      version: "1.0.0",
+      title: "File Out",
+      description: "Produces a file output",
+      input_schema: { type: "object" },
+      output_schema: {
+        type: "object",
+        properties: { out_file: { type: "string", format: "file" } },
+      },
+    };
+
+    execute(_inputs: Record<string, unknown>, context: ExecutionContext): Record<string, unknown> {
+      const p = context.outputPath("result.txt");
+      writeFileSync(p, "data");
+      return { out_file: p };
+    }
+  }
+
+  it("fails execution with UPLOAD_FAILED when upload PUT fails", async () => {
+    const node = new FileOutputNode();
+    const app = createNodeApp(node);
+    const server = app.listen(0);
+    const port = (server.address() as { port: number }).port;
+
+    const originalFetch = globalThis.fetch;
+    // Only the upload PUT fails; other requests (the test's own POST to
+    // /execute) pass through to the real fetch.
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        return new Response("boom", { status: 500 });
+      }
+      return originalFetch(input as RequestInfo, init);
+    }) as typeof fetch;
+
+    try {
+      const resp = await fetch(`http://127.0.0.1:${port}/execute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          run_id: "r1",
+          node_id: "n1",
+          inputs: {},
+          output_upload_url: { out_file: "https://s3.example.com/put" },
+        }),
+      });
+      const data = (await resp.json()) as { status: string; error_code?: string };
+      expect(data.status).toBe("fail");
+      expect(data.error_code).toBe("UPLOAD_FAILED");
+    } finally {
+      globalThis.fetch = originalFetch;
+      server.close();
+    }
   });
 });

@@ -399,6 +399,16 @@ override async execute(
 
 `context.outputDir` is created automatically.
 
+**v0.22+ security & behavior changes**
+
+- **SSRF policy**: file-input URLs must be `https://` (production); loopback/private/link-local/metadata/CGNAT IPs are blocked, re-validated per redirect hop (max 5). Escape hatches: `CANVASTEKK_URL_ALLOWLIST` (trusted host suffixes), `CANVASTEKK_DEV_MODE` (dev only — also lifts auth).
+- **Streamed downloads with mid-stream size caps**: responses stream to disk (no whole-body RAM buffering); `x-maxSizeBytes` aborts as soon as exceeded; undeclared fields fall back to `CANVASTEKK_MAX_DOWNLOAD_BYTES` (default 10 GiB).
+- **Download deadlines**: derived from `timeout_seconds`; timed-out requests cancel in-flight downloads via `context.cancelSignal`.
+- **Streamed uploads**: output files upload via `createReadStream` (multi-GB safe, 600 s timeout); upload failures **fail the execution** with `error_code: "UPLOAD_FAILED"`.
+- **Request validation**: `run_id`/`node_id` must be slug-safe (no `..`); `context.outputPath()` rejects path traversal.
+- **Auth posture**: startup warns loudly when no auth middleware is configured or dev-mode is active.
+- **Local `WorkflowRunner` (BREAKING)**: each node now gets `runOutputDir/<node_id>/` (previously shared the run root). Absolute-path hand-off via edge outputs is unchanged. Seeded start inputs merge with static start inputs; mis-wired edges fail one node instead of crashing the run. Resolver rejects `__proto__`/`constructor`/`prototype` keys.
+
 ### Output Upload
 
 The engine provides presigned PUT URLs via the `output_upload_url` field in the request. The SDK uploads file outputs automatically after successful execution. If execution fails (`status: "fail"`), the upload is skipped.
