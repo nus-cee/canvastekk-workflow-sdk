@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from collections.abc import Sequence
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, Literal
@@ -25,6 +26,10 @@ from canvastekk_workflow_sdk.middleware import SDKVersionMiddleware
 from canvastekk_workflow_sdk.request import NodeExecutionRequest
 from canvastekk_workflow_sdk.response import HealthResponse, NodeExecutionResponse
 from canvastekk_workflow_sdk.uploads import get_default_uploader
+
+# Registry of cancel events for in-flight timed executions (cooperative
+# cancellation — see BaseNode._set_cancel_event / context.cancel_event).
+_ACTIVE_CANCELS: dict[str, threading.Event] = {}
 
 if TYPE_CHECKING:
     from canvastekk_workflow_sdk.base import BaseNode
@@ -182,13 +187,30 @@ def create_node_app(
 
         timeout = node.definition.timeout_seconds
         if timeout and timeout > 0:
+            cancel_event = threading.Event()
+            cancel_key = id(exec_request)
+
+            def _run_with_cancel() -> Any:
+                # Publish the cancel event on a module-level registry so the
+                # BaseNode run() inside the worker thread can pick it up.
+                _ACTIVE_CANCELS[cancel_key] = cancel_event
+                try:
+                    node._set_cancel_event(cancel_event)
+                    return node.run(exec_request)
+                finally:
+                    _ACTIVE_CANCELS.pop(cancel_key, None)
+                    node._set_cancel_event(None)
+
             try:
                 response = await asyncio.wait_for(
-                    asyncio.to_thread(node.run, exec_request),
+                    asyncio.to_thread(_run_with_cancel),
                     timeout=timeout,
                 )
             except TimeoutError:
+                cancel_event.set()
                 raise NodeTimeoutError(timeout)
+            finally:
+                _ACTIVE_CANCELS.pop(cancel_key, None)
         else:
             response = await asyncio.to_thread(node.run, exec_request)
 

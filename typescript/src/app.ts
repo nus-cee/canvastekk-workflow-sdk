@@ -74,6 +74,9 @@ export function createNodeApp(
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeout * 1000);
         try {
+          // Thread the abort signal into the node so in-flight file
+          // downloads stop cooperatively when the deadline expires.
+          node.setCancelSignal(controller.signal);
           response = await Promise.race([
             node.run(execRequest),
             new Promise<never>((_, reject) =>
@@ -84,6 +87,7 @@ export function createNodeApp(
           ]);
         } finally {
           clearTimeout(timer);
+          node.setCancelSignal(null);
         }
       } else {
         response = await node.run(execRequest);

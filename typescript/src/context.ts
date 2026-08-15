@@ -14,6 +14,9 @@ import { getNodeLogger, type SdkLogger } from "./logging.js";
  * - Logger with run/node context (`logger`)
  * - Progress reporting for long-running operations (`reportProgress()`)
  * - Token usage tracking for LLM-based nodes (`recordTokenUsage()`)
+ * - Cooperative cancellation (`cancelSignal`) — aborted by the server when
+ *   the request deadline expires; checked between download chunks.
+ *   `execute()` itself cannot be interrupted.
  */
 export class ExecutionContext {
   private _request: NodeExecutionRequest | null;
@@ -22,14 +25,20 @@ export class ExecutionContext {
   private _tokenUsage: Record<string, number>;
   private _metadata: Record<string, unknown>;
   private _downloadsDir: string | null;
+  private _cancelSignal: AbortSignal | null;
 
+  /**
+   * Creates a new execution context.
+   * @param opts - Context options
+   */
   constructor(opts: {
     request?: NodeExecutionRequest | null;
     outputDir?: string;
     runId?: string;
     nodeId?: string;
+    cancelSignal?: AbortSignal | null;
   } = {}) {
-    const { request = null, outputDir, runId, nodeId } = opts;
+    const { request = null, outputDir, runId, nodeId, cancelSignal = null } = opts;
 
     this._request = request;
     const resolvedRunId = runId ?? request?.run_id ?? "local";
@@ -51,6 +60,12 @@ export class ExecutionContext {
     this._tokenUsage = {};
     this._metadata = {};
     this._downloadsDir = null;
+    this._cancelSignal = cancelSignal;
+  }
+
+  /** Cooperative cancellation signal — aborted when the request deadline expires. */
+  get cancelSignal(): AbortSignal | null {
+    return this._cancelSignal;
   }
 
   get runId(): string {
@@ -71,6 +86,11 @@ export class ExecutionContext {
     return this._logger;
   }
 
+  /**
+   * Gets the full path for a file in the output directory.
+   * @param filename - Filename to join with output directory
+   * @returns Full file path
+   */
   outputPath(filename: string): string {
     return join(this._outputDir, filename);
   }
@@ -91,6 +111,11 @@ export class ExecutionContext {
     this._metadata = value;
   }
 
+  /**
+   * Reports execution progress.
+   * @param progress - Progress value between 0 and 1
+   * @param message - Optional progress message
+   */
   reportProgress(progress: number, message = ""): void {
     const percent = Math.round(progress * 100);
     let logMsg = `Progress: ${percent}%`;

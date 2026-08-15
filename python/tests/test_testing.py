@@ -109,7 +109,8 @@ class TestServeFilesContextManager:
 
 
 class TestFullDownloadPipeline:
-    def test_sdk_downloads_from_local_server(self, tmp_path):
+    def test_sdk_downloads_from_local_server(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CANVASTEKK_DEV_MODE", "true")
         (tmp_path / "input.txt").write_text("downloaded content")
 
         with LocalFileServer(tmp_path) as server:
@@ -126,7 +127,8 @@ class TestFullDownloadPipeline:
             assert response.status == "pass"
             assert response.outputs["content"] == "downloaded content"
 
-    def test_sdk_validates_downloaded_file(self, tmp_path):
+    def test_sdk_validates_downloaded_file(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CANVASTEKK_DEV_MODE", "true")
         (tmp_path / "data.csv").write_text("col1,col2\n1,2")
 
         with LocalFileServer(tmp_path) as server:
@@ -142,7 +144,8 @@ class TestFullDownloadPipeline:
 
             assert response.status == "pass"
 
-    def test_rejects_wrong_extension(self, tmp_path):
+    def test_rejects_wrong_extension(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CANVASTEKK_DEV_MODE", "true")
         (tmp_path / "evil.exe").write_bytes(b"\x00\x01\x02")
 
         with LocalFileServer(tmp_path) as server:
