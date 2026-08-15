@@ -625,7 +625,8 @@ class TestWorkflowRunnerOutputDir:
         assert result.status == "completed"
         assert captured_dir
         assert Path(captured_dir[0]).exists()
-        assert result.output_dir == Path(captured_dir[0])
+        # Per-node subdirs: the node's output dir is a subdir of the run dir.
+        assert Path(captured_dir[0]) == result.output_dir / "cap"
 
     def test_auto_temp_dir_cleaned_up_on_exception(self) -> None:
         captured_dir: list[str] = []
@@ -709,3 +710,141 @@ class TestWorkflowRunnerOutputDir:
         result = runner.run(spec, inputs={})
 
         assert result.output_dir is None
+
+
+class TestStartInputSeeding:
+    """Regression tests for run(spec, inputs={...}) — seeded START outputs
+    must reach downstream nodes (previously clobbered by the re-run start
+    handler, crashing the whole run)."""
+
+    def test_nonempty_run_inputs_reach_downstream(self) -> None:
+        spec = WorkflowDefinitionSpec(
+            nodes=[
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="echo", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="end", slug="__end__"),
+            ],
+            edges=[
+                WorkflowEdgeDefinition(from_node="start", to_node="echo", from_output="point_cloud", to_input="message"),
+                WorkflowEdgeDefinition(from_node="echo", to_node="end", from_output="message", to_input="result"),
+            ],
+        )
+
+        executor = InProcessExecutor()
+        executor.register("echo-v1.0.0", EchoNode())
+        runner = WorkflowRunner(executor)
+
+        result = runner.run(spec, inputs={"point_cloud": "/tmp/scan.ply"})
+
+        assert result.status == "completed"
+        assert result.final_outputs == {"result": "/tmp/scan.ply"}
+
+    def test_seeded_inputs_merge_with_static_start_inputs(self) -> None:
+        spec = WorkflowDefinitionSpec(
+            nodes=[
+                WorkflowDefinitionNode(
+                    id="start", slug="__start__", inputs={"static_key": "static"}
+                ),
+                WorkflowDefinitionNode(id="echo", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="end", slug="__end__"),
+            ],
+            edges=[
+                WorkflowEdgeDefinition(from_node="start", to_node="echo", from_output="static_key", to_input="message"),
+                WorkflowEdgeDefinition(from_node="echo", to_node="end", from_output="message", to_input="result"),
+            ],
+        )
+
+        executor = InProcessExecutor()
+        executor.register("echo-v1.0.0", EchoNode())
+        runner = WorkflowRunner(executor)
+
+        result = runner.run(spec, inputs={"seeded_key": "seeded"})
+
+        assert result.status == "completed"
+        assert result.final_outputs == {"result": "static"}
+        start_result = next(r for r in result.node_results if r.node_id == "start")
+        assert start_result.status == "completed"
+        assert start_result.outputs == {"static_key": "static", "seeded_key": "seeded"}
+
+
+class TestResolverErrorIsolation:
+    """A mis-wired edge must fail ONE node, not crash run()."""
+
+    def test_user_node_bad_from_output_is_failed_node_result(self) -> None:
+        spec = WorkflowDefinitionSpec(
+            nodes=[
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="echo", slug="echo-v1.0.0"),
+                WorkflowDefinitionNode(id="end", slug="__end__"),
+            ],
+            edges=[
+                WorkflowEdgeDefinition(from_node="start", to_node="echo", from_output="missing_key", to_input="message"),
+                WorkflowEdgeDefinition(from_node="echo", to_node="end", from_output="message", to_input="result"),
+            ],
+        )
+
+        executor = InProcessExecutor()
+        executor.register("echo-v1.0.0", EchoNode())
+        runner = WorkflowRunner(executor)
+
+        result = runner.run(spec, inputs={"other": "x"})
+
+        assert result.status == "failed"
+        echo_result = next(r for r in result.node_results if r.node_id == "echo")
+        assert echo_result.status == "failed"
+        assert "Input resolution failed" in echo_result.error
+
+
+class TestPerNodeOutputSubdirs:
+    """Per-node output subdirs prevent same-filename collisions between
+    parallel nodes (DA-1711 step 2.3)."""
+
+    def test_parallel_nodes_same_filename_no_collision(self) -> None:
+        captured: list[str] = []
+
+        class CollisionNode(BaseNode):
+            definition = WorkflowNodeManifest(
+                name="collision",
+                version="1.0.0",
+                title="Collision",
+                description="Writes result.txt",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+            )
+
+            def execute(self, inputs, context):
+                p = context.output_path("result.txt")
+                p.write_text(context.node_id)
+                captured.append(str(p))
+                return {"file": str(p)}
+
+        spec = WorkflowDefinitionSpec(
+            nodes=[
+                WorkflowDefinitionNode(id="start", slug="__start__"),
+                WorkflowDefinitionNode(id="a", slug="collision-v1.0.0"),
+                WorkflowDefinitionNode(id="b", slug="collision-v1.0.0"),
+                WorkflowDefinitionNode(id="end", slug="__end__"),
+            ],
+            edges=[
+                WorkflowEdgeDefinition(from_node="start", to_node="a"),
+                WorkflowEdgeDefinition(from_node="start", to_node="b"),
+                WorkflowEdgeDefinition(from_node="a", to_node="end"),
+                WorkflowEdgeDefinition(from_node="b", to_node="end"),
+            ],
+        )
+
+        executor = InProcessExecutor()
+        executor.register("collision-v1.0.0", CollisionNode())
+        runner = WorkflowRunner(executor, cleanup=False)
+
+        result = runner.run(spec, inputs={})
+
+        assert result.status == "completed"
+        assert len(captured) == 2
+        assert captured[0] != captured[1]
+        assert Path(captured[0]).read_text() == "a"
+        assert Path(captured[1]).read_text() == "b"
+        # Tidy up the preserved temp dir (cleanup=False was only for asserts).
+        import shutil
+
+        shutil.rmtree(result.output_dir, ignore_errors=True)
