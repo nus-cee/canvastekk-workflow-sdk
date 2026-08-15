@@ -1,4 +1,5 @@
 import type { ExecutionContext } from "../context.js";
+import { NodeExecutionResponseSchema } from "../response.js";
 
 /**
  * Abstract base for node execution strategies.
@@ -113,11 +114,16 @@ export class HttpExecutor extends NodeExecutor {
       throw new Error(`Node '${slug}' returned HTTP ${resp.status}`);
     }
 
-    const data = await resp.json() as Record<string, unknown>;
-    if (data.status === "pass") {
-      return (data.outputs ?? {}) as Record<string, unknown>;
+    // Validate the remote response against the wire schema — a null/array
+    // body previously crashed with a TypeError instead of a clean error.
+    const parsed = NodeExecutionResponseSchema.safeParse(await resp.json());
+    if (!parsed.success) {
+      throw new Error(`Node '${slug}' returned malformed response: ${parsed.error.issues[0]?.message ?? "schema mismatch"}`);
     }
-    throw new Error(`Node '${slug}' returned failure: ${data.error ?? "unknown"}`);
+    if (parsed.data.status === "pass") {
+      return parsed.data.outputs ?? {};
+    }
+    throw new Error(`Node '${slug}' returned failure: ${parsed.data.error ?? "unknown"}`);
   }
 
   /** Checks if a URL is registered for the given slug. */

@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import httpx
+import pytest
 
 from canvastekk_workflow_sdk.response import NodeExecutionResponse
 from canvastekk_workflow_sdk.uploads import OutputUploader, S3PresignedUploader, get_default_uploader
@@ -148,8 +149,8 @@ class TestS3PresignedUploader:
             mock_logger.warning.assert_called_once()
             assert "Output field '%s' value is not a local file" in str(mock_logger.warning.call_args)
 
-    def test_upload_outputs_logs_error_but_doesnt_raise(self, tmp_path: Path) -> None:
-        """Test that upload failure logs error but doesn't raise exception."""
+    def test_upload_outputs_raises_on_upload_failure(self, tmp_path: Path) -> None:
+        """Upload failures now raise so the execution fails (DA-1711 4.1)."""
         uploader = S3PresignedUploader()
         test_file = tmp_path / "result.ply"
         test_file.write_bytes(b"ply data")
@@ -167,13 +168,9 @@ class TestS3PresignedUploader:
         mock_response.text = "Error"
         error = httpx.HTTPStatusError("Upload failed", request=MagicMock(), response=mock_response)
 
-        with (
-            patch("canvastekk_workflow_sdk.uploads.httpx.put", side_effect=error),
-            patch("canvastekk_workflow_sdk.uploads.logger") as mock_logger,
-        ):
-            uploader.upload_outputs(response, upload_urls, file_output_fields)
-            mock_logger.error.assert_called_once()
-            assert "Failed to upload output '%s' to S3" in str(mock_logger.error.call_args)
+        with patch("canvastekk_workflow_sdk.uploads.httpx.put", side_effect=error):
+            with pytest.raises(httpx.HTTPStatusError):
+                uploader.upload_outputs(response, upload_urls, file_output_fields)
 
     def test_upload_outputs_with_no_outputs(self) -> None:
         """Test that upload_outputs returns early when outputs is None."""

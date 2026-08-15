@@ -70,6 +70,14 @@ class StructuredJsonFormatter(logging.Formatter):
     """
 
     def format(self, record: logging.LogRecord) -> str:
+        """Format a log record as a JSON object.
+
+        Args:
+            record: Log record to format.
+
+        Returns:
+            JSON string with timestamp, level, logger, message, and context.
+        """
         entry: dict[str, Any] = {
             "timestamp": datetime.now(tz=UTC).isoformat(),
             "level": record.levelname,
@@ -82,8 +90,20 @@ class StructuredJsonFormatter(logging.Formatter):
         if hasattr(record, "node_id"):
             entry["node_id"] = record.node_id
 
-        for key, value in record.__dict__.get("_extra", {}).items():
-            entry[key] = value
+        # Merge extra={...} fields: stdlib logging sets them directly as
+        # attributes on the record — copy any non-standard ones. Also honor
+        # records constructed with an explicit `_extra` dict (legacy path).
+        _standard = {
+            "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
+            "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
+            "created", "msecs", "relativeCreated", "thread", "threadName",
+            "processName", "process", "taskName", "message", "asctime",
+        }
+        for key, value in record.__dict__.items():
+            if key == "_extra" and isinstance(value, dict):
+                entry.update(value)
+            elif key not in _standard and not key.startswith("_"):
+                entry[key] = value
 
         if record.exc_info and record.exc_info[1] is not None:
             entry["exception"] = self.formatException(record.exc_info)
@@ -98,6 +118,14 @@ class HumanReadableFormatter(logging.Formatter):
     """
 
     def format(self, record: logging.LogRecord) -> str:
+        """Format a log record as human-readable text.
+
+        Args:
+            record: Log record to format.
+
+        Returns:
+            Formatted string with timestamp, level, logger, message.
+        """
         ts = datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M:%S")
         base = f"{ts} [{record.levelname:>7}] {record.name}: {record.getMessage()}"
 
@@ -171,4 +199,5 @@ def get_node_logger(node_id: str, run_id: str | None = None) -> logging.Logger:
     Returns:
         A ``logging.Logger`` named ``node.<node_id>``.
     """
-    return logging.getLogger(f"{_NODE_LOGGER_PREFIX}{node_id}")
+    safe_id = node_id.replace(".", "_").replace(" ", "_")
+    return logging.getLogger(f"{_NODE_LOGGER_PREFIX}{safe_id}")

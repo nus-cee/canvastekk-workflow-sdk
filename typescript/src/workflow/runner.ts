@@ -36,6 +36,7 @@ export class WorkflowRunner {
   private _errorPolicy: ErrorPolicy;
   private _outputDir: string | null;
   private _cleanup: boolean;
+  private _maxConcurrency: number;
 
   /**
    * Creates a new workflow runner.
@@ -48,12 +49,26 @@ export class WorkflowRunner {
       errorPolicy?: ErrorPolicy;
       outputDir?: string;
       cleanup?: boolean;
+      maxConcurrency?: number;
     },
   ) {
     this._executor = executor;
     this._errorPolicy = opts?.errorPolicy ?? "fail_fast";
     this._outputDir = opts?.outputDir ?? null;
     this._cleanup = opts?.cleanup ?? true;
+    this._maxConcurrency = opts?.maxConcurrency ?? 8;
+  }
+
+  /** Runs executor.execute under the per-level concurrency cap:
+   * tasks are gathered and awaited in bounded chunks of maxConcurrency. */
+  private async gatherWithLimit<T>(tasks: Promise<T>[]): Promise<PromiseSettledResult<T>[]> {
+    const results: PromiseSettledResult<T>[] = [];
+    for (let i = 0; i < tasks.length; i += this._maxConcurrency) {
+      const chunk = tasks.slice(i, i + this._maxConcurrency);
+      const settled = await Promise.allSettled(chunk);
+      results.push(...settled);
+    }
+    return results;
   }
 
   /**
@@ -223,7 +238,7 @@ export class WorkflowRunner {
         }
 
         if (tasks.length > 0) {
-          const results = await Promise.allSettled(tasks);
+          const results = await this.gatherWithLimit(tasks);
           for (let i = 0; i < results.length; i++) {
             const nid = taskNodeIds[i];
             const node = nodeMap.get(nid)!;

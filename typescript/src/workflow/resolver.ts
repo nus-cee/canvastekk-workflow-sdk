@@ -7,7 +7,7 @@ import type { WorkflowDefinitionSpec } from "./models.js";
  */
 export class ResolverError extends Error {
   /** Error code categorizing the failure type. */
-  readonly code: "NODE_NOT_FOUND" | "KEY_NOT_FOUND" | "INVALID_PATH" | "TRAVERSAL_ERROR";
+  readonly code: "NODE_NOT_FOUND" | "KEY_NOT_FOUND" | "INVALID_PATH" | "TRAVERSAL_ERROR" | "FORBIDDEN_KEY";
   /** Optional node ID where the error occurred (for debugging). */
   readonly nodeId?: string;
 
@@ -20,7 +20,7 @@ export class ResolverError extends Error {
    */
   constructor(
     message: string,
-    code: "NODE_NOT_FOUND" | "KEY_NOT_FOUND" | "INVALID_PATH" | "TRAVERSAL_ERROR",
+    code: "NODE_NOT_FOUND" | "KEY_NOT_FOUND" | "INVALID_PATH" | "TRAVERSAL_ERROR" | "FORBIDDEN_KEY",
     nodeId?: string,
   ) {
     super(message);
@@ -49,6 +49,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * @returns Resolved inputs for the target node
  * @throws {ResolverError} When node not found or output key resolution fails
  */
+/** Keys that must never be assigned/merged onto resolved-input objects —
+ * assignment via these would poison the object's prototype chain. */
+const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+/** Defines a plain own data property (never touches the prototype chain). */
+function defineOwn(target: Record<string, unknown>, key: string, value: unknown): void {
+  Object.defineProperty(target, key, {
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+}
+
 export function resolveInputs(
   nodeId: string,
   spec: WorkflowDefinitionSpec,
@@ -64,9 +78,21 @@ export function resolveInputs(
     const sourceOutputs = nodeOutputs[edge.from_node] ?? {};
     const value = resolveOutput(sourceOutputs, edge.from_output, edge.from_node);
     if (edge.to_input) {
-      resolved[edge.to_input] = value;
+      if (DANGEROUS_KEYS.has(edge.to_input)) {
+        throw new ResolverError(
+          `Forbidden to_input key '${edge.to_input}' (prototype pollution)`,
+          "FORBIDDEN_KEY",
+          edge.from_node,
+        );
+      }
+      defineOwn(resolved, edge.to_input, value);
     } else if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-      Object.assign(resolved, value);
+      // Merge via own-data-property creation: JSON.parse creates an *own*
+      // __proto__ property which Object.assign would copy via [[Set]],
+      // swapping the target's prototype.
+      for (const [k, v] of Object.entries(value)) {
+        if (!DANGEROUS_KEYS.has(k)) defineOwn(resolved, k, v);
+      }
     }
   }
 
@@ -91,7 +117,9 @@ function resolveOutput(
 ): unknown {
   if (!fromOutput) return sourceOutputs;
 
-  if (fromOutput in sourceOutputs) return sourceOutputs[fromOutput];
+  // Object.hasOwn: the `in` operator also matches inherited builtins
+  // (e.g. from_output "toString" would "resolve" to a function).
+  if (Object.hasOwn(sourceOutputs, fromOutput)) return sourceOutputs[fromOutput];
 
   if (fromOutput.includes(".")) return walkDotPath(sourceOutputs, fromOutput, fromNode);
 
@@ -123,7 +151,7 @@ function walkDotPath(data: Record<string, unknown>, path: string, fromNode?: str
         fromNode,
       );
     }
-    if (!(segment in current)) {
+    if (!Object.hasOwn(current, segment)) {
       const nodeCtx = fromNode ? ` from node '${fromNode}'` : "";
       throw new ResolverError(
         `Dot-path '${path}': segment '${segment}' not found${nodeCtx}`,

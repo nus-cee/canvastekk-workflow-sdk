@@ -13,9 +13,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
 import threading
 from collections.abc import Sequence
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import APIRouter, FastAPI, Request
@@ -292,12 +294,39 @@ def create_node_app(
         if exec_request.output_upload_url and response.status == "pass":
             file_output_fields = node.definition.file_output_fields
             if file_output_fields:
-                await asyncio.to_thread(
-                    _upload_outputs_to_s3,
-                    response,
-                    exec_request.output_upload_url,
-                    file_output_fields,
-                )
+                try:
+                    await asyncio.to_thread(
+                        _upload_outputs_to_s3,
+                        response,
+                        exec_request.output_upload_url,
+                        file_output_fields,
+                    )
+                except Exception as exc:
+                    # A declared file output that could not be uploaded means
+                    # the engine would receive a local path it cannot fetch —
+                    # fail the execution instead of silently passing (4.1).
+                    logging.getLogger(__name__).error(
+                        "Output upload failed: %s", exc
+                    )
+                    response = response.model_copy(
+                        update={
+                            "status": "fail",
+                            "error": f"Output upload failed: {exc}",
+                            "error_code": "UPLOAD_FAILED",
+                        }
+                    )
+
+        # Clean up the per-execution temp dir AFTER uploads have completed —
+        # long-running node servers otherwise accumulate downloads/outputs
+        # in /tmp until disk exhaustion (DA-1711 4.4).
+        try:
+            output_dir = Path("/tmp") / exec_request.run_id / exec_request.node_id
+            if output_dir.is_dir() and output_dir.exists():
+                shutil.rmtree(output_dir, ignore_errors=True)
+        except Exception:
+            logging.getLogger(__name__).debug(
+                "Post-execution temp cleanup skipped", exc_info=True
+            )
 
         return response
 

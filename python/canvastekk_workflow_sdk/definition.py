@@ -88,6 +88,15 @@ class RetryConfig(BaseModel):
 
 
 class WorkflowNodeRole(str, enum.Enum):  # noqa: UP042
+    """Node role in the workflow system.
+
+    Values:
+        START: Workflow entry point.
+        END: Workflow exit point.
+        ERROR_GATE: Error handling node.
+        OPERATION: Regular processing node.
+    """
+
     START = "start"
     END = "end"
     ERROR_GATE = "error_gate"
@@ -230,12 +239,13 @@ class WorkflowNodeManifest(BaseModel):
     @computed_field  # type: ignore[misc]
     @property
     def id(self) -> str:
+        """Return the node identifier in the format 'name-vversion'."""
         return f"{self.name}-v{self.version}"
 
     @field_validator("name")
     @classmethod
     def _validate_name(cls, v: str) -> str:
-        if not _SLUG_PATTERN.match(v):
+        if not _SLUG_PATTERN.fullmatch(v):
             raise ValueError(
                 f"Node name must be a lowercase slug (alphanumeric and hyphens only, no leading/trailing hyphens). Got: '{v}'"
             )
@@ -244,7 +254,7 @@ class WorkflowNodeManifest(BaseModel):
     @field_validator("version")
     @classmethod
     def _validate_version(cls, v: str) -> str:
-        if not _SEMVER_PATTERN.match(v):
+        if not _SEMVER_PATTERN.fullmatch(v):
             raise ValueError(f"Node version must be semantic version (X.Y.Z). Got: '{v}'")
         return v
 

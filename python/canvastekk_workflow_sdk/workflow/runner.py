@@ -127,6 +127,7 @@ class WorkflowRunner:
         error_policy: ErrorPolicy = ErrorPolicy.FAIL_FAST,
         output_dir: Path | None = None,
         cleanup: bool = True,
+        max_concurrency: int = 8,
     ) -> None:
         """Initialize workflow runner.
 
@@ -135,11 +136,24 @@ class WorkflowRunner:
             error_policy: How to handle failures (fail_fast or continue).
             output_dir: Shared output directory for nodes.
             cleanup: Whether to clean up auto-created temp dirs.
+            max_concurrency: Cap on simultaneously executing nodes per
+                level (prevents overwhelming local/remote resources).
         """
         self._executor = executor
         self._error_policy = error_policy
         self._output_dir = output_dir
         self._cleanup = cleanup
+        self._semaphore = asyncio.Semaphore(max_concurrency)
+
+    async def _execute_with_sem(
+        self,
+        slug: str,
+        resolved: dict[str, Any],
+        context: ExecutionContext,
+    ) -> dict[str, Any]:
+        """Run executor.execute under the per-level concurrency semaphore."""
+        async with self._semaphore:
+            return await self._executor.execute(slug, resolved, context)
 
     def run(
         self,
@@ -330,7 +344,9 @@ class WorkflowRunner:
                         # absolute path), which per-node subdirs preserve.
                         output_dir=run_output_dir / nid,
                     )
-                    tasks.append(self._executor.execute(node.slug, resolved, context))
+                    tasks.append(
+                        self._execute_with_sem(node.slug, resolved, context)
+                    )
                     task_node_ids.append(nid)
 
                 if tasks:

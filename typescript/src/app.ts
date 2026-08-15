@@ -113,7 +113,20 @@ export function createNodeApp(
       if (execRequest.output_upload_url && response.status === "pass") {
         const fileOutputFields = getFileOutputFields(def);
         if (fileOutputFields.length > 0) {
-          await getDefaultUploader().uploadOutputs(response, execRequest.output_upload_url, fileOutputFields);
+          try {
+            await getDefaultUploader().uploadOutputs(response, execRequest.output_upload_url, fileOutputFields);
+          } catch (err) {
+            // A declared file output that could not be uploaded means the
+            // engine would receive a local path it cannot fetch — fail the
+            // execution instead of silently passing (DA-1711 4.1).
+            console.error("[canvastekk] Output upload failed:", err);
+            response = {
+              ...response,
+              status: "fail",
+              error: `Output upload failed: ${err}`,
+              error_code: "UPLOAD_FAILED",
+            };
+          }
         }
       }
 
