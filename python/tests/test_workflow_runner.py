@@ -842,8 +842,9 @@ class TestPerNodeOutputSubdirs:
         assert result.status == "completed"
         assert len(captured) == 2
         assert captured[0] != captured[1]
-        assert Path(captured[0]).read_text() == "a"
-        assert Path(captured[1]).read_text() == "b"
+        # gather() completes in arbitrary order — map path->content by dir name.
+        contents = {Path(p).parent.name: Path(p).read_text() for p in captured}
+        assert contents == {"a": "a", "b": "b"}
         # Tidy up the preserved temp dir (cleanup=False was only for asserts).
         import shutil
 

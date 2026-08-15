@@ -115,8 +115,17 @@ class ExecutionContext:
 
         Returns:
             Full path in the output directory
+
+        Raises:
+            ValueError: If the filename escapes the output directory
+                (path traversal — absolute paths or ``..`` segments).
         """
-        return self._output_dir / filename
+        candidate = (self._output_dir / filename).resolve()
+        if not candidate.is_relative_to(self._output_dir.resolve()):
+            raise ValueError(
+                f"Output filename '{filename}' escapes the output directory"
+            )
+        return candidate
 
     @property
     def downloads_dir(self) -> Path:

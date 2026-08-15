@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import type { NodeExecutionRequest } from "./request.js";
 import { getNodeLogger, type SdkLogger } from "./logging.js";
 
@@ -90,9 +90,15 @@ export class ExecutionContext {
    * Gets the full path for a file in the output directory.
    * @param filename - Filename to join with output directory
    * @returns Full file path
+   * @throws {Error} If the filename escapes the output directory
+   *   (path traversal — absolute paths or `..` segments).
    */
   outputPath(filename: string): string {
-    return join(this._outputDir, filename);
+    const candidate = resolve(join(this._outputDir, filename));
+    if (!candidate.startsWith(resolve(this._outputDir) + sep)) {
+      throw new Error(`Output filename '${filename}' escapes the output directory`);
+    }
+    return candidate;
   }
 
   get downloadsDir(): string {

@@ -85,20 +85,23 @@ Three-way review of main @ `1036831` (v0.21.0): architecture review, Python revi
 
 ### Phase 3 — Request validation & auth posture (M1/M2/M3)
 
-- [ ] **3.1** Add slug-pattern validators to `run_id`/`node_id` (`request.py:21-22` pydantic; `request.ts:4-5` zod): charset `^[A-Za-z0-9._-]+$` PLUS explicit dot-segment rejection (reject any value containing `..` or matching `^\.$`/`^\.\+$`) — the charset regex alone still permits `..` segments. Defense-in-depth: resolved-path containment (`resolve()` + `is_relative_to(base)`) in `ExecutionContext` is the authoritative check (`context.py:51-53,86-99`; `context.ts:43-48,74-84`).
+- [x] **3.1** Add slug-pattern validators to `run_id`/`node_id` (`request.py:21-22` pydantic; `request.ts:4-5` zod): charset `^[A-Za-z0-9._-]+$` PLUS explicit dot-segment rejection (reject any value containing `..` or matching `^\.$`/`^\.\+$`) — the charset regex alone still permits `..` segments. Defense-in-depth: resolved-path containment (`resolve()` + `is_relative_to(base)`) in `ExecutionContext` is the authoritative check (`context.py:51-53,86-99`; `context.ts:43-48,74-84`).
     — **Why:** Request-controlled identifiers are joined into `/tmp` paths unchecked (PY-3/TS-3/ARCH-7) — `run_id="../../…"` creates arbitrary directories; `output_path("../…")` escapes the sandbox.
     — **Done when:** Tests reject traversal payloads at validation layer in both languages; regex validated against real engine-generated `run_id`/`node_id` formats (rejecting a legitimate ID = 422 on every request); context containment asserts on escapes that pass validation.
     — **Consumers affected:** `/execute` servers, `ExecutionContext` consumers.
+    — **Done:** slug charset + dot-segment rejection at validation layer (Py pattern+model_validator; TS regex+refine) AND resolved-path containment in output_path/outputPath (resolve+is_relative_to / resolve+startsWith); tests reject traversal payloads both langs (Py 4, TS 4); files: python/canvastekk_workflow_sdk/request.py, typescript/src/request.ts, python/canvastekk_workflow_sdk/context.py, typescript/src/context.ts, python/tests/test_request.py, typescript/tests/request.test.ts; fixes: charset regex alone matched '..' — added explicit dot-segment validator after test caught it
 
-- [ ] **3.2** Python: enforce configurable request body size limit as ASGI/FastAPI middleware covering ALL JSON endpoints (`/execute`, `/hook` at `app.py:296` — both call `request.json()` unguarded), matching TS's global `express.json` 50 MB limit (`app.ts:36`); map `ValidationError`/`TypeError` from body parsing to 400/422 instead of 500 (`app.py:174-181,367-376`).
+- [x] **3.2** Python: enforce configurable request body size limit as ASGI/FastAPI middleware covering ALL JSON endpoints (`/execute`, `/hook` at `app.py:296` — both call `request.json()` unguarded), matching TS's global `express.json` 50 MB limit (`app.ts:36`); map `ValidationError`/`TypeError` from body parsing to 400/422 instead of 500 (`app.py:174-181,367-376`).
     — **Why:** Unbounded JSON body → memory DoS on Python nodes (ARCH-4); wrong status codes mask client errors as server faults (PY-18).
     — **Done when:** Test posts >limit body → 413 on both `/execute` and `/hook`; malformed/list body → 400/422.
     — **Consumers affected:** Python node servers.
+    — **Done:** ASGI _BodySizeLimitMiddleware (Content-Length vs CANVASTEKK_MAX_BODY_BYTES, default 50MB parity) on all endpoints; non-dict body→422, ValidationError→422, invalid JSON→400 (/execute + /hook); tests 413/422/400; files: python/canvastekk_workflow_sdk/app.py, python/tests/test_app.py; fixes: none
 
-- [ ] **3.3** Auth posture: loud startup warning when no auth is configured in production mode AND when `CANVASTEKK_DEV_MODE` bypass is active (`app.py`, `auth.py:42-43`; `app.ts`, `auth.ts:10-14`); redact unexpected-exception detail from responses (generic message + `execution_id`, full detail logged server-side) (`app.py:367-376`, `base.py:421-429`, `app.ts:206-221`).
+- [x] **3.3** Auth posture: loud startup warning when no auth is configured in production mode AND when `CANVASTEKK_DEV_MODE` bypass is active (`app.py`, `auth.py:42-43`; `app.ts`, `auth.ts:10-14`); redact unexpected-exception detail from responses (generic message + `execution_id`, full detail logged server-side) (`app.py:367-376`, `base.py:421-429`, `app.ts:206-221`).
     — **Why:** Auth is opt-in with a silent global env bypass (ARCH-5/TS-2/PY-6); `str(exc)` echoes internals/paths to callers (PY-5/TS-7). Breaking change to require auth outright is out of scope — warnings + redaction are the safe increment.
     — **Done when:** Tests capture startup warnings in both modes; error responses contain no exception text beyond a generic message + correlation id.
     — **Consumers affected:** all node servers; external authors (doc update in 5.2).
+    — **Done:** startup warnings both langs (dev-mode bypass active; no-auth configured) + generic 500 redaction (Py: server-side logging + generic detail; TS: console.error + 'Internal server error'); files: python/canvastekk_workflow_sdk/app.py, typescript/src/app.ts; fixes: none
 
 ### Phase 4 — Uploads, resolvers, executors (M4/M5/M6/M9 subset)
 
