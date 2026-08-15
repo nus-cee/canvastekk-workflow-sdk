@@ -2,11 +2,45 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.0] - 2026-08-15
+
+### Features
+
+- **runner**: Per-node output subdirs in local WorkflowRunner (DA-1711 2.3) (**BREAKING**)
+
+
+### Bug Fixes
+
+- **security**: Implement Phase 1 download hardening (DA-1711)
+- **runner**: Merge START inputs and isolate resolver errors (DA-1711 2.1-2.2)
+- **security**: Request validation, body limits, auth posture (DA-1711 Ph3)
+- **uploads/executors**: Fail on upload failure, proto-pollution guards, executor hardening (DA-1711 Ph4)
+
+
+### Documentation
+
+- **plan**: Add PLAN-DA-1711 for security & robustness hardening
+- **plan**: Amend PLAN-DA-1711 per plan-review findings PLAN-1..12
+- **examples**: Fix echo double-download, sync docs for v0.22 security changes, add parity manifest (DA-1711 Ph5)
+- Add missing docstrings across SDK modules
+
+
+### Miscellaneous Tasks
+
+- Remove completed plan files
+- Add opencode repo config and AGENTS rule blocks
+
+
 ## [0.21.0] - 2026-08-02
 
 ### Features
 
 - Add deprecation metadata field to WorkflowNodeManifest (DA-1582) (#51)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.21.0
 
 
 ## [0.20.0] - 2026-07-20
