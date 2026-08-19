@@ -2,12 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.2] - 2026-08-19
+
+### Bug Fixes
+
+- **uploads**: Send fixed-length identity PUT for S3 presigned uploads [DA-1811]
+
+
 ## [0.22.1] - 2026-08-19
 
 ### Bug Fixes
 
 - **uploads**: Set duplex half for stream bodies in S3 output upload [DA-1811]
 - **node**: Guard download write stream against late open errors [DA-1811]
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.22.1
 
 
 ## [0.22.0] - 2026-08-15
