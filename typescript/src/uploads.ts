@@ -1,5 +1,6 @@
 import { createReadStream, statSync } from "node:fs";
-import type { Readable } from "node:stream";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import type { NodeExecutionResponse } from "./response.js";
 
 /**
@@ -16,7 +17,7 @@ export interface OutputUploader {
 
 // Explicit generous timeout for output uploads — without it, a large
 // multi-GB upload has no deadline at all; with it, slow links still get
-// 600 s. AbortSignal.timeout is a TOTAL deadline (matches the Py SDK).
+// 600 s. Total deadline (matches the Py SDK).
 const UPLOAD_TIMEOUT_MS = 600_000;
 
 /**
@@ -29,23 +30,63 @@ export class S3PresignedUploader implements OutputUploader {
    * Streams the file from disk (never buffers the whole body in memory —
    * outputs in this domain are multi-GB point clouds).
    *
+   * Uses Node's http/https core module instead of fetch: fetch cannot send
+   * a fixed-length stream body (it forces `Transfer-Encoding: chunked`,
+   * which S3 rejects with `501 Not Implemented`, and strips a
+   * user-supplied `Content-Length`). http.request with an explicit
+   * Content-Length pipes the stream with identity encoding.
+   *
    * @param filePath - Local file path
    * @param presignedUrl - S3 presigned upload URL
    * @throws Error if upload fails
    */
   async uploadFile(filePath: string, presignedUrl: string): Promise<void> {
-    const body = createReadStream(filePath) as Readable;
-    const resp = await fetch(presignedUrl, {
-      method: "PUT",
-      // @ts-expect-error Node fetch accepts Node streams as bodies
-      body,
-      duplex: "half",
-      headers: { "Content-Type": "application/octet-stream" },
-      signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+    const { size } = statSync(filePath);
+    const target = new URL(presignedUrl);
+    const send = target.protocol === "http:" ? httpRequest : httpsRequest;
+
+    await new Promise<void>((resolve, reject) => {
+      const req = send(
+        target,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "Content-Length": String(size),
+          },
+        },
+        (res) => {
+          const code = res.statusCode ?? 0;
+          if (code >= 200 && code < 300) {
+            res.resume(); // drain so the socket is released
+            clearTimeout(timer);
+            resolve();
+            return;
+          }
+          const chunks: Buffer[] = [];
+          res.on("data", (c) => chunks.push(c as Buffer));
+          res.on("end", () => {
+            clearTimeout(timer);
+            const detail = Buffer.concat(chunks).toString("utf8").slice(0, 200).trim();
+            reject(new Error(`Upload failed: HTTP ${code} ${res.statusMessage ?? ""} ${detail}`.trim()));
+          });
+        },
+      );
+
+      const timer = setTimeout(
+        () => req.destroy(new Error(`Upload timed out after ${UPLOAD_TIMEOUT_MS} ms`)),
+        UPLOAD_TIMEOUT_MS,
+      );
+
+      req.on("error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+
+      const stream = createReadStream(filePath);
+      stream.on("error", (err) => req.destroy(err));
+      stream.pipe(req);
     });
-    if (!resp.ok) {
-      throw new Error(`Upload failed: HTTP ${resp.status} ${resp.statusText}`);
-    }
   }
 
   /**

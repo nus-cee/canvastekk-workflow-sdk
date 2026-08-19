@@ -1,81 +1,146 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createServer, type Server } from "node:http";
+import { AddressInfo } from "node:net";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { S3PresignedUploader } from "../src/uploads.js";
+
+interface CapturedRequest {
+  method?: string;
+  url?: string;
+  contentLength?: string | string[] | undefined;
+  transferEncoding?: string | string[] | undefined;
+  contentType?: string | string[] | undefined;
+  body: Buffer;
+}
+
+// Real local HTTP server: verifies the actual wire behavior (identity
+// encoding with Content-Length, no Transfer-Encoding: chunked) that S3
+// requires — a fetch mock cannot assert that.
+async function startServer() {
+  const captured: CapturedRequest[] = [];
+  let respondPair: [number, string] = [200, "OK"];
+  const server: Server = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (c) => chunks.push(c as Buffer));
+    req.on("end", () => {
+      captured.push({
+        method: req.method,
+        url: req.url,
+        contentLength: req.headers["content-length"],
+        transferEncoding: req.headers["transfer-encoding"],
+        contentType: req.headers["content-type"],
+        body: Buffer.concat(chunks),
+      });
+      const [status, statusText] = respondPair;
+      res.writeHead(status, statusText);
+      res.end(status >= 200 && status < 300 ? undefined : "error-detail");
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    url: `http://127.0.0.1:${port}/presigned-put`,
+    captured,
+    setResponse: (status: number, statusText: string) => {
+      respondPair = [status, statusText];
+    },
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
+}
 
 describe("S3PresignedUploader", () => {
   let tmpDir: string;
-  let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), "sdk-uploads-"));
-    // Drain the stream body so createReadStream opens before afterEach cleanup
-    fetchMock = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
-      if (init?.body) await new Response(init.body).arrayBuffer();
-      return new Response(null, { status: 200, statusText: "OK" });
-    });
-    vi.stubGlobal("fetch", fetchMock);
   });
 
   afterEach(() => {
     rmSync(tmpDir, { recursive: true, force: true });
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
   });
 
   describe("uploadFile", () => {
-    it("sends the file as a PUT stream with duplex half (undici requirement)", async () => {
-      const filePath = join(tmpDir, "out.frag");
-      writeFileSync(filePath, Buffer.from("frag-bytes"));
+    it("PUTs with explicit Content-Length and identity encoding (no chunked TE)", async () => {
+      const srv = await startServer();
+      try {
+        const payload = Buffer.from("frag-bytes-0123456789");
+        const filePath = join(tmpDir, "out.frag");
+        writeFileSync(filePath, payload);
 
-      await new S3PresignedUploader().uploadFile(filePath, "https://s3/presigned");
+        await new S3PresignedUploader().uploadFile(filePath, srv.url);
 
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-      expect(url).toBe("https://s3/presigned");
-      expect(init.method).toBe("PUT");
-      expect(init.headers).toEqual({ "Content-Type": "application/octet-stream" });
-      // Node streams require duplex: "half" or undici throws
-      // "RequestInit: duplex option is required when sending a body"
-      expect(init.duplex).toBe("half");
-      expect(init.body).toBeTruthy();
+        expect(srv.captured).toHaveLength(1);
+        const req = srv.captured[0];
+        expect(req.method).toBe("PUT");
+        expect(req.url).toBe("/presigned-put");
+        expect(req.contentLength).toBe(String(payload.length));
+        // S3 rejects chunked uploads with 501 — the request must be identity
+        expect(req.transferEncoding).toBeUndefined();
+        expect(req.contentType).toBe("application/octet-stream");
+        expect(req.body.equals(payload)).toBe(true);
+      } finally {
+        await srv.close();
+      }
     });
 
-    it("throws on non-2xx response", async () => {
-      const filePath = join(tmpDir, "out.frag");
-      writeFileSync(filePath, Buffer.from("frag-bytes"));
-      fetchMock.mockImplementation(async (_u: string, init?: RequestInit) => {
-        if (init?.body) await new Response(init.body).arrayBuffer();
-        return new Response(null, { status: 403, statusText: "Forbidden" });
-      });
+    it("streams large bodies without buffering (multi-chunk pipe)", async () => {
+      const srv = await startServer();
+      try {
+        const payload = Buffer.alloc(5 * 1024 * 1024, 7); // 5 MiB
+        const filePath = join(tmpDir, "big.ply");
+        writeFileSync(filePath, payload);
 
-      await expect(
-        new S3PresignedUploader().uploadFile(filePath, "https://s3/presigned"),
-      ).rejects.toThrow("Upload failed: HTTP 403 Forbidden");
+        await new S3PresignedUploader().uploadFile(filePath, srv.url);
+
+        const req = srv.captured[0];
+        expect(req.contentLength).toBe(String(payload.length));
+        expect(req.body.length).toBe(payload.length);
+      } finally {
+        await srv.close();
+      }
+    });
+
+    it("throws on non-2xx response with status and detail", async () => {
+      const srv = await startServer();
+      srv.setResponse(501, "Not Implemented");
+      try {
+        const filePath = join(tmpDir, "out.frag");
+        writeFileSync(filePath, Buffer.from("frag-bytes"));
+
+        await expect(
+          new S3PresignedUploader().uploadFile(filePath, srv.url),
+        ).rejects.toThrow(/Upload failed: HTTP 501 Not Implemented.*error-detail/);
+      } finally {
+        await srv.close();
+      }
     });
   });
 
   describe("uploadOutputs", () => {
     it("uploads local file outputs and skips non-file values", async () => {
-      const fragPath = join(tmpDir, "converted.frag");
-      writeFileSync(fragPath, Buffer.from("frag-bytes"));
+      const srv = await startServer();
+      try {
+        const fragPath = join(tmpDir, "converted.frag");
+        writeFileSync(fragPath, Buffer.from("frag-bytes"));
 
-      const response = {
-        success: true,
-        outputs: { frag_file: fragPath, note: "not-a-file" },
-      } as Parameters<S3PresignedUploader["uploadOutputs"]>[0];
+        const response = {
+          success: true,
+          outputs: { frag_file: fragPath, note: "not-a-file" },
+        } as Parameters<S3PresignedUploader["uploadOutputs"]>[0];
 
-      await new S3PresignedUploader().uploadOutputs(
-        response,
-        { frag_file: "https://s3/frag", note: "https://s3/note" },
-        ["frag_file", "note"],
-      );
+        await new S3PresignedUploader().uploadOutputs(
+          response,
+          { frag_file: srv.url, note: `${srv.url}/note` },
+          ["frag_file", "note"],
+        );
 
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-      expect(url).toBe("https://s3/frag");
-      expect(init.duplex).toBe("half");
+        expect(srv.captured).toHaveLength(1);
+        expect(srv.captured[0].url).toBe("/presigned-put");
+      } finally {
+        await srv.close();
+      }
     });
   });
 });
