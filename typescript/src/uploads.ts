@@ -39,6 +39,7 @@ export class S3PresignedUploader implements OutputUploader {
       method: "PUT",
       // @ts-expect-error Node fetch accepts Node streams as bodies
       body,
+      duplex: "half",
       headers: { "Content-Type": "application/octet-stream" },
       signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
     });
