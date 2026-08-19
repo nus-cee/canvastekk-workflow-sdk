@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.1] - 2026-08-19
+
+### Bug Fixes
+
+- **uploads**: Set duplex half for stream bodies in S3 output upload [DA-1811]
+- **node**: Guard download write stream against late open errors [DA-1811]
+
+
 ## [0.22.0] - 2026-08-15
 
 ### Features
@@ -29,6 +37,7 @@ All notable changes to this project will be documented in this file.
 
 - Remove completed plan files
 - Add opencode repo config and AGENTS rule blocks
+- **release**: Prepare v0.22.0
 
 
 ## [0.21.0] - 2026-08-02
