@@ -344,6 +344,10 @@ export abstract class BaseNode {
 
       const reader = body.getReader();
       const file = createWriteStream(localPath, { flags: "w" });
+      // Lazy open can error after abort/cleanup (e.g. temp dir removed); a
+      // listener here keeps such late errors from crashing the process.
+      // Real failures still surface via the once("error") handler below.
+      file.on("error", () => {});
       try {
         let running = 0;
         for (;;) {
