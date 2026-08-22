@@ -1,7 +1,10 @@
 # PLAN-DA-1900 — Python SDK uploads: explicit fixed-length PUT contract pin
 
 **Ticket:** DA-1900 (Bug → re-scoped hardening) · **Branch:** feat/DA-1900-fixed-length-put · **Base:** origin/main `dfe4c04`
-**Repos touched:** canvastekk-workflow-sdk only. **No nodes bump, no release required** (wire-neutral).
+**Repos touched:** canvastekk-workflow-sdk, then canvastekk-workflow-nodes (wheel pin bump).
+**Release fires on merge** (CR-1: git-cliff bumps patch for ANY conventional commit — no
+`no_increment_regex` in cliff.toml); user decision 2026-08-22: accept v0.22.3 + nodes bump
+(wire-neutral, zero behavior risk; keeps pins current).
 
 ## Context
 
@@ -27,9 +30,10 @@ rule ("explicit Content-Length on presigned PUTs") and the TS DA-1811 contract.
   (`h11 LocalProtocolError`) → UPLOAD_FAILED; same race exists today via auto-fstat. No hang.
 - Existing 13 tests assert headers by key lookup (not dict equality) — adding a header key
   breaks nothing.
-- Current SDK version is 0.22.2; a `fix:` commit on main auto-releases v0.22.3 (git-cliff).
-  This change ships as `test:`/`refactor:` (no behavior change) so NO release fires and the
-  nodes repo needs no bump. If a release fires anyway it is harmless (wire-neutral).
+- Current SDK version is 0.22.2; ANY conventional commit on main auto-releases a patch
+  (v0.22.3) — git-cliff bumps by default; `cliff.toml` has no `no_increment_regex` opt-out
+  (code-review CR-1, verified upstream). The `test:` prefix does NOT suppress the release.
+  Release accepted as harmless (wire-neutral); nodes bump to v0.22.3 follows per user decision.
 
 ## Dependency & Consumer Map
 
@@ -89,31 +93,43 @@ rule ("explicit Content-Length on presigned PUTs") and the TS DA-1811 contract.
     — **Consumers affected:** none.
     — **Done:** ruff check clean; ruff format applied (1 file); full SDK suite 594 passed.
 
-- [ ] **3.2** Commit with NON-release-triggering subject (`test(uploads): pin fixed-length
-      wire contract for S3 presigned PUTs` — no `fix:`/`feat:` prefix so git-cliff does not
-      bump); body ≤72 chars, notes premise correction. Tick plan + Done lines. Push.
-      PR → **main** (no dev branch), merge, CI green. Post-merge: confirm NO new release/tag
-      fired (if one did, accept it — wire-neutral, no consumer action).
-    — **Why:** wire-neutral hardening must not force a consumer bump cycle.
-    — **Done when:** PR merged; no release created (or accepted harmlessly).
-    — **Consumers affected:** nodes repo (none — no dispatch if no release).
+- [ ] **3.2** Commit with subject `test(uploads): pin fixed-length identity PUT contract — DA-1900`
+      (actual shipped subject — CR-3 tick-with-actual; prefix does NOT suppress release per CR-1);
+      body ≤72 chars, notes premise correction. Tick plan + Done lines. Push.
+      PR → **main** (no dev branch), merge, CI green. Post-merge: confirm v0.22.3 release +
+      tag fired (release.yml git-cliff auto-bump) and `sdk-released` dispatch sent to nodes.
+    — **Why:** ship; release accepted per user decision (wire-neutral).
+    — **Done when:** PR merged; v0.22.3 tag + GitHub Release exist; dispatch run observed.
+    — **Consumers affected:** nodes repo (dispatch triggers a rebuild; pin bump lands in Phase 4).
 
 - [ ] **3.3** JIRA close-out on DA-1900: premise correction evidence (probe results), what
-      shipped (contract pin + tests + docstring fixes), why no release/nodes-bump.
+      shipped (contract pin + tests + docstring fixes), release fired (v0.22.3, accepted),
+      nodes bump PR link.
     — **Why:** the ticket was filed as a bug — the record must carry the falsification.
-    — **Done when:** comment posted with PR link.
+    — **Done when:** comment posted with both PR links.
     — **Consumers affected:** ticket reviewers.
+
+### Phase 4 — Nodes consumption (restored per user decision 2026-08-22)
+
+- [ ] **4.1** Nodes repo `fastapi_app/pyproject.toml`: wheel pin `v0.22.0` → `v0.22.3`;
+      `poetry lock` (bare URL, no sha256); gates (ruff/format/mypy + full pytest) green;
+      PR → dev, merge. Deploy Lambda run green (auth assertions, 50 nodes, reseed).
+    — **Why:** keep the pin current; the DA-1546 dispatch rebuild alone doesn't move the pin.
+    — **Done when:** merge commit on dev + deploy run URL recorded.
+    — **Consumers affected:** nodes Lambda runtime (wire-neutral).
 
 ## Acceptance Criteria
 
 - [ ] AC-1: explicit `Content-Length` sent (contract no longer relies on httpx internals);
       wire format unchanged (identity, correct length — verified pre/post)
 - [ ] AC-2: wire-format regression test + zero-byte test green; existing suite untouched
-- [ ] AC-3: no release triggered; no consumer bumps needed
+- [ ] AC-3: v0.22.3 release fired (accepted — git-cliff bumps any conventional commit);
+      nodes pin bumped to v0.22.3 on dev
 - [ ] AC-4: JIRA comment records premise correction + evidence
 
 ## Rollback
 
-Revert the merge commit (use a `test:`/`refactor:`-prefixed revert subject — git-cliff filters
-default `Revert "..."` subjects, and no release is involved anyway). Fully safe: wire-neutral
-change; nodes repo never consumes it (pin stays 0.22.0 until the next real SDK release).
+SDK: revert the merge commit (a revert lands as another patch release since git-cliff bumps any
+conventional commit — harmless; wheels are immutable so v0.22.3 stays valid). Nodes: revert the
+pin bump commit on dev (re-pin to v0.22.0 wheel + lock in one atomic commit). Fully safe either
+way: the change is wire-neutral.

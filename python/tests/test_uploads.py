@@ -236,12 +236,10 @@ class TestUploadWireFormat:
     — the pin exists to catch future httpx drift, not to gate the fix.
     """
 
-    def test_upload_file_sends_fixed_length_identity_put(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_upload_file_sends_fixed_length_identity_put(self, tmp_path: Path) -> None:
         """PUT wire format: Content-Length == file size, no chunked TE, body intact."""
         import http.server
         import threading
-
-        monkeypatch.setenv("CANVASTEKK_DEV_MODE", "true")  # consistency with LocalFileServer tests
 
         payload = bytes(range(256)) * 64  # 16 KiB of non-repeating-pattern data
         test_file = tmp_path / "payload.bin"
