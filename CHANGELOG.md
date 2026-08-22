@@ -2,11 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.3] - 2026-08-22
+
+### Testing
+
+- **uploads**: Pin fixed-length identity PUT contract — DA-1900
+- **uploads**: Drop inert DEV_MODE setenv; correct plan release narrative
+- **uploads**: Pin fixed-length identity PUT contract — DA-1900 (#55)
+
+
 ## [0.22.2] - 2026-08-19
 
 ### Bug Fixes
 
 - **uploads**: Send fixed-length identity PUT for S3 presigned uploads [DA-1811]
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.22.2
 
 
 ## [0.22.1] - 2026-08-19
