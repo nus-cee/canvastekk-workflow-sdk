@@ -76,6 +76,23 @@ class TestS3PresignedUploader:
         assert call_kwargs["headers"]["Content-Type"] == "application/octet-stream"
         assert hasattr(call_kwargs["content"], "read")
 
+    def test_upload_file_zero_byte_file(self, tmp_path: Path) -> None:
+        """Test upload_file with a zero-byte file sends Content-Length: 0."""
+        uploader = S3PresignedUploader()
+        test_file = tmp_path / "empty.bin"
+        test_file.write_bytes(b"")
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("canvastekk_workflow_sdk.uploads.httpx.put", return_value=mock_response) as mock_put:
+            uploader.upload_file(str(test_file), "https://example.com/presigned")
+
+        mock_put.assert_called_once()
+        call_kwargs = mock_put.call_args[1]
+        assert call_kwargs["headers"]["Content-Length"] == "0"
+        assert call_kwargs["headers"]["Content-Type"] == "application/octet-stream"
+
     def test_upload_outputs_with_valid_file_and_url(self, tmp_path: Path) -> None:
         """Test upload_outputs with valid file and URL."""
         uploader = S3PresignedUploader()
@@ -208,3 +225,56 @@ class TestDefaultUploaderSingleton:
         """Test that default uploader implements OutputUploader protocol."""
         uploader = get_default_uploader()
         assert isinstance(uploader, OutputUploader)
+
+
+class TestUploadWireFormat:
+    """Wire-contract regression pins (DA-1900).
+
+    Asserts the actual bytes-on-the-wire for S3 presigned PUTs against a real local
+    HTTP server: explicit Content-Length, no Transfer-Encoding: chunked, body intact.
+    Passes on pre-DA-1900 code too (httpx 0.28 auto-sets Content-Length via os.fstat)
+    — the pin exists to catch future httpx drift, not to gate the fix.
+    """
+
+    def test_upload_file_sends_fixed_length_identity_put(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """PUT wire format: Content-Length == file size, no chunked TE, body intact."""
+        import http.server
+        import threading
+
+        monkeypatch.setenv("CANVASTEKK_DEV_MODE", "true")  # consistency with LocalFileServer tests
+
+        payload = bytes(range(256)) * 64  # 16 KiB of non-repeating-pattern data
+        test_file = tmp_path / "payload.bin"
+        test_file.write_bytes(payload)
+
+        captured: dict[str, object] = {}
+
+        class _CaptureHandler(http.server.BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_PUT(self) -> None:  # noqa: N802 (stdlib naming)
+                captured["content_length"] = self.headers.get("Content-Length")
+                captured["transfer_encoding"] = self.headers.get("Transfer-Encoding")
+                length = int(self.headers["Content-Length"])
+                captured["body"] = self.rfile.read(length)
+                self.send_response(200)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            def log_message(self, *args: object) -> None:
+                pass  # keep test output clean
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _CaptureHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{server.server_address[1]}/upload"
+            S3PresignedUploader().upload_file(str(test_file), url)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+        assert captured["content_length"] == str(len(payload))
+        assert captured["transfer_encoding"] is None
+        assert captured["body"] == payload
