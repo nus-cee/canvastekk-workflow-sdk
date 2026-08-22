@@ -61,13 +61,22 @@ class S3PresignedUploader:
     """Upload binary outputs to S3 via pre-signed PUT URLs.
 
     Uses httpx for HTTP requests. A failed upload raises
-    :class:`OutputUploadError` so the caller can fail the execution —
+    :class:`httpx.HTTPStatusError`, which the router layer
+    (``app.py``) converts into a ``fail``/``UPLOAD_FAILED`` response —
     silently reporting success with local-only paths would strand
     downstream consumers (DA-1711 4.1).
     """
 
     def upload_file(self, file_path: str, presigned_url: str) -> None:
         """Upload a single file to a pre-signed S3 PUT URL.
+
+        The ``Content-Length`` header is set explicitly so the fixed-length
+        identity wire contract does not rely on httpx internals (httpx
+        currently auto-sets it for seekable files via ``os.fstat``; this
+        pins the contract against transport drift, mirroring the TS SDK's
+        DA-1811 fix). The file is still streamed (never buffered) to
+        preserve the multi-GB upload contract. ``timeout`` is per-operation
+        (connect/read/write/pool), not a wall-clock deadline.
 
         Args:
             file_path: Local path to the file.
@@ -80,7 +89,10 @@ class S3PresignedUploader:
             resp = httpx.put(
                 presigned_url,
                 content=f,
-                headers={"Content-Type": "application/octet-stream"},
+                headers={
+                    "Content-Type": "application/octet-stream",
+                    "Content-Length": str(os.path.getsize(file_path)),
+                },
                 timeout=_UPLOAD_TIMEOUT_SECONDS,
             )
             resp.raise_for_status()
