@@ -127,6 +127,34 @@ export const WorkflowNodeManifestSchema = z
     role: WorkflowNodeRoleSchema,
     styles: WorkflowNodeStylesSchema.nullable().default(null),
     deprecation: DeprecationInfoSchema.nullable().default(null),
+    minimum_sdk_version: z
+      .string()
+      .refine((v) => SEMVER_PATTERN.test(v), (v) => ({
+        message: `SDK version must be semantic version (X.Y.Z). Got: '${v}'`,
+      }))
+      .nullable()
+      .default(null),
+    maximum_sdk_version: z
+      .string()
+      .refine((v) => SEMVER_PATTERN.test(v), (v) => ({
+        message: `SDK version must be semantic version (X.Y.Z). Got: '${v}'`,
+      }))
+      .nullable()
+      .default(null),
+    docs_url: z
+      .string()
+      .refine((v) => v.startsWith("http://") || v.startsWith("https://"), (v) => ({
+        message: `docs_url must be an http(s) URL. Got: '${v}'`,
+      }))
+      .nullable()
+      .default(null),
+    changelog_url: z
+      .string()
+      .refine((v) => v.startsWith("http://") || v.startsWith("https://"), (v) => ({
+        message: `changelog_url must be an http(s) URL. Got: '${v}'`,
+      }))
+      .nullable()
+      .default(null),
   })
   .transform((data, ctx) => {
     const { id: _id, ...rest } = data;

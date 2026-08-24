@@ -61,11 +61,26 @@ export function buildRegistryPayload(
     invokeConfig,
     tags,
     constraints,
-    nodeStatus = "active",
   } = opts;
 
   const resolvedStyles = definition.styles ?? null;
 
+  // DA-1955: manifest compat + docs fields merge into constraints; caller wins.
+  const resolvedConstraints: Record<string, unknown> = { ...(constraints ?? {}) };
+  const manifestConstraintFields: [string, string | null][] = [
+    ["minimum_sdk_version", definition.minimum_sdk_version ?? null],
+    ["maximum_sdk_version", definition.maximum_sdk_version ?? null],
+    ["docs_url", definition.docs_url ?? null],
+    ["changelog_url", definition.changelog_url ?? null],
+  ];
+  for (const [key, value] of manifestConstraintFields) {
+    if (value !== null && !(key in resolvedConstraints)) {
+      resolvedConstraints[key] = value;
+    }
+  }
+
+  // DA-1955: engine RegisterWorkflowNodeRequest is extra="forbid" without
+  // node_role/retry/node_status/deprecation — those keys are NOT emitted here.
   const payload: Record<string, unknown> = {
     name: definition.name,
     label: definition.title,
@@ -77,11 +92,8 @@ export function buildRegistryPayload(
     category: definition.category,
     token_cost: definition.token_cost,
     timeout_seconds: definition.timeout_seconds,
-    node_role: definition.role,
-    retry: definition.default_retry,
     tags: tags ?? [],
     styles: resolvedStyles,
-    node_status: nodeStatus,
   };
 
   if (invokeUrl !== undefined) {
@@ -90,11 +102,8 @@ export function buildRegistryPayload(
   if (invokeConfig !== undefined) {
     payload.invoke_config = invokeConfig;
   }
-  if (constraints !== undefined) {
-    payload.constraints = constraints;
-  }
-  if (definition.deprecation != null) {
-    payload.deprecation = definition.deprecation;
+  if (Object.keys(resolvedConstraints).length > 0) {
+    payload.constraints = resolvedConstraints;
   }
 
   return payload;

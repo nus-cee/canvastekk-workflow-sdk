@@ -173,6 +173,20 @@ export function createNodeApp(
       content.id = getNodeId(def);
       content.sdk_version = VERSION;
 
+      // DA-1955: parity with python drop-when-none serialization — omit null
+      // optional keys instead of leaking them as explicit nulls.
+      for (const key of [
+        "deprecation",
+        "minimum_sdk_version",
+        "maximum_sdk_version",
+        "docs_url",
+        "changelog_url",
+      ] as const) {
+        if (content[key] === null) {
+          delete content[key];
+        }
+      }
+
       const rawEnv = (process.env.CANVASTEKK_NODE_ENV ?? "dev").toLowerCase();
       let mode: string;
       if (["dev", "development", "test"].includes(rawEnv)) {

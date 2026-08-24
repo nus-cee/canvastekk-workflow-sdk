@@ -259,3 +259,15 @@ describe("POST /execute upload failure (DA-1711 parity)", () => {
     }
   });
 });
+
+describe("GET /manifest null-key stripping (DA-1955)", () => {
+  it("omits null optional keys instead of leaking explicit nulls", async () => {
+    const resp = await request(app).get("/manifest");
+    expect(resp.status).toBe(200);
+    expect(resp.body).not.toHaveProperty("deprecation");
+    expect(resp.body).not.toHaveProperty("minimum_sdk_version");
+    expect(resp.body).not.toHaveProperty("maximum_sdk_version");
+    expect(resp.body).not.toHaveProperty("docs_url");
+    expect(resp.body).not.toHaveProperty("changelog_url");
+  });
+});

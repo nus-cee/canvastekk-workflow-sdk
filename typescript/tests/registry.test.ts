@@ -34,14 +34,10 @@ describe("buildRegistryPayload", () => {
     expect(payload).not.toHaveProperty("id");
   });
 
-  it("maps default_retry to retry", () => {
+  it("omits retry from request payload (DA-1955)", () => {
     const payload = buildRegistryPayload(testDef);
-    expect(payload.retry).toEqual({
-      max_attempts: 1,
-      initial_delay_ms: 1000,
-      backoff_multiplier: 2.0,
-      max_delay_ms: 30000,
-    });
+    expect(payload).not.toHaveProperty("retry");
+    expect(payload).not.toHaveProperty("default_retry");
   });
 
   it("includes invoke_url when provided", () => {
@@ -59,9 +55,10 @@ describe("buildRegistryPayload", () => {
     expect(payload.invoke_type).toBe("http");
   });
 
-  it("includes node_role in payload", () => {
+  it("omits node_role from request payload (DA-1955)", () => {
     const payload = buildRegistryPayload(testDef);
-    expect(payload.node_role).toBe("operation");
+    expect(payload).not.toHaveProperty("node_role");
+    expect(payload).not.toHaveProperty("node_status");
   });
 
   it("omits deprecation when null (DA-1582)", () => {
@@ -69,7 +66,7 @@ describe("buildRegistryPayload", () => {
     expect(payload).not.toHaveProperty("deprecation");
   });
 
-  it("includes deprecation when set (DA-1582)", () => {
+  it("omits deprecation from request payload when set (DA-1955)", () => {
     const deprecated = {
       ...testDef,
       deprecation: {
@@ -81,13 +78,65 @@ describe("buildRegistryPayload", () => {
       },
     };
     const payload = buildRegistryPayload(deprecated);
-    expect(payload.deprecation).toEqual({
-      deprecated_at: "2026-08-01",
-      sunset_date: "2027-01-01",
-      replacement_slug: "echo-v2",
-      migration_url: "https://example.com/migrate",
-      notice: "use echo-v2",
+    expect(payload).not.toHaveProperty("deprecation");
+  });
+
+  it("merges manifest compat fields into constraints (DA-1955)", () => {
+    const def = {
+      ...testDef,
+      minimum_sdk_version: "0.22.0",
+      maximum_sdk_version: "1.0.0",
+      docs_url: "https://example.com/docs",
+      changelog_url: "https://example.com/changelog",
+    };
+    const payload = buildRegistryPayload(def);
+    expect(payload.constraints).toMatchObject({
+      minimum_sdk_version: "0.22.0",
+      maximum_sdk_version: "1.0.0",
+      docs_url: "https://example.com/docs",
+      changelog_url: "https://example.com/changelog",
     });
+  });
+
+  it("caller constraints win on key collision (DA-1955)", () => {
+    const def = { ...testDef, minimum_sdk_version: "0.22.0" };
+    const payload = buildRegistryPayload(def, {
+      constraints: { minimum_sdk_version: "0.21.0", gpu_required: true },
+    });
+    expect(payload.constraints).toEqual({
+      minimum_sdk_version: "0.21.0",
+      gpu_required: true,
+    });
+  });
+
+  it("omits constraints when nothing set (DA-1955)", () => {
+    const payload = buildRegistryPayload(testDef);
+    expect(payload).not.toHaveProperty("constraints");
+  });
+
+  it("payload keys are a subset of engine request fields (DA-1955)", () => {
+    const def = {
+      ...testDef,
+      minimum_sdk_version: "0.22.0",
+      docs_url: "https://example.com/docs",
+      deprecation: { notice: "soon" },
+    };
+    const payload = buildRegistryPayload(def, {
+      invokeUrl: "https://node.example.com",
+      invokeConfig: { region: "us-east-1" },
+      constraints: { gpu: true },
+    });
+    // Mirrors fastapi_app/schemas/api/nodes.py RegisterWorkflowNodeRequest
+    // (extra='forbid') in canvastekk-workflow-engine.
+    const engineRequestFields = new Set([
+      "name", "version", "label", "description",
+      "input_schema", "output_schema", "invoke_type", "invoke_url",
+      "invoke_config", "category", "tags", "styles", "constraints",
+      "token_cost", "timeout_seconds",
+    ]);
+    for (const key of Object.keys(payload)) {
+      expect(engineRequestFields.has(key)).toBe(true);
+    }
   });
 });
 
