@@ -119,6 +119,8 @@ export {
   registerNodeResultHas,
 } from "./registry.js";
 export type { InvokeType, RegisterNodeResult } from "./registry.js";
+export { diffManifests } from "./diff.js";
+export type { ManifestDiff } from "./diff.js";
 export {
   WorkflowBuilder,
   InProcessExecutor,
