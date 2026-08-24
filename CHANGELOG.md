@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.23.0] - 2026-08-24
+
+### Features
+
+- Diff CLI compat fields typed errors and robustness [DA-1955]
+
+
 ## [0.22.3] - 2026-08-22
 
 ### Testing
@@ -9,6 +16,11 @@ All notable changes to this project will be documented in this file.
 - **uploads**: Pin fixed-length identity PUT contract — DA-1900
 - **uploads**: Drop inert DEV_MODE setenv; correct plan release narrative
 - **uploads**: Pin fixed-length identity PUT contract — DA-1900 (#55)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.22.3
 
 
 ## [0.22.2] - 2026-08-19
