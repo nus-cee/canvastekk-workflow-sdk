@@ -92,13 +92,20 @@ def build_registry_payload(
 ) -> dict[str, Any]:
     """Build a registry-compatible payload dict from a WorkflowNodeManifest.
 
-    Centralizes field mapping (title->label, default_retry->retry, omit id)
-    so that ``register_node()`` and ``export_definition()`` share the same logic.
+    Centralizes field mapping (title->label, omit id) so that ``register_node()``
+    and ``export_definition()`` share the same logic.
 
-    The payload targets the engine's ``RegisterNodeRequest`` schema, which
-    registers a ``WorkflowNode`` (the registry-level node type). This is
+    The payload targets the engine's ``RegisterWorkflowNodeRequest`` schema,
+    which registers a ``WorkflowNode`` (the registry-level node type). This is
     distinct from ``WorkflowDefinitionNode`` (a node instance in a workflow
     definition).
+
+    DA-1955 payload alignment:
+        The engine request model is ``extra="forbid"`` and has no
+        ``node_role`` / ``retry`` / ``node_status`` / ``deprecation`` fields,
+        so those keys are NOT emitted here (the engine derives defaults for
+        them). ``export_definition()`` re-adds them for the full manifest
+        shape consumed by the node's ``/manifest`` endpoint.
 
     Versioning note:
         The ``version`` field in the payload is the node's semantic version
@@ -113,15 +120,28 @@ def build_registry_payload(
         invoke_url: URL/ARN for invoking the node.
         invoke_config: Extra invocation parameters.
         tags: Searchable tags for the registry.
-        constraints: Resource/compatibility constraints.
-        node_status: Registry status (active, inactive, dead).
+        constraints: Resource/compatibility constraints. Manifest compat
+            fields (``minimum_sdk_version`` / ``maximum_sdk_version``) and
+            docs fields are merged in; caller-supplied keys win on collision.
+        node_status: Ignored — kept for backward compatibility. The engine
+            request schema has no ``node_status`` field.
 
     Returns:
-        A dict matching the engine's RegisterNodeRequest schema.
+        A dict matching the engine's RegisterWorkflowNodeRequest schema.
     """
     resolved_styles = None
     if definition.styles is not None:
         resolved_styles = definition.styles.model_dump(mode="json")
+
+    resolved_constraints = dict(constraints) if constraints else {}
+    for key, value in (
+        ("minimum_sdk_version", definition.minimum_sdk_version),
+        ("maximum_sdk_version", definition.maximum_sdk_version),
+        ("docs_url", definition.docs_url),
+        ("changelog_url", definition.changelog_url),
+    ):
+        if value is not None and key not in resolved_constraints:
+            resolved_constraints[key] = value
 
     payload: dict[str, Any] = {
         "name": definition.name,
@@ -134,21 +154,16 @@ def build_registry_payload(
         "category": definition.category,
         "token_cost": definition.token_cost,
         "timeout_seconds": definition.timeout_seconds,
-        "node_role": definition.role.value,
-        "retry": definition.default_retry.model_dump(mode="json"),
         "tags": tags or [],
         "styles": resolved_styles,
-        "node_status": node_status,
     }
 
     if invoke_url is not None:
         payload["invoke_url"] = invoke_url
     if invoke_config is not None:
         payload["invoke_config"] = invoke_config
-    if constraints is not None:
-        payload["constraints"] = constraints
-    if definition.deprecation is not None:
-        payload["deprecation"] = definition.deprecation.model_dump(mode="json")
+    if resolved_constraints:
+        payload["constraints"] = resolved_constraints
 
     return payload
 
