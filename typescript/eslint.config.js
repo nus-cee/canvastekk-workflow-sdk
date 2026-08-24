@@ -5,13 +5,13 @@ export default tseslint.config(
   { ignores: ["dist/", "coverage/"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
-      { languageOptions: { ecmaVersion: "latest", sourceType: "module" } },
-      {
-        rules: {
-          "@typescript-eslint/no-unused-vars": [
-            "error",
-            { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
-          ],
-        },
-      },
-    );
+  { languageOptions: { ecmaVersion: "latest", sourceType: "module" } },
+  {
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
+    },
+  },
+);

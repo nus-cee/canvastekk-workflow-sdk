@@ -184,7 +184,6 @@ describe("BaseNode", () => {
 // NOTE: IPv4 literals are constructed from fragments because the vibeguard
 // secret-masking layer rewrites full dotted-quad literals in agent output.
 
-
 import { readdirSync, readFileSync, rmSync, existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

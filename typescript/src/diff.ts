@@ -19,7 +19,6 @@ export interface ManifestDiff {
 
 const HANDLED_KEYS: Set<string> = new Set(["input_schema", "output_schema", "name", "version", "id"]);
 
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

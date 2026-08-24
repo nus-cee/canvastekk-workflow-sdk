@@ -275,8 +275,7 @@ export abstract class BaseNode {
     let filename = `${fieldName}_${extractFilename(currentUrl, undefined)}`;
 
     let hops = 0;
-     
-    while (true) {
+     while (true) {
       if (cancelSignal?.aborted) {
         throw new NodeIOError(`Download for field '${fieldName}' was cancelled`);
       }
