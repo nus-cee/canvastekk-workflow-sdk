@@ -540,10 +540,18 @@ class TestBuildRegistryPayload:
         definition = self._make_definition()
         payload = build_registry_payload(definition)
         expected_keys = {
-            "name", "label", "version", "description",
-            "input_schema", "output_schema", "invoke_type",
-            "category", "token_cost", "timeout_seconds",
-            "tags", "styles",
+            "name",
+            "label",
+            "version",
+            "description",
+            "input_schema",
+            "output_schema",
+            "invoke_type",
+            "category",
+            "token_cost",
+            "timeout_seconds",
+            "tags",
+            "styles",
         }
         assert expected_keys.issubset(payload.keys())
 
@@ -555,10 +563,21 @@ class TestBuildRegistryPayload:
         after updating the engine schema.
         """
         engine_request_fields = {
-            "name", "version", "label", "description",
-            "input_schema", "output_schema", "invoke_type", "invoke_url",
-            "invoke_config", "category", "tags", "styles", "constraints",
-            "token_cost", "timeout_seconds",
+            "name",
+            "version",
+            "label",
+            "description",
+            "input_schema",
+            "output_schema",
+            "invoke_type",
+            "invoke_url",
+            "invoke_config",
+            "category",
+            "tags",
+            "styles",
+            "constraints",
+            "token_cost",
+            "timeout_seconds",
         }
         definition = self._make_definition(
             minimum_sdk_version="0.22.0",
@@ -777,3 +796,121 @@ class TestRegisterNodeResult:
         assert result.revision_id == "rev-456"
         assert result.previous_version == "0.9.0"
         assert result.changes == ["version", "input_schema"]
+
+
+class TestRegistrationErrorEnrichment:
+    """Tests for typed error_code/guidance from engine envelopes (DA-1955)."""
+
+    def _raise_via_register(self, node: DummyNode, mock_response: MagicMock) -> None:
+        """Run register_node against a mocked failing response."""
+        mock_response.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError(
+                str(mock_response.status_code), request=MagicMock(), response=mock_response
+            )
+        )
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response):
+            register_node(node, "https://registry.example.com/api/nodes", api_key="test-key")
+
+    def test_immutable_error_extracts_changed_fields(self) -> None:
+        """node_version_immutable 409 yields guidance naming changed fields."""
+        import json as _json
+
+        node = DummyNode()
+        detail = {
+            "name": "test-node",
+            "version": "1.0.0",
+            "changed_fields": [
+                {"field": "input_schema", "expected": {}, "actual": {"type": "object"}},
+                {"field": "invoke_url", "expected": "http://old", "actual": "http://new"},
+            ],
+        }
+        mock_response = MagicMock()
+        mock_response.status_code = 409
+        mock_response.json.return_value = {"error": "node_version_immutable", "detail": _json.dumps(detail)}
+        mock_response.text = '{"error": "node_version_immutable"}'
+
+        with pytest.raises(RegistrationError) as exc_info:
+            self._raise_via_register(node, mock_response)
+
+        assert exc_info.value.error_code == "node_version_immutable"
+        assert exc_info.value.status_code == 409
+        assert "input_schema" in (exc_info.value.guidance or "")
+        assert "invoke_url" in (exc_info.value.guidance or "")
+        assert "Bump" in (exc_info.value.guidance or "")
+
+    def test_other_409_gets_publish_higher_guidance(self) -> None:
+        """Older-semver 409 (resource conflict) yields publish-higher guidance."""
+        node = DummyNode()
+        mock_response = MagicMock()
+        mock_response.status_code = 409
+        mock_response.json.return_value = {"error": "resource_conflict", "detail": "1.2.0 is newer"}
+        mock_response.text = "{}"
+
+        with pytest.raises(RegistrationError) as exc_info:
+            self._raise_via_register(node, mock_response)
+
+        assert exc_info.value.error_code == "resource_conflict"
+        assert "higher" in (exc_info.value.guidance or "")
+
+    def test_422_fastapi_detail_list_surfaced(self) -> None:
+        """FastAPI default 422 detail list is surfaced as guidance."""
+        node = DummyNode()
+        mock_response = MagicMock()
+        mock_response.status_code = 422
+        mock_response.json.return_value = {
+            "detail": [{"loc": ["body", "name"], "msg": "Field required", "type": "missing"}]
+        }
+        mock_response.text = "{}"
+
+        with pytest.raises(RegistrationError) as exc_info:
+            self._raise_via_register(node, mock_response)
+
+        assert exc_info.value.status_code == 422
+        assert "name" in (exc_info.value.guidance or "")
+        assert "Field required" in (exc_info.value.guidance or "")
+
+    def test_400_canonical_errors_key_surfaced(self) -> None:
+        """Engine canonical 400 errors[] messages surface as guidance."""
+        node = DummyNode()
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_response.json.return_value = {
+            "error": "bad_request",
+            "errors": [{"field": "version", "message": "invalid semver"}],
+        }
+        mock_response.text = "{}"
+
+        with pytest.raises(RegistrationError) as exc_info:
+            self._raise_via_register(node, mock_response)
+
+        assert exc_info.value.error_code == "bad_request"
+        assert "invalid semver" in (exc_info.value.guidance or "")
+
+    def test_unmapped_envelope_attrs_none(self) -> None:
+        """Unmapped codes leave error_code/guidance as None-like (code set, guidance None)."""
+        node = DummyNode()
+        mock_response = MagicMock()
+        mock_response.status_code = 418
+        mock_response.json.return_value = {"error": "teapot", "detail": "short and stout"}
+        mock_response.text = "{}"
+
+        with pytest.raises(RegistrationError) as exc_info:
+            self._raise_via_register(node, mock_response)
+
+        assert exc_info.value.error_code == "teapot"
+        assert exc_info.value.guidance is None
+
+    def test_unparseable_body_attrs_none(self) -> None:
+        """Non-JSON bodies leave error_code/guidance None."""
+        node = DummyNode()
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.json.side_effect = ValueError("not json")
+        mock_response.text = "Internal Server Error"
+
+        with pytest.raises(RegistrationError) as exc_info:
+            self._raise_via_register(node, mock_response)
+
+        assert exc_info.value.error_code is None
+        assert exc_info.value.guidance is None
+        assert exc_info.value.status_code == 500

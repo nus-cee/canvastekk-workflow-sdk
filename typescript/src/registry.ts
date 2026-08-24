@@ -192,7 +192,13 @@ export async function registerNode(
 
     if (!resp.ok) {
       const body = await resp.text().catch(() => "");
-      throw new RegistrationError(resp.status, { detail: body });
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(body) as Record<string, unknown>;
+      } catch {
+        parsed = { detail: body };
+      }
+      throw new RegistrationError(resp.status, parsed);
     }
 
     const responseData = await resp.json() as Record<string, unknown>;

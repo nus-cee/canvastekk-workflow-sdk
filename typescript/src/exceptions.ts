@@ -232,6 +232,10 @@ export class WorkflowValidationError extends NodeExecutionError {
 export class RegistrationError extends Error {
   readonly statusCode: number;
   readonly body: Record<string, unknown>;
+  /** Engine error code from the envelope, or null when unmapped. */
+  readonly code: string | null;
+  /** Actionable fix suggestion derived from the envelope, or null. */
+  readonly guidance: string | null;
 
   /**
    * Creates a new RegistrationError.
@@ -244,7 +248,94 @@ export class RegistrationError extends Error {
     this.name = "RegistrationError";
     this.statusCode = statusCode;
     this.body = body;
+    const derived = deriveCodeAndGuidance(body, statusCode);
+    this.code = derived.code;
+    this.guidance = derived.guidance;
   }
+}
+
+/**
+ * Unwraps a JSON-encoded detail string (engine canonical errors).
+ * Non-string or unparsable values pass through unchanged.
+ */
+function parseDetail(detail: unknown): unknown {
+  if (typeof detail === "string") {
+    try {
+      return JSON.parse(detail);
+    } catch {
+      return detail;
+    }
+  }
+  return detail;
+}
+
+function collectFieldMessages(body: Record<string, unknown>, statusCode: number): string[] {
+  const messages: string[] = [];
+  const errors = body["errors"];
+  if (Array.isArray(errors)) {
+    for (const item of errors) {
+      if (typeof item === "object" && item !== null && item["message"]) {
+        messages.push(String(item["message"]));
+      } else if (typeof item === "string") {
+        messages.push(item);
+      }
+    }
+  }
+  if (messages.length === 0 && statusCode === 422) {
+    const detail = parseDetail(body["detail"]);
+    if (Array.isArray(detail)) {
+      for (const item of detail) {
+        if (typeof item === "object" && item !== null) {
+          const loc = Array.isArray(item["loc"])
+            ? (item["loc"] as unknown[]).filter((p) => p !== "body").join(".")
+            : "";
+          const msg = String(item["msg"] ?? "invalid value");
+          messages.push(loc ? `${loc}: ${msg}` : msg);
+        } else if (typeof item === "string") {
+          messages.push(item);
+        }
+      }
+    }
+  }
+  return messages;
+}
+
+function deriveCodeAndGuidance(
+  body: Record<string, unknown>,
+  statusCode: number,
+): { code: string | null; guidance: string | null } {
+  const rawCode = body["error"];
+  const code = typeof rawCode === "string" && rawCode.length > 0 ? rawCode : null;
+
+  if (code === "node_version_immutable") {
+    const detail = parseDetail(body["detail"]);
+    const changed: string[] = [];
+    if (typeof detail === "object" && detail !== null && Array.isArray((detail as Record<string, unknown>)["changed_fields"])) {
+      for (const item of (detail as Record<string, unknown>)["changed_fields"] as unknown[]) {
+        if (typeof item === "object" && item !== null && (item as Record<string, unknown>)["field"]) {
+          changed.push(String((item as Record<string, unknown>)["field"]));
+        }
+      }
+    }
+    const fields = changed.length > 0 ? changed.join(", ") : "unknown fields";
+    return {
+      code,
+      guidance: `This version is already published and immutable (changed: ${fields}). Bump 'version' to a higher semver and re-register.`,
+    };
+  }
+  if (statusCode === 409) {
+    return {
+      code,
+      guidance: "The registry rejected this version conflict. Publish a version higher than the current latest.",
+    };
+  }
+  if (statusCode === 400 || statusCode === 422) {
+    const messages = collectFieldMessages(body, statusCode);
+    if (messages.length > 0) {
+      return { code, guidance: `Fix the validation errors and retry: ${messages.join("; ")}` };
+    }
+  }
+  return { code, guidance: null };
 }
 
 /**

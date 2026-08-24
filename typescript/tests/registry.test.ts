@@ -5,6 +5,7 @@ import {
   registerNodeResultGet,
   registerNodeResultHas,
 } from "../src/registry.js";
+import { RegistrationError } from "../src/exceptions.js";
 import type { WorkflowNodeManifest } from "../src/definition.js";
 
 const testDef: WorkflowNodeManifest = {
@@ -183,5 +184,65 @@ describe("RegisterNodeResult dict-like access", () => {
 
   it("has returns false for missing key", () => {
     expect(registerNodeResultHas(result, "missing")).toBe(false);
+  });
+});
+
+describe("RegistrationError enrichment (DA-1955)", () => {
+  it("extracts changed fields from node_version_immutable detail", () => {
+    const detail = JSON.stringify({
+      name: "test-node",
+      version: "1.0.0",
+      changed_fields: [
+        { field: "input_schema", expected: {}, actual: { type: "object" } },
+        { field: "invoke_url", expected: "http://old", actual: "http://new" },
+      ],
+    });
+    const error = new RegistrationError(409, { error: "node_version_immutable", detail });
+
+    expect(error.code).toBe("node_version_immutable");
+    expect(error.guidance).toContain("input_schema");
+    expect(error.guidance).toContain("invoke_url");
+    expect(error.guidance).toContain("Bump");
+  });
+
+  it("maps other 409 to publish-higher guidance", () => {
+    const error = new RegistrationError(409, { error: "resource_conflict", detail: "1.2.0 is newer" });
+
+    expect(error.code).toBe("resource_conflict");
+    expect(error.guidance).toContain("higher");
+  });
+
+  it("surfaces FastAPI 422 detail list", () => {
+    const error = new RegistrationError(422, {
+      detail: [{ loc: ["body", "name"], msg: "Field required", type: "missing" }],
+    });
+
+    expect(error.statusCode).toBe(422);
+    expect(error.guidance).toContain("name");
+    expect(error.guidance).toContain("Field required");
+  });
+
+  it("surfaces canonical 400 errors[] messages", () => {
+    const error = new RegistrationError(400, {
+      error: "bad_request",
+      errors: [{ field: "version", message: "invalid semver" }],
+    });
+
+    expect(error.code).toBe("bad_request");
+    expect(error.guidance).toContain("invalid semver");
+  });
+
+  it("unmapped codes get null guidance", () => {
+    const error = new RegistrationError(418, { error: "teapot", detail: "short and stout" });
+
+    expect(error.code).toBe("teapot");
+    expect(error.guidance).toBeNull();
+  });
+
+  it("plain-text bodies keep null code", () => {
+    const error = new RegistrationError(500, { detail: "Internal Server Error" });
+
+    expect(error.code).toBeNull();
+    expect(error.guidance).toBeNull();
   });
 });
