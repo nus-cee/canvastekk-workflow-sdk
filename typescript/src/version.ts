@@ -1,4 +1,4 @@
 /**
  * SDK version string following semantic versioning (X.Y.Z).
  */
-export const VERSION = "0.22.3";
+export const VERSION = "0.23.0";
