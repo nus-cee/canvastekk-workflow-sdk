@@ -262,6 +262,17 @@ describe("POST /execute upload failure (DA-1711 parity)", () => {
 
 describe("GET /manifest null-key stripping (DA-1955)", () => {
   it("omits null optional keys instead of leaking explicit nulls", async () => {
+    class NullOptionalsNode extends TestNode {
+      definition: WorkflowNodeManifest = {
+        ...super.definition,
+        deprecation: null,
+        minimum_sdk_version: null,
+        maximum_sdk_version: null,
+        docs_url: null,
+        changelog_url: null,
+      } as WorkflowNodeManifest;
+    }
+    const app = createNodeApp(new NullOptionalsNode());
     const resp = await request(app).get("/manifest");
     expect(resp.status).toBe(200);
     expect(resp.body).not.toHaveProperty("deprecation");
@@ -269,5 +280,6 @@ describe("GET /manifest null-key stripping (DA-1955)", () => {
     expect(resp.body).not.toHaveProperty("maximum_sdk_version");
     expect(resp.body).not.toHaveProperty("docs_url");
     expect(resp.body).not.toHaveProperty("changelog_url");
+    expect(resp.body.name).toBe("test-node");
   });
 });
