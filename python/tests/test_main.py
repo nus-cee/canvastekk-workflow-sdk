@@ -173,3 +173,145 @@ def test_help_flag():
     assert "--json" in result.stdout
     assert "--version" in result.stdout
     assert "--help" in result.stdout
+
+
+def _write_manifest(directory: str, filename: str, manifest: dict) -> Path:
+    """Write a manifest dict to a JSON file and return its path."""
+    path = Path(directory) / filename
+    path.write_text(json.dumps(manifest))
+    return path
+
+
+_BASE_MANIFEST = {
+    "name": "test-node",
+    "version": "1.0.0",
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+    "output_schema": {"type": "object", "properties": {"result": {"type": "string"}}},
+}
+
+
+def test_diff_clean_change_exit_0():
+    """Test diff with a non-breaking change exits 0."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_file = _write_manifest(tmpdir, "old.json", _BASE_MANIFEST)
+        new_file = _write_manifest(
+            tmpdir,
+            "new.json",
+            {
+                **_BASE_MANIFEST,
+                "version": "1.1.0",
+                "title": "New Title",
+            },
+        )
+
+        result = subprocess.run(
+            [str(PYTHON_BIN), "-m", "canvastekk_workflow_sdk", "diff", str(old_file), str(new_file)],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 0, (
+            f"Expected exit 0, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )
+        assert "BREAKING" not in result.stdout
+
+
+def test_diff_breaking_change_exit_1():
+    """Test diff with a breaking change exits 1 and reports it."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_file = _write_manifest(tmpdir, "old.json", _BASE_MANIFEST)
+        new_file = _write_manifest(
+            tmpdir,
+            "new.json",
+            {**_BASE_MANIFEST, "version": "2.0.0", "output_schema": {"type": "object", "properties": {}}},
+        )
+
+        result = subprocess.run(
+            [str(PYTHON_BIN), "-m", "canvastekk_workflow_sdk", "diff", str(old_file), str(new_file)],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 1, (
+            f"Expected exit 1, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )
+        assert "BREAKING" in result.stdout
+        assert "removed output" in result.stdout
+
+
+def test_diff_malformed_json_exit_2():
+    """Test diff with malformed JSON exits 2."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_file = Path(tmpdir) / "old.json"
+        old_file.write_text('{"name": "test-node"')
+        new_file = _write_manifest(tmpdir, "new.json", _BASE_MANIFEST)
+
+        result = subprocess.run(
+            [str(PYTHON_BIN), "-m", "canvastekk_workflow_sdk", "diff", str(old_file), str(new_file)],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 2, (
+            f"Expected exit 2, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )
+
+
+def test_diff_missing_file_exit_2():
+    """Test diff with a missing file exits 2."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_file = Path(tmpdir) / "does-not-exist.json"
+        new_file = _write_manifest(tmpdir, "new.json", _BASE_MANIFEST)
+
+        result = subprocess.run(
+            [str(PYTHON_BIN), "-m", "canvastekk_workflow_sdk", "diff", str(old_file), str(new_file)],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 2, (
+            f"Expected exit 2, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )
+
+
+def test_diff_wrong_arg_count_exit_2():
+    """Test diff without exactly two paths exits 2."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        only_file = _write_manifest(tmpdir, "only.json", _BASE_MANIFEST)
+
+        result = subprocess.run(
+            [str(PYTHON_BIN), "-m", "canvastekk_workflow_sdk", "diff", str(only_file)],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 2, (
+            f"Expected exit 2, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )
+
+
+def test_diff_json_flag_outputs_valid_json():
+    """Test diff --json outputs machine-readable JSON with contract keys."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_file = _write_manifest(tmpdir, "old.json", _BASE_MANIFEST)
+        new_file = _write_manifest(
+            tmpdir,
+            "new.json",
+            {**_BASE_MANIFEST, "version": "1.1.0", "title": "New Title"},
+        )
+
+        result = subprocess.run(
+            [str(PYTHON_BIN), "-m", "canvastekk_workflow_sdk", "diff", str(old_file), str(new_file), "--json"],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 0, (
+            f"Expected exit 0, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )
+        payload = json.loads(result.stdout)
+        assert payload["breaking"] is False
+        assert "breaking_changes" in payload
+        assert "non_breaking_changes" in payload
+        assert payload["old_version"] == "1.0.0"
+        assert payload["new_version"] == "1.1.0"
