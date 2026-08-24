@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.23.1] - 2026-08-24
+
+### Bug Fixes
+
+- **lint**: Commit eslint 9 flat config so npm run lint gates CI [DA-1968] (#57)
+
+
 ## [0.23.0] - 2026-08-24
 
 ### Features
 
 - Diff CLI compat fields typed errors and robustness [DA-1955]
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.23.0
 
 
 ## [0.22.3] - 2026-08-22
