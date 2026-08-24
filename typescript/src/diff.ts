@@ -33,6 +33,16 @@ function versionTuple(version: string): [number, number, number] {
   return [Number(parts[0]), Number(parts[1]), Number(parts[2])];
 }
 
+function compareVersionTuples(
+  a: [number, number, number],
+  b: [number, number, number],
+): number {
+  for (let i = 0; i < 3; i++) {
+    if (a[i] !== b[i]) return a[i] - b[i];
+  }
+  return 0;
+}
+
 function classifyBump(oldVersion: string, newVersion: string): "major" | "minor" | "patch" | null {
   const [oldMajor, oldMinor, oldPatch] = versionTuple(oldVersion);
   const [newMajor, newMinor, newPatch] = versionTuple(newVersion);
@@ -92,6 +102,7 @@ export function diffManifests(
 
   const oldVersion = oldManifest["version"];
   const newVersion = newManifest["version"];
+  let versionsParsed = false;
   if (typeof oldVersion !== "string" || typeof newVersion !== "string") {
     diff.errors.push("both manifests must carry a 'version' field");
   } else {
@@ -99,6 +110,12 @@ export function diffManifests(
     diff.newVersion = newVersion;
     try {
       diff.versionBump = classifyBump(oldVersion, newVersion);
+      versionsParsed = true;
+      if (compareVersionTuples(versionTuple(oldVersion), versionTuple(newVersion)) > 0) {
+        diff.errors.push(
+          `version downgrade: '${oldVersion}' -> '${newVersion}' (publish a higher semver)`,
+        );
+      }
     } catch (error) {
       diff.errors.push(error instanceof Error ? error.message : String(error));
     }
@@ -145,7 +162,11 @@ export function diffManifests(
 
   diff.breaking = diff.breakingChanges.length > 0;
 
-  if (diff.versionBump === null && (diff.breakingChanges.length > 0 || diff.nonBreakingChanges.length > 0)) {
+  if (
+    versionsParsed &&
+    diff.versionBump === null &&
+    (diff.breakingChanges.length > 0 || diff.nonBreakingChanges.length > 0)
+  ) {
     diff.errors.push(
       `same version '${String(oldVersion)}' but the manifest changed; publish a higher semver`,
     );

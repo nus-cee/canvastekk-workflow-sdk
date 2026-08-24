@@ -248,6 +248,17 @@ export function exportDefinition(
     nodeStatus: opts.nodeStatus,
   });
 
+  // DA-1955: full manifest shape (parity with python export_definition).
+  // The exported file targets the node's /manifest endpoint format
+  // (SDKNodeDefinition, extra-tolerant), not the engine's extra="forbid"
+  // registration request — re-add registry-only keys the payload omits.
+  registryDict.node_role = definition.role;
+  registryDict.retry = definition.default_retry;
+  registryDict.node_status = opts.nodeStatus ?? "active";
+  if (definition.deprecation !== null) {
+    registryDict.deprecation = definition.deprecation;
+  }
+
   if (opts.styles !== undefined && opts.styles !== null) {
     registryDict.styles = opts.styles;
   }

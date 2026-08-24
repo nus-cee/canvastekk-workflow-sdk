@@ -5,6 +5,7 @@ import { getNodeId, getFileOutputFields } from "./definition.js";
 import { NodeTimeoutError, NodeExecutionError, getHttpStatusForError } from "./exceptions.js";
 import { configureLogging } from "./logging.js";
 import { SDKVersionMiddleware } from "./middleware.js";
+import { CANVASTEKK_AUTH_MARKER } from "./auth.js";
 import type { BaseNode } from "./base-node.js";
 import { NodeExecutionRequestSchema } from "./request.js";
 import { HealthResponseSchema } from "./response.js";
@@ -28,6 +29,17 @@ export interface CreateNodeAppOptions {
  * @param opts - Optional configuration for dependencies and extra routes
  * @returns Configured Express application
  */
+/** True when any dependency middleware was produced by NodeAuth (DA-1955). */
+function hasAuthDependency(
+  dependencies?: Array<(req: Request, res: Response, next: NextFunction) => void>,
+): boolean {
+  return (
+    dependencies?.some(
+      (dep) => (dep as unknown as Record<string, unknown>)[CANVASTEKK_AUTH_MARKER] === true,
+    ) ?? false
+  );
+}
+
 export function createNodeApp(
   node: BaseNode,
   opts: CreateNodeAppOptions = {},
@@ -45,7 +57,7 @@ export function createNodeApp(
       "[canvastekk] CANVASTEKK_DEV_MODE is active: ALL authentication is bypassed " +
         "and URL policy restrictions are lifted. Never enable in production.",
     );
-  } else if (!opts.dependencies || opts.dependencies.length === 0) {
+  } else if (!hasAuthDependency(opts.dependencies)) {
     console.warn(
       "[canvastekk] Node server starting with NO authentication configured. " +
         "Every endpoint (incl. /execute, /metrics) is unauthenticated. " +

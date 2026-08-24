@@ -27,6 +27,18 @@ export type AuthMiddleware = (
 ) => void;
 
 /**
+ * Property tagged on middleware produced by NodeAuth factories so callers
+ * (e.g. createNodeApp) can detect that authentication is configured.
+ */
+export const CANVASTEKK_AUTH_MARKER = "_canvastekkAuth";
+
+/** Tags an auth middleware with the detection marker and returns it. */
+function markAuth<T extends AuthMiddleware>(mw: T): T {
+  return Object.assign(mw, { [CANVASTEKK_AUTH_MARKER]: true });
+}
+
+
+/**
  * Sends a 401 Unauthorized JSON response.
  *
  * @param res - Express response object
@@ -46,7 +58,7 @@ export class NodeAuth {
    * @returns Express middleware function
    */
   static apiKey(keyEnvVar = "CANVASTEKK_API_KEY"): AuthMiddleware {
-    return (req: Request, res: Response, next: NextFunction) => {
+    return markAuth((req: Request, res: Response, next: NextFunction) => {
       if (isDevMode()) {
         next();
         return;
@@ -68,7 +80,7 @@ export class NodeAuth {
       }
 
       next();
-    };
+    });
   }
 
   /**
@@ -85,7 +97,7 @@ export class NodeAuth {
     const algorithm = opts?.algorithm ?? "HS256";
     const audience = opts?.audience;
 
-    return async (req: Request, res: Response, next: NextFunction) => {
+    return markAuth(async (req: Request, res: Response, next: NextFunction) => {
       if (isDevMode()) {
         next();
         return;
@@ -119,7 +131,7 @@ export class NodeAuth {
           unauthorized(res, `Invalid token: ${msg}`);
         }
       }
-    };
+    });
   }
 
   /**
@@ -203,7 +215,7 @@ export class NodeAuth {
       return map;
     }
 
-    return async (req: Request, res: Response, next: NextFunction) => {
+    return markAuth(async (req: Request, res: Response, next: NextFunction) => {
       if (isDevMode()) {
         next();
         return;
@@ -286,6 +298,6 @@ export class NodeAuth {
           unauthorized(res, `Invalid token: ${msg}`);
         }
       }
-    };
+    });
   }
 }

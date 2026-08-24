@@ -136,7 +136,7 @@ def create_node_app(
     *,
     dependencies: Sequence[Any] | None = None,
     extra_routes: list[APIRouter] | None = None,
-    auth: _AuthBackend | str | None = None,
+    auth: _AuthBackend | Literal["api-key"] | None = None,
     **fastapi_kwargs: Any,
 ) -> FastAPI:
     """
@@ -411,8 +411,6 @@ def create_node_app(
         Used by registry for auto-discovery and manifest cross-checking.
         The engine reads ``mode`` to decide routing and test behaviour.
         """
-        import os
-
         import canvastekk_workflow_sdk
 
         content = node.definition.to_dict()

@@ -193,3 +193,32 @@ class TestManifestDiffDefaults:
         assert diff.old_version is None
         assert diff.new_version is None
         assert diff.version_bump is None
+
+
+class TestVersionDowngradeAndParseGating:
+    """DA-1955 review fixes: downgrade detection + parsed-version error gating."""
+
+    def test_version_downgrade_is_error(self) -> None:
+        old = {"name": "n", "version": "2.0.0", "input_schema": {}}
+        new = {"name": "n", "version": "1.0.0", "input_schema": {}}
+        diff = diff_manifests(old, new)
+
+        assert diff.errors == [
+            "version downgrade: '2.0.0' -> '1.0.0' (publish a higher semver)"
+        ]
+
+    def test_unparsable_version_no_same_version_error(self) -> None:
+        old = {"name": "n", "version": "1.0", "input_schema": {}}
+        new = {"name": "n", "version": "1.0", "input_schema": {}, "title": "T"}
+        diff = diff_manifests(old, new)
+
+        assert len(diff.errors) == 1
+        assert "MAJOR.MINOR.PATCH" in diff.errors[0]
+        assert "same version" not in diff.errors[0]
+
+    def test_missing_version_no_same_version_error(self) -> None:
+        old = {"name": "n", "input_schema": {}}
+        new = {"name": "n", "input_schema": {}, "title": "T"}
+        diff = diff_manifests(old, new)
+
+        assert diff.errors == ["both manifests must carry a 'version' field"]

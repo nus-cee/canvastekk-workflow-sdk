@@ -6,6 +6,10 @@ import {
   registerNodeResultHas,
 } from "../src/registry.js";
 import { RegistrationError } from "../src/exceptions.js";
+import { exportDefinition } from "../src/registry.js";
+import { readFileSync, rmSync } from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 import type { WorkflowNodeManifest } from "../src/definition.js";
 
 const testDef: WorkflowNodeManifest = {
@@ -244,5 +248,41 @@ describe("RegistrationError enrichment (DA-1955)", () => {
 
     expect(error.code).toBeNull();
     expect(error.guidance).toBeNull();
+  });
+});
+
+describe("exportDefinition full manifest shape (DA-1955 review fix)", () => {
+  it("re-adds node_role retry node_status and deprecation for /manifest format", () => {
+    const deprecation = {
+      deprecated_at: "2026-08-24",
+      notice: "Use echo-v2",
+    };
+    const def: WorkflowNodeManifest = {
+      ...testDef,
+      deprecation,
+    } as WorkflowNodeManifest;
+    const outPath = path.join(os.tmpdir(), `sdk-export-test-${Date.now()}.json`);
+    try {
+      exportDefinition(def, outPath);
+      const exported = JSON.parse(readFileSync(outPath, "utf8")) as Record<string, unknown>;
+      expect(exported["node_role"]).toBe("operation");
+      expect(exported["retry"]).toEqual(testDef.default_retry);
+      expect(exported["node_status"]).toBe("active");
+      expect(exported["deprecation"]).toEqual(deprecation);
+    } finally {
+      rmSync(outPath, { force: true });
+    }
+  });
+
+  it("omits deprecation when unset", () => {
+    const outPath = path.join(os.tmpdir(), `sdk-export-test-${Date.now()}.json`);
+    try {
+      exportDefinition(testDef, outPath);
+      const exported = JSON.parse(readFileSync(outPath, "utf8")) as Record<string, unknown>;
+      expect(exported["deprecation"]).toBeUndefined();
+      expect(exported["node_status"]).toBe("active");
+    } finally {
+      rmSync(outPath, { force: true });
+    }
   });
 });

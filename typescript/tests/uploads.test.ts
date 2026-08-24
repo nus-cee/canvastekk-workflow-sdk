@@ -225,3 +225,12 @@ describe("S3PresignedUploader retry (DA-1955)", () => {
     }
   });
 });
+
+describe("retry classification (DA-1955 review fix)", () => {
+  it("missing local file fails fast without retries (ENOENT is not transient)", async () => {
+    const uploader = new S3PresignedUploader();
+    await expect(
+      uploader.uploadFile("/nonexistent/sdk-test-file.bin", "http://127.0.0.1:1/presigned"),
+    ).rejects.toThrow(/ENOENT/);
+  });
+});

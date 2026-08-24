@@ -292,3 +292,16 @@ describe("GET /manifest null-key stripping (DA-1955)", () => {
     expect(resp.body.name).toBe("null-opt-node");
   });
 });
+
+describe("auth middleware detection (DA-1955 review fix)", () => {
+  it("tags NodeAuth middleware with the detection marker", async () => {
+    const { CANVASTEKK_AUTH_MARKER } = await import("../src/auth.js");
+    const mw = NodeAuth.apiKey() as unknown as Record<string, unknown>;
+    expect(mw[CANVASTEKK_AUTH_MARKER]).toBe(true);
+  });
+
+  it("plain middleware is not tagged as auth", () => {
+    const plain = (req: unknown, res: unknown, next: () => void) => next();
+    expect((plain as unknown as Record<string, unknown>)["_canvastekkAuth"]).toBeUndefined();
+  });
+});

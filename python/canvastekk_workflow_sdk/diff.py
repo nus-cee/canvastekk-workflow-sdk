@@ -122,16 +122,23 @@ def diff_manifests(old: dict[str, Any], new: dict[str, Any]) -> ManifestDiff:
         diff.errors.append(f"name mismatch: '{old_name}' -> '{new_name}' (publish a new node, not a new version)")
 
     bump: str | None = None
+    versions_parsed = False
     if diff.old_version is None or diff.new_version is None:
         diff.errors.append("both manifests must carry a 'version' field")
     else:
         try:
             bump = _classify_bump(diff.old_version, diff.new_version)
             diff.version_bump = bump
+            versions_parsed = True
         except ValueError:
             diff.errors.append(
                 f"versions must be strict MAJOR.MINOR.PATCH (got '{diff.old_version}' -> '{diff.new_version}')"
             )
+        else:
+            if _version_tuple(str(diff.old_version)) > _version_tuple(str(diff.new_version)):
+                diff.errors.append(
+                    f"version downgrade: '{diff.old_version}' -> '{diff.new_version}' (publish a higher semver)"
+                )
 
     old_required = set(_schema_block(old, "input_schema").get("required") or [])
     new_required = set(_schema_block(new, "input_schema").get("required") or [])
@@ -158,7 +165,7 @@ def diff_manifests(old: dict[str, Any], new: dict[str, Any]) -> ManifestDiff:
 
     diff.breaking = bool(diff.breaking_changes)
 
-    if bump is None and (diff.breaking_changes or diff.non_breaking_changes):
+    if versions_parsed and bump is None and (diff.breaking_changes or diff.non_breaking_changes):
         diff.errors.append(f"same version '{diff.old_version}' but the manifest changed; publish a higher semver")
     if diff.breaking and bump != "major":
         diff.errors.append(
