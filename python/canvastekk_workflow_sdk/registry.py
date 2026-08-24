@@ -7,6 +7,7 @@ registry via its REST API. Intended for use in CI/CD pipelines.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING, Any, Literal, get_args
 
@@ -24,19 +25,168 @@ VALID_INVOKE_TYPES: set[str] = set(get_args(InvokeType))
 
 
 class RegistrationError(Exception):
-    """Raised when node registration fails."""
+    """Raised when node registration fails.
 
-    def __init__(self, message: str, *, status_code: int | None = None, body: str | None = None) -> None:
+    Attributes:
+        status_code: HTTP status code from registry.
+        body: Response body from registry.
+        error_code: Engine error code from the response envelope
+            (e.g. ``"node_version_immutable"``), or ``None`` when unmapped.
+        guidance: Actionable fix suggestion derived from the engine
+            envelope, or ``None`` when unmapped.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        body: str | None = None,
+        error_code: str | None = None,
+        guidance: str | None = None,
+    ) -> None:
         """Initialize the registration exception.
 
         Args:
             message: Human-readable error message.
             status_code: HTTP status code from registry.
             body: Response body from registry.
+            error_code: Engine error code from the response envelope.
+            guidance: Actionable fix suggestion.
         """
         super().__init__(message)
         self.status_code = status_code
         self.body = body
+        self.error_code = error_code
+        self.guidance = guidance
+
+
+def _parse_error_envelope(payload: object) -> dict[str, Any] | None:
+    """Return the envelope dict when the payload looks like the engine error shape.
+
+    Args:
+        payload: Parsed JSON value from the error response.
+
+    Returns:
+        The envelope dict, or ``None`` when the payload is not a mapping.
+    """
+    return payload if isinstance(payload, dict) else None
+
+
+def _parse_detail(detail: object) -> object:
+    """Unwrap a JSON-encoded detail string (engine canonical errors).
+
+    The engine serializes structured detail via ``json.dumps``; parsing it
+    again recovers the structured dict. Non-string or unparsable values
+    pass through unchanged.
+
+    Args:
+        detail: Raw ``detail`` value from the envelope.
+
+    Returns:
+        The parsed detail, or the original value.
+    """
+    if isinstance(detail, str):
+        try:
+            return json.loads(detail)
+        except ValueError:
+            return detail
+    return detail
+
+
+def _collect_field_messages(envelope: dict[str, Any], status_code: int) -> list[str]:
+    """Collect human-readable validation messages across envelope shapes.
+
+    Handles the engine canonical ``errors[]`` key (HTTP 400) and FastAPI's
+    default ``detail`` list (HTTP 422).
+
+    Args:
+        envelope: Parsed response envelope.
+        status_code: HTTP status code of the response.
+
+    Returns:
+        List of short validation messages.
+    """
+    messages: list[str] = []
+    errors = envelope.get("errors")
+    if isinstance(errors, list):
+        for item in errors:
+            if isinstance(item, dict) and item.get("message"):
+                messages.append(str(item["message"]))
+            elif isinstance(item, str):
+                messages.append(item)
+    if not messages and status_code == 422:
+        detail = _parse_detail(envelope.get("detail"))
+        if isinstance(detail, list):
+            for item in detail:
+                if isinstance(item, dict):
+                    loc = ".".join(str(p) for p in item.get("loc", []) if p != "body")
+                    msg = item.get("msg", "invalid value")
+                    messages.append(f"{loc}: {msg}" if loc else str(msg))
+                elif isinstance(item, str):
+                    messages.append(item)
+    return messages
+
+
+def _enrich_registration_error(e: httpx.HTTPStatusError) -> RegistrationError:
+    """Build a RegistrationError with error_code and guidance from the envelope.
+
+    Mappings (codes reachable from the register endpoint):
+
+    - ``node_version_immutable`` (409): same version re-registered with
+      changed data. Guidance lists the changed fields and the bump rule.
+    - other 409 (e.g. older-semver resource conflict): publish a higher
+      version than the current latest.
+    - 400/422: validation failures; guidance lists field messages.
+
+    Unparseable or unmapped bodies fall back to attrs ``None``.
+
+    Args:
+        e: The httpx status error raised by ``raise_for_status``.
+
+    Returns:
+        The enriched :class:`RegistrationError`.
+    """
+    status_code = e.response.status_code
+    try:
+        envelope = _parse_error_envelope(e.response.json())
+    except ValueError:
+        envelope = None
+
+    error_code: str | None = None
+    guidance: str | None = None
+
+    if envelope is not None:
+        raw_code = envelope.get("error")
+        if isinstance(raw_code, str) and raw_code:
+            error_code = raw_code
+
+        if error_code == "node_version_immutable":
+            detail = _parse_detail(envelope.get("detail"))
+            changed: list[str] = []
+            if isinstance(detail, dict) and isinstance(detail.get("changed_fields"), list):
+                for item in detail["changed_fields"]:
+                    if isinstance(item, dict) and item.get("field"):
+                        changed.append(str(item["field"]))
+            fields = ", ".join(changed) if changed else "unknown fields"
+            guidance = (
+                "This version is already published and immutable "
+                f"(changed: {fields}). Bump 'version' to a higher semver and re-register."
+            )
+        elif status_code == 409:
+            guidance = "The registry rejected this version conflict. Publish a version higher than the current latest."
+        elif status_code in (400, 422):
+            messages = _collect_field_messages(envelope, status_code)
+            if messages:
+                guidance = "Fix the validation errors and retry: " + "; ".join(messages)
+
+    return RegistrationError(
+        f"Registration failed: {e}",
+        status_code=status_code,
+        body=e.response.text,
+        error_code=error_code,
+        guidance=guidance,
+    )
 
 
 class RegisterNodeResult(BaseModel):
@@ -92,13 +242,20 @@ def build_registry_payload(
 ) -> dict[str, Any]:
     """Build a registry-compatible payload dict from a WorkflowNodeManifest.
 
-    Centralizes field mapping (title->label, default_retry->retry, omit id)
-    so that ``register_node()`` and ``export_definition()`` share the same logic.
+    Centralizes field mapping (title->label, omit id) so that ``register_node()``
+    and ``export_definition()`` share the same logic.
 
-    The payload targets the engine's ``RegisterNodeRequest`` schema, which
-    registers a ``WorkflowNode`` (the registry-level node type). This is
+    The payload targets the engine's ``RegisterWorkflowNodeRequest`` schema,
+    which registers a ``WorkflowNode`` (the registry-level node type). This is
     distinct from ``WorkflowDefinitionNode`` (a node instance in a workflow
     definition).
+
+    DA-1955 payload alignment:
+        The engine request model is ``extra="forbid"`` and has no
+        ``node_role`` / ``retry`` / ``node_status`` / ``deprecation`` fields,
+        so those keys are NOT emitted here (the engine derives defaults for
+        them). ``export_definition()`` re-adds them for the full manifest
+        shape consumed by the node's ``/manifest`` endpoint.
 
     Versioning note:
         The ``version`` field in the payload is the node's semantic version
@@ -113,15 +270,28 @@ def build_registry_payload(
         invoke_url: URL/ARN for invoking the node.
         invoke_config: Extra invocation parameters.
         tags: Searchable tags for the registry.
-        constraints: Resource/compatibility constraints.
-        node_status: Registry status (active, inactive, dead).
+        constraints: Resource/compatibility constraints. Manifest compat
+            fields (``minimum_sdk_version`` / ``maximum_sdk_version``) and
+            docs fields are merged in; caller-supplied keys win on collision.
+        node_status: Ignored — kept for backward compatibility. The engine
+            request schema has no ``node_status`` field.
 
     Returns:
-        A dict matching the engine's RegisterNodeRequest schema.
+        A dict matching the engine's RegisterWorkflowNodeRequest schema.
     """
     resolved_styles = None
     if definition.styles is not None:
         resolved_styles = definition.styles.model_dump(mode="json")
+
+    resolved_constraints = dict(constraints) if constraints else {}
+    for key, value in (
+        ("minimum_sdk_version", definition.minimum_sdk_version),
+        ("maximum_sdk_version", definition.maximum_sdk_version),
+        ("docs_url", definition.docs_url),
+        ("changelog_url", definition.changelog_url),
+    ):
+        if value is not None and key not in resolved_constraints:
+            resolved_constraints[key] = value
 
     payload: dict[str, Any] = {
         "name": definition.name,
@@ -134,21 +304,16 @@ def build_registry_payload(
         "category": definition.category,
         "token_cost": definition.token_cost,
         "timeout_seconds": definition.timeout_seconds,
-        "node_role": definition.role.value,
-        "retry": definition.default_retry.model_dump(mode="json"),
         "tags": tags or [],
         "styles": resolved_styles,
-        "node_status": node_status,
     }
 
     if invoke_url is not None:
         payload["invoke_url"] = invoke_url
     if invoke_config is not None:
         payload["invoke_config"] = invoke_config
-    if constraints is not None:
-        payload["constraints"] = constraints
-    if definition.deprecation is not None:
-        payload["deprecation"] = definition.deprecation.model_dump(mode="json")
+    if resolved_constraints:
+        payload["constraints"] = resolved_constraints
 
     return payload
 
@@ -303,10 +468,6 @@ def register_node(
             changes=changes,
         )
     except httpx.HTTPStatusError as e:
-        raise RegistrationError(
-            f"Registration failed: {e}",
-            status_code=e.response.status_code,
-            body=e.response.text,
-        ) from e
+        raise _enrich_registration_error(e) from e
     except httpx.HTTPError as e:
         raise RegistrationError(f"Registration failed: {e}") from e

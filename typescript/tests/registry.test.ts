@@ -5,6 +5,11 @@ import {
   registerNodeResultGet,
   registerNodeResultHas,
 } from "../src/registry.js";
+import { RegistrationError } from "../src/exceptions.js";
+import { exportDefinition } from "../src/registry.js";
+import { readFileSync, rmSync } from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 import type { WorkflowNodeManifest } from "../src/definition.js";
 
 const testDef: WorkflowNodeManifest = {
@@ -34,14 +39,10 @@ describe("buildRegistryPayload", () => {
     expect(payload).not.toHaveProperty("id");
   });
 
-  it("maps default_retry to retry", () => {
+  it("omits retry from request payload (DA-1955)", () => {
     const payload = buildRegistryPayload(testDef);
-    expect(payload.retry).toEqual({
-      max_attempts: 1,
-      initial_delay_ms: 1000,
-      backoff_multiplier: 2.0,
-      max_delay_ms: 30000,
-    });
+    expect(payload).not.toHaveProperty("retry");
+    expect(payload).not.toHaveProperty("default_retry");
   });
 
   it("includes invoke_url when provided", () => {
@@ -59,9 +60,10 @@ describe("buildRegistryPayload", () => {
     expect(payload.invoke_type).toBe("http");
   });
 
-  it("includes node_role in payload", () => {
+  it("omits node_role from request payload (DA-1955)", () => {
     const payload = buildRegistryPayload(testDef);
-    expect(payload.node_role).toBe("operation");
+    expect(payload).not.toHaveProperty("node_role");
+    expect(payload).not.toHaveProperty("node_status");
   });
 
   it("omits deprecation when null (DA-1582)", () => {
@@ -69,7 +71,7 @@ describe("buildRegistryPayload", () => {
     expect(payload).not.toHaveProperty("deprecation");
   });
 
-  it("includes deprecation when set (DA-1582)", () => {
+  it("omits deprecation from request payload when set (DA-1955)", () => {
     const deprecated = {
       ...testDef,
       deprecation: {
@@ -81,13 +83,65 @@ describe("buildRegistryPayload", () => {
       },
     };
     const payload = buildRegistryPayload(deprecated);
-    expect(payload.deprecation).toEqual({
-      deprecated_at: "2026-08-01",
-      sunset_date: "2027-01-01",
-      replacement_slug: "echo-v2",
-      migration_url: "https://example.com/migrate",
-      notice: "use echo-v2",
+    expect(payload).not.toHaveProperty("deprecation");
+  });
+
+  it("merges manifest compat fields into constraints (DA-1955)", () => {
+    const def = {
+      ...testDef,
+      minimum_sdk_version: "0.22.0",
+      maximum_sdk_version: "1.0.0",
+      docs_url: "https://example.com/docs",
+      changelog_url: "https://example.com/changelog",
+    };
+    const payload = buildRegistryPayload(def);
+    expect(payload.constraints).toMatchObject({
+      minimum_sdk_version: "0.22.0",
+      maximum_sdk_version: "1.0.0",
+      docs_url: "https://example.com/docs",
+      changelog_url: "https://example.com/changelog",
     });
+  });
+
+  it("caller constraints win on key collision (DA-1955)", () => {
+    const def = { ...testDef, minimum_sdk_version: "0.22.0" };
+    const payload = buildRegistryPayload(def, {
+      constraints: { minimum_sdk_version: "0.21.0", gpu_required: true },
+    });
+    expect(payload.constraints).toEqual({
+      minimum_sdk_version: "0.21.0",
+      gpu_required: true,
+    });
+  });
+
+  it("omits constraints when nothing set (DA-1955)", () => {
+    const payload = buildRegistryPayload(testDef);
+    expect(payload).not.toHaveProperty("constraints");
+  });
+
+  it("payload keys are a subset of engine request fields (DA-1955)", () => {
+    const def = {
+      ...testDef,
+      minimum_sdk_version: "0.22.0",
+      docs_url: "https://example.com/docs",
+      deprecation: { notice: "soon" },
+    };
+    const payload = buildRegistryPayload(def, {
+      invokeUrl: "https://node.example.com",
+      invokeConfig: { region: "us-east-1" },
+      constraints: { gpu: true },
+    });
+    // Mirrors fastapi_app/schemas/api/nodes.py RegisterWorkflowNodeRequest
+    // (extra='forbid') in canvastekk-workflow-engine.
+    const engineRequestFields = new Set([
+      "name", "version", "label", "description",
+      "input_schema", "output_schema", "invoke_type", "invoke_url",
+      "invoke_config", "category", "tags", "styles", "constraints",
+      "token_cost", "timeout_seconds",
+    ]);
+    for (const key of Object.keys(payload)) {
+      expect(engineRequestFields.has(key)).toBe(true);
+    }
   });
 });
 
@@ -134,5 +188,101 @@ describe("RegisterNodeResult dict-like access", () => {
 
   it("has returns false for missing key", () => {
     expect(registerNodeResultHas(result, "missing")).toBe(false);
+  });
+});
+
+describe("RegistrationError enrichment (DA-1955)", () => {
+  it("extracts changed fields from node_version_immutable detail", () => {
+    const detail = JSON.stringify({
+      name: "test-node",
+      version: "1.0.0",
+      changed_fields: [
+        { field: "input_schema", expected: {}, actual: { type: "object" } },
+        { field: "invoke_url", expected: "http://old", actual: "http://new" },
+      ],
+    });
+    const error = new RegistrationError(409, { error: "node_version_immutable", detail });
+
+    expect(error.code).toBe("node_version_immutable");
+    expect(error.guidance).toContain("input_schema");
+    expect(error.guidance).toContain("invoke_url");
+    expect(error.guidance).toContain("Bump");
+  });
+
+  it("maps other 409 to publish-higher guidance", () => {
+    const error = new RegistrationError(409, { error: "resource_conflict", detail: "1.2.0 is newer" });
+
+    expect(error.code).toBe("resource_conflict");
+    expect(error.guidance).toContain("higher");
+  });
+
+  it("surfaces FastAPI 422 detail list", () => {
+    const error = new RegistrationError(422, {
+      detail: [{ loc: ["body", "name"], msg: "Field required", type: "missing" }],
+    });
+
+    expect(error.statusCode).toBe(422);
+    expect(error.guidance).toContain("name");
+    expect(error.guidance).toContain("Field required");
+  });
+
+  it("surfaces canonical 400 errors[] messages", () => {
+    const error = new RegistrationError(400, {
+      error: "bad_request",
+      errors: [{ field: "version", message: "invalid semver" }],
+    });
+
+    expect(error.code).toBe("bad_request");
+    expect(error.guidance).toContain("invalid semver");
+  });
+
+  it("unmapped codes get null guidance", () => {
+    const error = new RegistrationError(418, { error: "teapot", detail: "short and stout" });
+
+    expect(error.code).toBe("teapot");
+    expect(error.guidance).toBeNull();
+  });
+
+  it("plain-text bodies keep null code", () => {
+    const error = new RegistrationError(500, { detail: "Internal Server Error" });
+
+    expect(error.code).toBeNull();
+    expect(error.guidance).toBeNull();
+  });
+});
+
+describe("exportDefinition full manifest shape (DA-1955 review fix)", () => {
+  it("re-adds node_role retry node_status and deprecation for /manifest format", () => {
+    const deprecation = {
+      deprecated_at: "2026-08-24",
+      notice: "Use echo-v2",
+    };
+    const def: WorkflowNodeManifest = {
+      ...testDef,
+      deprecation,
+    } as WorkflowNodeManifest;
+    const outPath = path.join(os.tmpdir(), `sdk-export-test-${Date.now()}.json`);
+    try {
+      exportDefinition(def, outPath);
+      const exported = JSON.parse(readFileSync(outPath, "utf8")) as Record<string, unknown>;
+      expect(exported["node_role"]).toBe("operation");
+      expect(exported["retry"]).toEqual(testDef.default_retry);
+      expect(exported["node_status"]).toBe("active");
+      expect(exported["deprecation"]).toEqual(deprecation);
+    } finally {
+      rmSync(outPath, { force: true });
+    }
+  });
+
+  it("omits deprecation when unset", () => {
+    const outPath = path.join(os.tmpdir(), `sdk-export-test-${Date.now()}.json`);
+    try {
+      exportDefinition(testDef, outPath);
+      const exported = JSON.parse(readFileSync(outPath, "utf8")) as Record<string, unknown>;
+      expect(exported["deprecation"]).toBeUndefined();
+      expect(exported["node_status"]).toBe("active");
+    } finally {
+      rmSync(outPath, { force: true });
+    }
   });
 });

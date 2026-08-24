@@ -20,11 +20,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from canvastekk_workflow_sdk._url import is_dev_mode as _is_dev_mode
+from canvastekk_workflow_sdk.auth import NodeAuth, _AuthBackend
 from canvastekk_workflow_sdk.exceptions import NodeExecutionError, NodeTimeoutError, get_http_status_for_error
 from canvastekk_workflow_sdk.logging import configure_logging
 from canvastekk_workflow_sdk.middleware import SDKVersionMiddleware
@@ -82,6 +83,7 @@ class _BodySizeLimitMiddleware:  # ASGI middleware (Starlette style)
 
         await self.app(scope, receive, send)
 
+
 if TYPE_CHECKING:
     from canvastekk_workflow_sdk.base import BaseNode
 
@@ -134,6 +136,7 @@ def create_node_app(
     *,
     dependencies: Sequence[Any] | None = None,
     extra_routes: list[APIRouter] | None = None,
+    auth: _AuthBackend | Literal["api-key"] | None = None,
     **fastapi_kwargs: Any,
 ) -> FastAPI:
     """
@@ -148,9 +151,17 @@ def create_node_app(
     Args:
         node: The BaseNode instance to wrap
         dependencies: Optional FastAPI dependencies applied to all endpoints
-            (e.g., ``[Depends(auth)]`` for request authentication).
+            (e.g., ``[Depends(custom_dep)]`` for custom request-scoped logic).
         extra_routes: Optional list of FastAPI APIRouter instances to mount
             on the application.
+        auth: Optional authentication for all endpoints (DA-1890 adoption):
+            ``"api-key"`` constructs ``NodeAuth.api_key()`` (reads
+            ``CANVASTEKK_API_KEY``); any backend built by the
+            :class:`NodeAuth` factories (e.g. ``NodeAuth.api_key()``,
+            ``NodeAuth.jwt(...)``) is used directly; ``None`` (default)
+            leaves authentication unconfigured.
+            When ``dependencies`` already contains an auth backend, the
+            ``auth`` argument is skipped with a warning.
         **fastapi_kwargs: Additional arguments passed to FastAPI constructor
             (e.g., title, version, docs_url)
 
@@ -158,14 +169,34 @@ def create_node_app(
         FastAPI application instance
 
     Example:
-        from canvastekk_workflow_sdk.auth import NodeAuth
-
         node = EchoNode()
-        auth = NodeAuth.api_key()
-        app = create_node_app(node, dependencies=[Depends(auth)])
+        app = create_node_app(node, auth="api-key")
+
+        # Or with a fully configured backend:
+        # app = create_node_app(node, auth=NodeAuth.jwt(secret="..."))
 
         # Run with: uvicorn handler:app --port 8001
     """
+    resolved_auth: _AuthBackend | None
+    if auth is None or isinstance(auth, _AuthBackend):
+        resolved_auth = auth
+    elif auth == "api-key":
+        resolved_auth = NodeAuth.api_key()
+    else:
+        raise ValueError(f"Unknown auth shorthand {auth!r}. Use 'api-key', a NodeAuth backend, or None.")
+
+    router_dependencies = list(dependencies) if dependencies else []
+    has_auth_dependency = any(isinstance(getattr(dep, "dependency", dep), _AuthBackend) for dep in router_dependencies)
+    if resolved_auth is not None:
+        if has_auth_dependency:
+            logging.getLogger(__name__).warning(
+                "create_node_app: 'dependencies' already contains an auth backend; "
+                "ignoring the 'auth' argument to avoid double authentication."
+            )
+        else:
+            router_dependencies.append(Depends(resolved_auth))
+            has_auth_dependency = True
+
     default_kwargs: dict[str, Any] = {
         "title": node.definition.title,
         "version": node.definition.version,
@@ -187,11 +218,11 @@ def create_node_app(
                 "CANVASTEKK_DEV_MODE is active: ALL authentication is bypassed "
                 "and URL policy restrictions are lifted. Never enable in production."
             )
-        elif not dependencies:
+        elif not has_auth_dependency:
             logging.getLogger(__name__).warning(
                 "Node server starting with NO authentication configured. "
                 "Every endpoint (incl. /execute, /metrics) is unauthenticated. "
-                "Pass an auth dependency via create_node_app(dependencies=[...]) "
+                "Pass auth='api-key' (or a NodeAuth via create_node_app(auth=...)) "
                 "or ensure the node is network-isolated."
             )
         async with node._lifespan():
@@ -204,8 +235,6 @@ def create_node_app(
     app = FastAPI(lifespan=_node_lifespan, **default_kwargs)
     app.add_middleware(SDKVersionMiddleware)
     app.add_middleware(_BodySizeLimitMiddleware)
-
-    router_dependencies = list(dependencies) if dependencies else []
 
     router = APIRouter(dependencies=router_dependencies)
 
@@ -305,9 +334,7 @@ def create_node_app(
                     # A declared file output that could not be uploaded means
                     # the engine would receive a local path it cannot fetch —
                     # fail the execution instead of silently passing (4.1).
-                    logging.getLogger(__name__).error(
-                        "Output upload failed: %s", exc
-                    )
+                    logging.getLogger(__name__).error("Output upload failed: %s", exc)
                     response = response.model_copy(
                         update={
                             "status": "fail",
@@ -324,9 +351,7 @@ def create_node_app(
             if output_dir.is_dir() and output_dir.exists():
                 shutil.rmtree(output_dir, ignore_errors=True)
         except Exception:
-            logging.getLogger(__name__).debug(
-                "Post-execution temp cleanup skipped", exc_info=True
-            )
+            logging.getLogger(__name__).debug("Post-execution temp cleanup skipped", exc_info=True)
 
         return response
 
@@ -386,8 +411,6 @@ def create_node_app(
         Used by registry for auto-discovery and manifest cross-checking.
         The engine reads ``mode`` to decide routing and test behaviour.
         """
-        import os
-
         import canvastekk_workflow_sdk
 
         content = node.definition.to_dict()

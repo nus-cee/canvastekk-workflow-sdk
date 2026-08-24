@@ -15,6 +15,9 @@ from importlib.resources import as_file
 from importlib.resources import files as pkg_files
 from pathlib import Path
 
+from jsonschema import Draft7Validator
+from jsonschema import exceptions as _jsonschema_exceptions
+
 
 def _load_definition(module_path: str):
     """Load a WorkflowNodeManifest from a module:attribute path."""
@@ -83,6 +86,15 @@ def _validate_definition(definition) -> dict:
         schema = definition.output_schema.get("properties", {}).get(name, {})
         field_report = {"name": name, "format": schema.get("format"), "type": schema.get("type")}
         report["file_output_fields"].append(field_report)
+
+    # Draft-7 structural validation of the JSON schemas (DA-1955).
+    # Catches broken schemas at authoring time instead of at engine registration.
+    for label, schema in (("input_schema", definition.input_schema), ("output_schema", definition.output_schema)):
+        try:
+            Draft7Validator.check_schema(schema)
+        except _jsonschema_exceptions.SchemaError as exc:
+            report["valid"] = False
+            report["errors"].append(f"{label} is not a valid draft-7 JSON schema: {exc.message}")
 
     return report
 
@@ -204,6 +216,80 @@ def _write_agents_md(target_dir: Path, *, force: bool = False) -> None:
     print(f"Updated {agents_md_path.relative_to(target_dir)}")
 
 
+def _load_manifest_file(path: str) -> dict:
+    """Load a manifest dictionary from a JSON file.
+
+    Args:
+        path: Path to the JSON manifest file.
+
+    Returns:
+        The parsed manifest dictionary.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        ValueError: If the content is not a JSON object.
+        json.JSONDecodeError: If the content is not valid JSON.
+    """
+    file_path = Path(path)
+    if not file_path.exists():
+        raise FileNotFoundError(path)
+    data = json.loads(file_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"'{path}' does not contain a JSON object")
+    return data
+
+
+def _run_diff(args: list[str]) -> int:
+    """Run the ``diff`` command: classify changes between two manifest files.
+
+    Args:
+        args: Positional file paths plus optional ``--json`` flag.
+
+    Returns:
+        Process exit code: 0 clean, 1 breaking change or diff error,
+        2 load failure.
+    """
+    use_json = "--json" in args
+    positional = [a for a in args if not a.startswith("--")]
+    if len(positional) != 2:
+        print("Error: diff requires two manifest files (old.json new.json)", file=sys.stderr)
+        return 2
+
+    old_path, new_path = positional
+    try:
+        old = _load_manifest_file(old_path)
+        new = _load_manifest_file(new_path)
+    except (OSError, ValueError, json.JSONDecodeError) as e:
+        print(f"Error loading manifests: {e}", file=sys.stderr)
+        return 2
+
+    from canvastekk_workflow_sdk.diff import diff_manifests
+
+    result = diff_manifests(old, new)
+
+    if use_json:
+        from dataclasses import asdict
+
+        print(json.dumps(asdict(result), indent=2))
+    else:
+        print(f"{old_path} -> {new_path}")
+        print(f"  version: {result.old_version} -> {result.new_version} (bump: {result.version_bump or 'none'})")
+        for change in result.breaking_changes:
+            print(f"  BREAKING: {change}")
+        for change in result.non_breaking_changes:
+            print(f"  ok: {change}")
+        for error in result.errors:
+            print(f"  ERROR: {error}")
+        if result.breaking:
+            print()
+            print("Breaking changes require a MAJOR version bump before registering.")
+            print("On uat/prod the engine reseed additionally gates MAJOR+schema-diff upgrades")
+            print("behind force_upgrade (update workflow-definitions.json, then POST")
+            print("/api/internal/reseed?force_upgrade=true).")
+
+    return 1 if (result.breaking or result.errors) else 0
+
+
 def main() -> None:
     """CLI entry point for ``python -m canvastekk_workflow_sdk``.
 
@@ -220,6 +306,7 @@ def main() -> None:
         print()
         print("Commands:")
         print("  validate <module:attribute> [--json]  Validate a node manifest definition")
+        print("  diff <old.json> <new.json> [--json]   Classify breaking changes between manifests")
         print("  init [--agents-md] [--force]          Scaffold AI agent skills into your project")
         print()
         print("Options:")
@@ -235,6 +322,9 @@ def main() -> None:
 
         print(f"canvastekk-workflow-sdk {__version__}")
         sys.exit(0)
+
+    if args[0] == "diff":
+        sys.exit(_run_diff(args[1:]))
 
     if args[0] == "init":
         include_agents_md = "--agents-md" in args

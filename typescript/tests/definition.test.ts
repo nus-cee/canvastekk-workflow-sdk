@@ -339,3 +339,45 @@ describe("WorkflowNodeManifestSchema deprecation field (DA-1582)", () => {
     expect(def.deprecation?.replacement_slug).toBe("my-node-v2");
   });
 });
+
+describe("WorkflowNodeManifestSchema compat and docs fields (DA-1955)", () => {
+  it("defaults all four fields to null", () => {
+    const def = WorkflowNodeManifestSchema.parse(validDefinition);
+    expect(def.minimum_sdk_version).toBeNull();
+    expect(def.maximum_sdk_version).toBeNull();
+    expect(def.docs_url).toBeNull();
+    expect(def.changelog_url).toBeNull();
+  });
+
+  it("parses valid compat and docs values", () => {
+    const def = WorkflowNodeManifestSchema.parse({
+      ...validDefinition,
+      minimum_sdk_version: "0.22.0",
+      maximum_sdk_version: "1.0.0",
+      docs_url: "https://example.com/docs",
+      changelog_url: "https://example.com/changelog",
+    });
+    expect(def.minimum_sdk_version).toBe("0.22.0");
+    expect(def.maximum_sdk_version).toBe("1.0.0");
+    expect(def.docs_url).toBe("https://example.com/docs");
+    expect(def.changelog_url).toBe("https://example.com/changelog");
+  });
+
+  it("rejects non-semver sdk versions", () => {
+    expect(() =>
+      WorkflowNodeManifestSchema.parse({
+        ...validDefinition,
+        minimum_sdk_version: "0.22",
+      }),
+    ).toThrow();
+  });
+
+  it("rejects non-http docs_url", () => {
+    expect(() =>
+      WorkflowNodeManifestSchema.parse({
+        ...validDefinition,
+        docs_url: "ftp://example.com/docs",
+      }),
+    ).toThrow();
+  });
+});

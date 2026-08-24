@@ -20,6 +20,50 @@ export interface OutputUploader {
 // 600 s. Total deadline (matches the Py SDK).
 const UPLOAD_TIMEOUT_MS = 600_000;
 
+// Retry policy (DA-1955): transient failures only, exponential backoff.
+const MAX_ATTEMPTS = 3;
+const INITIAL_BACKOFF_MS = 500;
+
+/**
+ * HTTP-status upload failure carrying the status code so callers (and the
+ * retry loop) can classify 4xx vs 5xx without regexing the message.
+ */
+export class UploadHttpError extends Error {
+  readonly statusCode: number;
+
+  constructor(statusCode: number, message: string) {
+    super(message);
+    this.name = "UploadHttpError";
+    this.statusCode = statusCode;
+  }
+}
+
+/** Node errno codes that are transient network failures worth retrying. */
+const TRANSIENT_ERRNO_CODES = new Set([
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "ECONNREFUSED",
+  "EPIPE",
+  "EAI_AGAIN",
+  "ENOTFOUND",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+]);
+
+function isTransientError(err: unknown): boolean {
+  if (err instanceof UploadHttpError) {
+    return err.statusCode >= 500;
+  }
+  // Only transient network errnos are retryable. Deterministic local errors
+  // (ENOENT/EACCES from statSync/read stream) fail fast, matching python.
+  const code = (err as NodeJS.ErrnoException)?.code;
+  return typeof code === "string" && TRANSIENT_ERRNO_CODES.has(code);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Uploads output files to S3 using presigned URLs.
  */
@@ -36,11 +80,35 @@ export class S3PresignedUploader implements OutputUploader {
    * user-supplied `Content-Length`). http.request with an explicit
    * Content-Length pipes the stream with identity encoding.
    *
+   * Retries transient failures (network/socket errors and HTTP 5xx) up to
+   * 3 attempts with exponential backoff (0.5s, 1s). Deterministic client
+   * errors (4xx) are never retried (DA-1955).
+   *
    * @param filePath - Local file path
    * @param presignedUrl - S3 presigned upload URL
-   * @throws Error if upload fails
+   * @throws UploadHttpError on HTTP status failure after retries
+   * @throws Error on transport failure after retries
    */
   async uploadFile(filePath: string, presignedUrl: string): Promise<void> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        await this.attemptUpload(filePath, presignedUrl);
+        return;
+      } catch (err) {
+        lastError = err;
+        if (!isTransientError(err) || attempt === MAX_ATTEMPTS) throw err;
+        const backoffMs = INITIAL_BACKOFF_MS * 2 ** (attempt - 1);
+        console.warn(
+          `Upload attempt ${attempt}/${MAX_ATTEMPTS} failed (${err instanceof Error ? err.message : String(err)}); retrying in ${backoffMs} ms`,
+        );
+        await sleep(backoffMs);
+      }
+    }
+    throw lastError;
+  }
+
+  private async attemptUpload(filePath: string, presignedUrl: string): Promise<void> {
     const { size } = statSync(filePath);
     const target = new URL(presignedUrl);
     const send = target.protocol === "http:" ? httpRequest : httpsRequest;
@@ -68,13 +136,20 @@ export class S3PresignedUploader implements OutputUploader {
           res.on("end", () => {
             clearTimeout(timer);
             const detail = Buffer.concat(chunks).toString("utf8").slice(0, 200).trim();
-            reject(new Error(`Upload failed: HTTP ${code} ${res.statusMessage ?? ""} ${detail}`.trim()));
+            reject(new UploadHttpError(code, `Upload failed: HTTP ${code} ${res.statusMessage ?? ""} ${detail}`.trim()));
           });
         },
       );
 
       const timer = setTimeout(
-        () => req.destroy(new Error(`Upload timed out after ${UPLOAD_TIMEOUT_MS} ms`)),
+        () =>
+          req.destroy(
+            // Tag the timeout with ETIMEDOUT so isTransientError retries it
+            // (parity with python, where httpx timeouts are TransportErrors).
+            Object.assign(new Error(`Upload timed out after ${UPLOAD_TIMEOUT_MS} ms`), {
+              code: "ETIMEDOUT",
+            }),
+          ),
         UPLOAD_TIMEOUT_MS,
       );
 

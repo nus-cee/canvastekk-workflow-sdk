@@ -101,10 +101,18 @@ The SDK's auto-download only triggers on `http://`/`https://` values — a plain
 
 ### CLI Manifest Validation
 
-Offline validation without starting the server:
+Offline validation without starting the server (also checks that `input_schema` / `output_schema` are structurally valid draft-7 JSON schemas):
 
 ```bash
 python -m canvastekk_workflow_sdk validate my_node.handler:definition --json
+```
+
+### Manifest Diff (breaking-change classification)
+
+Classify changes between two manifest exports before publishing a new version:
+
+```bash
+python -m canvastekk_workflow_sdk diff old.json new.json
 ```
 
 ### Template Variable Substitution
@@ -294,6 +302,64 @@ The validator checks:
 - `format: "file"` enforcement (rejects `format: "binary"`)
 - File fields use `type: "string"` (not `"object"` or `"array"`)
 - Warns on file fields missing `x-accept` or `x-maxSizeBytes` extensions
+- `input_schema` / `output_schema` are structurally valid draft-7 JSON schemas
+
+### CLI Manifest Diff
+
+Compare two manifest JSON exports and classify the changes (mirrors the engine's
+registration-time gate signal-for-signal):
+
+```bash
+# Human-readable report
+python -m canvastekk_workflow_sdk diff old.json new.json
+
+# Machine-readable JSON for CI
+python -m canvastekk_workflow_sdk diff old.json new.json --json
+
+# Exit codes: 0 = clean, 1 = breaking changes or errors, 2 = load failure
+```
+
+Classification rules:
+- Removed output property — **breaking**
+- Newly required input property — **breaking**
+- New optional input, new output, metadata-only changes — non-breaking
+- Same version + any change — error (publish a higher semver)
+- Breaking changes with a non-MAJOR version bump — error
+- Node name mismatch — error (publish a new node instead)
+
+Breaking changes require a MAJOR version bump before registering. On uat/prod
+the engine additionally gates MAJOR bumps with schema diffs — update
+`workflow-definitions.json` and re-run
+`POST /api/internal/reseed?force_upgrade=true` to force the upgrade.
+
+### SDK Compatibility Range
+
+Manifests can declare which engine/SDK versions they support. Values are
+exported through the registration payload's `constraints` channel:
+
+```python
+definition = WorkflowNodeManifest(
+    ...,
+    minimum_sdk_version="0.23.0",
+    maximum_sdk_version="1.0.0",
+    docs_url="https://docs.example.com/my-node",
+    changelog_url="https://docs.example.com/my-node/changelog",
+)
+```
+
+### Auth Shorthand
+
+`create_node_app` accepts an `auth` keyword for one-line DA-1890 adoption:
+
+```python
+app = create_node_app(node, auth="api-key")  # reads CANVASTEKK_API_KEY
+```
+
+### Upload Retry
+
+`S3PresignedUploader.upload_file` retries transient failures (network errors
+and HTTP 5xx) up to 3 attempts with exponential backoff (0.5s, 1s). Client
+errors (4xx) fail immediately — they are deterministic.
 
 ### AI Agent Setup
 

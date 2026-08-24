@@ -78,9 +78,9 @@ export {
 export { BaseNode } from "./base-node.js";
 export { createNodeApp, createMultiNodeApp } from "./app.js";
 export type { CreateNodeAppOptions } from "./app.js";
-export { NodeAuth } from "./auth.js";
+export { NodeAuth, CANVASTEKK_AUTH_MARKER } from "./auth.js";
 export type { AuthMiddleware, AuthResult } from "./auth.js";
-export { S3PresignedUploader, getDefaultUploader } from "./uploads.js";
+export { S3PresignedUploader, getDefaultUploader, UploadHttpError } from "./uploads.js";
 export type { OutputUploader } from "./uploads.js";
 export {
   CONTRACT_VERSION,
@@ -119,6 +119,8 @@ export {
   registerNodeResultHas,
 } from "./registry.js";
 export type { InvokeType, RegisterNodeResult } from "./registry.js";
+export { diffManifests } from "./diff.js";
+export type { ManifestDiff } from "./diff.js";
 export {
   WorkflowBuilder,
   InProcessExecutor,

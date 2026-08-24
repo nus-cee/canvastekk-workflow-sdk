@@ -424,29 +424,29 @@ class TestBuildRegistryPayload:
         assert payload["label"] == "My Node"
         assert "title" not in payload
 
-    def test_maps_default_retry_to_retry(self) -> None:
+    def test_retry_not_in_request_payload(self) -> None:
+        """DA-1955 B1: engine RegisterWorkflowNodeRequest is extra='forbid' with no retry key."""
         definition = self._make_definition()
         payload = build_registry_payload(definition)
-        assert "retry" in payload
+        assert "retry" not in payload
         assert "default_retry" not in payload
-        assert payload["retry"]["max_attempts"] == 1
 
     def test_omits_id_field(self) -> None:
         definition = self._make_definition()
         payload = build_registry_payload(definition)
         assert "id" not in payload
 
-    def test_includes_node_role(self) -> None:
+    def test_node_role_not_in_request_payload(self) -> None:
+        """DA-1955 B1: node_role is not an engine request field."""
         from canvastekk_workflow_sdk.definition import WorkflowNodeRole
 
         definition = self._make_definition(role=WorkflowNodeRole.START)
         payload = build_registry_payload(definition)
-        assert payload["node_role"] == "start"
+        assert "node_role" not in payload
 
     def test_default_node_role_is_operation(self) -> None:
         definition = self._make_definition()
-        payload = build_registry_payload(definition)
-        assert payload["node_role"] == "operation"
+        assert definition.role.value == "operation"
 
     def test_styles_none_produces_null(self) -> None:
         definition = self._make_definition()
@@ -500,22 +500,97 @@ class TestBuildRegistryPayload:
         payload = build_registry_payload(definition)
         assert "constraints" not in payload
 
-    def test_node_status_defaults_to_active(self) -> None:
+    def test_constraints_merges_manifest_compat_fields(self) -> None:
+        """DA-1955: manifest compat + docs fields land in constraints."""
+        definition = self._make_definition(
+            minimum_sdk_version="0.22.0",
+            maximum_sdk_version="1.0.0",
+            docs_url="https://example.com/docs",
+            changelog_url="https://example.com/changelog",
+        )
+        payload = build_registry_payload(definition)
+        assert payload["constraints"]["minimum_sdk_version"] == "0.22.0"
+        assert payload["constraints"]["maximum_sdk_version"] == "1.0.0"
+        assert payload["constraints"]["docs_url"] == "https://example.com/docs"
+        assert payload["constraints"]["changelog_url"] == "https://example.com/changelog"
+
+    def test_constraints_caller_wins_on_key_collision(self) -> None:
+        """DA-1955: caller-supplied constraints override manifest compat fields."""
+        definition = self._make_definition(minimum_sdk_version="0.22.0")
+        payload = build_registry_payload(
+            definition,
+            constraints={"minimum_sdk_version": "0.21.0", "gpu_required": True},
+        )
+        assert payload["constraints"]["minimum_sdk_version"] == "0.21.0"
+        assert payload["constraints"]["gpu_required"] is True
+
+    def test_constraints_omitted_when_all_none(self) -> None:
+        """DA-1955: no manifest fields + no caller constraints -> no constraints key."""
         definition = self._make_definition()
         payload = build_registry_payload(definition)
-        assert payload["node_status"] == "active"
+        assert "constraints" not in payload
+
+    def test_node_status_not_in_request_payload(self) -> None:
+        """DA-1955 B1: node_status is not an engine request field (param kept for compat)."""
+        definition = self._make_definition()
+        payload = build_registry_payload(definition, node_status="inactive")
+        assert "node_status" not in payload
 
     def test_all_standard_fields_present(self) -> None:
         definition = self._make_definition()
         payload = build_registry_payload(definition)
         expected_keys = {
-            "name", "label", "version", "description",
-            "input_schema", "output_schema", "invoke_type",
-            "category", "token_cost", "timeout_seconds",
-            "node_role", "retry", "tags", "styles",
-            "node_status",
+            "name",
+            "label",
+            "version",
+            "description",
+            "input_schema",
+            "output_schema",
+            "invoke_type",
+            "category",
+            "token_cost",
+            "timeout_seconds",
+            "tags",
+            "styles",
         }
         assert expected_keys.issubset(payload.keys())
+
+    def test_payload_keys_subset_of_engine_request_model(self) -> None:
+        """DA-1955 B1 contract: every emitted key must exist on the engine request model.
+
+        Mirrors fastapi_app/schemas/api/nodes.py RegisterWorkflowNodeRequest
+        (extra='forbid') in canvastekk-workflow-engine. Update this list only
+        after updating the engine schema.
+        """
+        engine_request_fields = {
+            "name",
+            "version",
+            "label",
+            "description",
+            "input_schema",
+            "output_schema",
+            "invoke_type",
+            "invoke_url",
+            "invoke_config",
+            "category",
+            "tags",
+            "styles",
+            "constraints",
+            "token_cost",
+            "timeout_seconds",
+        }
+        definition = self._make_definition(
+            minimum_sdk_version="0.22.0",
+            docs_url="https://example.com/docs",
+            deprecation=DeprecationInfo(deprecated_at=None, notice="soon"),
+        )
+        payload = build_registry_payload(
+            definition,
+            invoke_url="https://node.example.com",
+            invoke_config={"region": "us-east-1"},
+            constraints={"gpu": True},
+        )
+        assert set(payload.keys()) <= engine_request_fields
 
     def test_deprecation_omitted_when_none(self) -> None:
         """DA-1582: non-deprecated nodes never send the deprecation key."""
@@ -523,27 +598,18 @@ class TestBuildRegistryPayload:
         payload = build_registry_payload(definition)
         assert "deprecation" not in payload
 
-    def test_deprecation_included_when_set(self) -> None:
-        """DA-1582: deprecated nodes send the full nested object."""
+    def test_deprecation_not_in_request_payload_when_set(self) -> None:
+        """DA-1955 B1: deprecation lives in the export full shape, not the request."""
         from datetime import date
 
         definition = self._make_definition(
             deprecation=DeprecationInfo(
                 deprecated_at=date(2026, 8, 1),
-                sunset_date=date(2027, 1, 1),
-                replacement_slug="test-v2",
-                migration_url="https://example.com/migrate",
                 notice="use test-v2",
             )
         )
         payload = build_registry_payload(definition)
-        assert payload["deprecation"] == {
-            "deprecated_at": "2026-08-01",
-            "sunset_date": "2027-01-01",
-            "replacement_slug": "test-v2",
-            "migration_url": "https://example.com/migrate",
-            "notice": "use test-v2",
-        }
+        assert "deprecation" not in payload
 
 
 class TestExtractNodeDataNewFormat:
@@ -660,7 +726,7 @@ class TestRegisterNodeNewFeatures:
 
         call_kwargs = mock_post.call_args[1]
         assert "default_retry" not in call_kwargs["json"]
-        assert "retry" in call_kwargs["json"]
+        assert "retry" not in call_kwargs["json"]
 
     def test_unwraps_new_node_response_format(self) -> None:
         node = DummyNode()
@@ -730,3 +796,121 @@ class TestRegisterNodeResult:
         assert result.revision_id == "rev-456"
         assert result.previous_version == "0.9.0"
         assert result.changes == ["version", "input_schema"]
+
+
+class TestRegistrationErrorEnrichment:
+    """Tests for typed error_code/guidance from engine envelopes (DA-1955)."""
+
+    def _raise_via_register(self, node: DummyNode, mock_response: MagicMock) -> None:
+        """Run register_node against a mocked failing response."""
+        mock_response.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError(
+                str(mock_response.status_code), request=MagicMock(), response=mock_response
+            )
+        )
+        with patch("canvastekk_workflow_sdk.registry.httpx.post", return_value=mock_response):
+            register_node(node, "https://registry.example.com/api/nodes", api_key="test-key")
+
+    def test_immutable_error_extracts_changed_fields(self) -> None:
+        """node_version_immutable 409 yields guidance naming changed fields."""
+        import json as _json
+
+        node = DummyNode()
+        detail = {
+            "name": "test-node",
+            "version": "1.0.0",
+            "changed_fields": [
+                {"field": "input_schema", "expected": {}, "actual": {"type": "object"}},
+                {"field": "invoke_url", "expected": "http://old", "actual": "http://new"},
+            ],
+        }
+        mock_response = MagicMock()
+        mock_response.status_code = 409
+        mock_response.json.return_value = {"error": "node_version_immutable", "detail": _json.dumps(detail)}
+        mock_response.text = '{"error": "node_version_immutable"}'
+
+        with pytest.raises(RegistrationError) as exc_info:
+            self._raise_via_register(node, mock_response)
+
+        assert exc_info.value.error_code == "node_version_immutable"
+        assert exc_info.value.status_code == 409
+        assert "input_schema" in (exc_info.value.guidance or "")
+        assert "invoke_url" in (exc_info.value.guidance or "")
+        assert "Bump" in (exc_info.value.guidance or "")
+
+    def test_other_409_gets_publish_higher_guidance(self) -> None:
+        """Older-semver 409 (resource conflict) yields publish-higher guidance."""
+        node = DummyNode()
+        mock_response = MagicMock()
+        mock_response.status_code = 409
+        mock_response.json.return_value = {"error": "resource_conflict", "detail": "1.2.0 is newer"}
+        mock_response.text = "{}"
+
+        with pytest.raises(RegistrationError) as exc_info:
+            self._raise_via_register(node, mock_response)
+
+        assert exc_info.value.error_code == "resource_conflict"
+        assert "higher" in (exc_info.value.guidance or "")
+
+    def test_422_fastapi_detail_list_surfaced(self) -> None:
+        """FastAPI default 422 detail list is surfaced as guidance."""
+        node = DummyNode()
+        mock_response = MagicMock()
+        mock_response.status_code = 422
+        mock_response.json.return_value = {
+            "detail": [{"loc": ["body", "name"], "msg": "Field required", "type": "missing"}]
+        }
+        mock_response.text = "{}"
+
+        with pytest.raises(RegistrationError) as exc_info:
+            self._raise_via_register(node, mock_response)
+
+        assert exc_info.value.status_code == 422
+        assert "name" in (exc_info.value.guidance or "")
+        assert "Field required" in (exc_info.value.guidance or "")
+
+    def test_400_canonical_errors_key_surfaced(self) -> None:
+        """Engine canonical 400 errors[] messages surface as guidance."""
+        node = DummyNode()
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_response.json.return_value = {
+            "error": "bad_request",
+            "errors": [{"field": "version", "message": "invalid semver"}],
+        }
+        mock_response.text = "{}"
+
+        with pytest.raises(RegistrationError) as exc_info:
+            self._raise_via_register(node, mock_response)
+
+        assert exc_info.value.error_code == "bad_request"
+        assert "invalid semver" in (exc_info.value.guidance or "")
+
+    def test_unmapped_envelope_attrs_none(self) -> None:
+        """Unmapped codes leave error_code/guidance as None-like (code set, guidance None)."""
+        node = DummyNode()
+        mock_response = MagicMock()
+        mock_response.status_code = 418
+        mock_response.json.return_value = {"error": "teapot", "detail": "short and stout"}
+        mock_response.text = "{}"
+
+        with pytest.raises(RegistrationError) as exc_info:
+            self._raise_via_register(node, mock_response)
+
+        assert exc_info.value.error_code == "teapot"
+        assert exc_info.value.guidance is None
+
+    def test_unparseable_body_attrs_none(self) -> None:
+        """Non-JSON bodies leave error_code/guidance None."""
+        node = DummyNode()
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.json.side_effect = ValueError("not json")
+        mock_response.text = "Internal Server Error"
+
+        with pytest.raises(RegistrationError) as exc_info:
+            self._raise_via_register(node, mock_response)
+
+        assert exc_info.value.error_code is None
+        assert exc_info.value.guidance is None
+        assert exc_info.value.status_code == 500

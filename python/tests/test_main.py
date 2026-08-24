@@ -8,12 +8,23 @@ subprocess.run.
 """
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 PYTHON_BIN = Path(sys.executable)
+REPO_PYTHON_DIR = Path(__file__).resolve().parents[1]
+
+
+def _cli_env() -> dict[str, str]:
+    """Env that forces the CLI subprocess to import THIS repo's SDK code."""
+    env = dict(os.environ)
+    existing = env.get("PYTHONPATH", "")
+    repo_dir = str(REPO_PYTHON_DIR)
+    env["PYTHONPATH"] = f"{repo_dir}{os.pathsep}{existing}" if existing else repo_dir
+    return env
 
 
 def test_validate_valid_definition():
@@ -173,3 +184,207 @@ def test_help_flag():
     assert "--json" in result.stdout
     assert "--version" in result.stdout
     assert "--help" in result.stdout
+
+
+def _write_manifest(directory: str, filename: str, manifest: dict) -> Path:
+    """Write a manifest dict to a JSON file and return its path."""
+    path = Path(directory) / filename
+    path.write_text(json.dumps(manifest))
+    return path
+
+
+_BASE_MANIFEST = {
+    "name": "test-node",
+    "version": "1.0.0",
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+    "output_schema": {"type": "object", "properties": {"result": {"type": "string"}}},
+}
+
+
+def test_diff_clean_change_exit_0():
+    """Test diff with a non-breaking change exits 0."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_file = _write_manifest(tmpdir, "old.json", _BASE_MANIFEST)
+        new_file = _write_manifest(
+            tmpdir,
+            "new.json",
+            {
+                **_BASE_MANIFEST,
+                "version": "1.1.0",
+                "title": "New Title",
+            },
+        )
+
+        result = subprocess.run(
+            [str(PYTHON_BIN), "-m", "canvastekk_workflow_sdk", "diff", str(old_file), str(new_file)],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 0, (
+            f"Expected exit 0, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )
+        assert "BREAKING" not in result.stdout
+
+
+def test_diff_breaking_change_exit_1():
+    """Test diff with a breaking change exits 1 and reports it."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_file = _write_manifest(tmpdir, "old.json", _BASE_MANIFEST)
+        new_file = _write_manifest(
+            tmpdir,
+            "new.json",
+            {**_BASE_MANIFEST, "version": "2.0.0", "output_schema": {"type": "object", "properties": {}}},
+        )
+
+        result = subprocess.run(
+            [str(PYTHON_BIN), "-m", "canvastekk_workflow_sdk", "diff", str(old_file), str(new_file)],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 1, (
+            f"Expected exit 1, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )
+        assert "BREAKING" in result.stdout
+        assert "removed output" in result.stdout
+
+
+def test_diff_malformed_json_exit_2():
+    """Test diff with malformed JSON exits 2."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_file = Path(tmpdir) / "old.json"
+        old_file.write_text('{"name": "test-node"')
+        new_file = _write_manifest(tmpdir, "new.json", _BASE_MANIFEST)
+
+        result = subprocess.run(
+            [str(PYTHON_BIN), "-m", "canvastekk_workflow_sdk", "diff", str(old_file), str(new_file)],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 2, (
+            f"Expected exit 2, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )
+
+
+def test_diff_missing_file_exit_2():
+    """Test diff with a missing file exits 2."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_file = Path(tmpdir) / "does-not-exist.json"
+        new_file = _write_manifest(tmpdir, "new.json", _BASE_MANIFEST)
+
+        result = subprocess.run(
+            [str(PYTHON_BIN), "-m", "canvastekk_workflow_sdk", "diff", str(old_file), str(new_file)],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 2, (
+            f"Expected exit 2, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )
+
+
+def test_diff_wrong_arg_count_exit_2():
+    """Test diff without exactly two paths exits 2."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        only_file = _write_manifest(tmpdir, "only.json", _BASE_MANIFEST)
+
+        result = subprocess.run(
+            [str(PYTHON_BIN), "-m", "canvastekk_workflow_sdk", "diff", str(only_file)],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 2, (
+            f"Expected exit 2, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )
+
+
+def test_diff_json_flag_outputs_valid_json():
+    """Test diff --json outputs machine-readable JSON with contract keys."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        old_file = _write_manifest(tmpdir, "old.json", _BASE_MANIFEST)
+        new_file = _write_manifest(
+            tmpdir,
+            "new.json",
+            {**_BASE_MANIFEST, "version": "1.1.0", "title": "New Title"},
+        )
+
+        result = subprocess.run(
+            [str(PYTHON_BIN), "-m", "canvastekk_workflow_sdk", "diff", str(old_file), str(new_file), "--json"],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 0, (
+            f"Expected exit 0, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )
+        payload = json.loads(result.stdout)
+        assert payload["breaking"] is False
+        assert "breaking_changes" in payload
+        assert "non_breaking_changes" in payload
+        assert payload["old_version"] == "1.0.0"
+        assert payload["new_version"] == "1.1.0"
+
+
+def test_validate_invalid_draft7_schema_exit_1():
+    """Test that a structurally-invalid input_schema fails validation (DA-1955)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test_node.py"
+        test_file.write_text("""
+from canvastekk_workflow_sdk import WorkflowNodeManifest
+
+definition = WorkflowNodeManifest(
+    name="test-node",
+    version="1.0.0",
+    title="Test Node",
+    description="A test node",
+    input_schema={"type": "strng", "properties": {"input": {"type": "string"}}},
+    output_schema={"type": "object"},
+)
+""")
+
+        result = subprocess.run(
+            [str(PYTHON_BIN), "-m", "canvastekk_workflow_sdk", "validate", "test_node:definition"],
+            cwd=tmpdir,
+            capture_output=True,
+            text=True,
+            env=_cli_env(),
+        )
+
+        assert result.returncode == 1, (
+            f"Expected exit 1, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )
+        assert "input_schema" in result.stdout
+        assert "draft-7" in result.stdout
+
+
+def test_validate_valid_draft7_schema_exit_0():
+    """Test that well-formed schemas still pass (regression guard)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test_node.py"
+        test_file.write_text("""
+from canvastekk_workflow_sdk import WorkflowNodeManifest
+
+definition = WorkflowNodeManifest(
+    name="test-node",
+    version="1.0.0",
+    title="Test Node",
+    description="A test node",
+    input_schema={"type": "object", "properties": {"input": {"type": "string"}}, "required": []},
+    output_schema={"type": "object", "properties": {"output": {"type": "string"}}},
+)
+""")
+
+        result = subprocess.run(
+            [str(PYTHON_BIN), "-m", "canvastekk_workflow_sdk", "validate", "test_node:definition"],
+            cwd=tmpdir,
+            capture_output=True,
+            text=True,
+            env=_cli_env(),
+        )
+
+        assert result.returncode == 0, (
+            f"Expected exit 0, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )

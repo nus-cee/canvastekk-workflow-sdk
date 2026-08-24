@@ -259,3 +259,49 @@ describe("POST /execute upload failure (DA-1711 parity)", () => {
     }
   });
 });
+
+describe("GET /manifest null-key stripping (DA-1955)", () => {
+  it("omits null optional keys instead of leaking explicit nulls", async () => {
+    class NullOptionalsNode extends BaseNode {
+      definition: WorkflowNodeManifest = {
+        name: "null-opt-node",
+        version: "1.0.0",
+        title: "Null Optionals",
+        description: "Definition carrying explicit null optionals",
+        input_schema: { type: "object" },
+        output_schema: { type: "object" },
+        deprecation: null,
+        minimum_sdk_version: null,
+        maximum_sdk_version: null,
+        docs_url: null,
+        changelog_url: null,
+      } as unknown as WorkflowNodeManifest;
+
+      execute(): Record<string, unknown> {
+        return {};
+      }
+    }
+    const app = createNodeApp(new NullOptionalsNode());
+    const resp = await request(app).get("/manifest");
+    expect(resp.status).toBe(200);
+    expect(resp.body).not.toHaveProperty("deprecation");
+    expect(resp.body).not.toHaveProperty("minimum_sdk_version");
+    expect(resp.body).not.toHaveProperty("maximum_sdk_version");
+    expect(resp.body).not.toHaveProperty("docs_url");
+    expect(resp.body).not.toHaveProperty("changelog_url");
+    expect(resp.body.name).toBe("null-opt-node");
+  });
+});
+
+describe("auth middleware detection (DA-1955 review fix)", () => {
+  it("tags NodeAuth middleware with the detection marker", async () => {
+    const { CANVASTEKK_AUTH_MARKER } = await import("../src/auth.js");
+    const mw = NodeAuth.apiKey() as unknown as Record<string, unknown>;
+    expect(mw[CANVASTEKK_AUTH_MARKER]).toBe(true);
+  });
+
+  it("plain middleware is not tagged as auth", () => {
+    const plain = (req: unknown, res: unknown, next: () => void) => next();
+    expect((plain as unknown as Record<string, unknown>)["_canvastekkAuth"]).toBeUndefined();
+  });
+});

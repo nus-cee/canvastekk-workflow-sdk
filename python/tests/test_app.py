@@ -978,3 +978,89 @@ class TestBodyLimitAndRedaction:
             headers={"Content-Type": "application/json"},
         )
         assert resp.status_code == 422
+
+
+class TestCreateNodeAppAuthParam:
+    """Tests for the auth= shorthand on create_node_app (DA-1955)."""
+
+    def test_api_key_shorthand_requires_key_on_execute(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """auth='api-key' rejects unauthenticated /execute and accepts the key."""
+
+        monkeypatch.setenv("CANVASTEKK_API_KEY", "test-key-123")
+        app = create_node_app(EchoNode(), auth="api-key")
+        client = TestClient(app)
+
+        unauthenticated = client.post("/execute", json={"run_id": "r1", "node_id": "n1", "inputs": {}})
+        assert unauthenticated.status_code == 401
+
+        authenticated = client.post(
+            "/execute",
+            json={"run_id": "r1", "node_id": "n1", "inputs": {}},
+            headers={"X-API-Key": "test-key-123"},
+        )
+        assert authenticated.status_code == 200
+
+    def test_auth_none_keeps_current_behavior(self) -> None:
+        """auth=None leaves every endpoint unauthenticated (default)."""
+        app = create_node_app(EchoNode(), auth=None)
+        client = TestClient(app)
+
+        resp = client.post("/execute", json={"run_id": "r1", "node_id": "n1", "inputs": {}})
+        assert resp.status_code == 200
+
+    def test_node_auth_instance_honored(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An explicit NodeAuth instance is used directly."""
+        from canvastekk_workflow_sdk.auth import NodeAuth
+
+        monkeypatch.setenv("CANVASTEKK_API_KEY", "test-key-123")
+        app = create_node_app(EchoNode(), auth=NodeAuth.api_key())
+        client = TestClient(app)
+
+        with_key = client.post(
+            "/execute",
+            json={"run_id": "r1", "node_id": "n1", "inputs": {}},
+            headers={"X-API-Key": "test-key-123"},
+        )
+        assert with_key.status_code == 200
+
+    def test_unknown_shorthand_raises(self) -> None:
+        """Unknown strings raise ValueError with the valid options."""
+        with pytest.raises(ValueError, match="api-key"):
+            create_node_app(EchoNode(), auth="oauth")  # type: ignore[arg-type]
+
+    def test_dependencies_and_auth_merge(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Custom dependencies and auth coexist on the same router."""
+        from fastapi import Depends
+
+        monkeypatch.setenv("CANVASTEKK_API_KEY", "test-key-123")
+        calls: list[str] = []
+
+        def custom_dep() -> None:
+            calls.append("custom_dep")
+
+        app = create_node_app(EchoNode(), dependencies=[Depends(custom_dep)], auth="api-key")
+        client = TestClient(app)
+
+        resp = client.post(
+            "/execute",
+            json={"run_id": "r1", "node_id": "n1", "inputs": {}},
+            headers={"X-API-Key": "test-key-123"},
+        )
+        assert resp.status_code == 200
+        assert calls == ["custom_dep"]
+
+    def test_auth_skipped_when_dependencies_already_authed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Existing auth backend in dependencies wins; auth= is skipped."""
+        from canvastekk_workflow_sdk.auth import NodeAuth
+
+        monkeypatch.setenv("CANVASTEKK_API_KEY", "test-key-123")
+        explicit = NodeAuth.api_key()
+        app = create_node_app(EchoNode(), dependencies=[Depends(explicit)], auth="api-key")
+        client = TestClient(app)
+
+        with_key = client.post(
+            "/execute",
+            json={"run_id": "r1", "node_id": "n1", "inputs": {}},
+            headers={"X-API-Key": "test-key-123"},
+        )
+        assert with_key.status_code == 200
