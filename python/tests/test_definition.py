@@ -1111,3 +1111,91 @@ class TestManifestDeprecationSerialization:
         schema = WorkflowNodeManifest.model_json_schema()
         assert "deprecation" in schema["properties"]
         assert "deprecation" not in schema.get("required", [])
+
+
+class TestSdkCompatAndDocsFields:
+    """DA-1955: optional compat-range and docs fields with drop-when-none serialization."""
+
+    def _minimal(self) -> WorkflowNodeManifest:
+        return WorkflowNodeManifest(
+            name="echo",
+            version="1.0.0",
+            title="Echo",
+            description="Returns input unchanged",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        )
+
+    def test_unset_fields_omitted_from_to_dict(self) -> None:
+        """Drop-when-none: opting-out nodes serialize byte-identically (no new keys)."""
+        data = self._minimal().to_dict()
+        for key in ("minimum_sdk_version", "maximum_sdk_version", "docs_url", "changelog_url"):
+            assert key not in data
+
+    def test_set_fields_round_trip(self) -> None:
+        """Set fields are present and valid after serialization."""
+        manifest = self._minimal().model_copy(
+            update={
+                "minimum_sdk_version": "0.22.0",
+                "maximum_sdk_version": "1.0.0",
+                "docs_url": "https://example.com/docs",
+                "changelog_url": "https://example.com/changelog",
+            }
+        )
+        data = manifest.to_dict()
+        assert data["minimum_sdk_version"] == "0.22.0"
+        assert data["maximum_sdk_version"] == "1.0.0"
+        assert data["docs_url"] == "https://example.com/docs"
+        assert data["changelog_url"] == "https://example.com/changelog"
+
+    def test_invalid_sdk_version_rejected(self) -> None:
+        """Compat fields must be strict MAJOR.MINOR.PATCH semver."""
+        import pydantic
+
+        with pytest.raises(pydantic.ValidationError):
+            WorkflowNodeManifest(
+                name="echo",
+                version="1.0.0",
+                title="Echo",
+                description="Test",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+                minimum_sdk_version="0.22",
+            )
+
+    def test_invalid_sdk_version_prerelease_rejected(self) -> None:
+        """Pre-release tags are rejected, matching the version field's strictness."""
+        import pydantic
+
+        with pytest.raises(pydantic.ValidationError):
+            WorkflowNodeManifest(
+                name="echo",
+                version="1.0.0",
+                title="Echo",
+                description="Test",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+                maximum_sdk_version="1.0.0-rc1",
+            )
+
+    def test_non_http_url_rejected(self) -> None:
+        """docs_url/changelog_url must be http(s)."""
+        import pydantic
+
+        with pytest.raises(pydantic.ValidationError):
+            WorkflowNodeManifest(
+                name="echo",
+                version="1.0.0",
+                title="Echo",
+                description="Test",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+                docs_url="ftp://example.com/docs",
+            )
+
+    def test_fields_optional_in_json_schema(self) -> None:
+        """Schema stability gate: new fields listed as optional, never required."""
+        schema = WorkflowNodeManifest.model_json_schema()
+        for key in ("minimum_sdk_version", "maximum_sdk_version", "docs_url", "changelog_url"):
+            assert key in schema["properties"]
+            assert key not in schema.get("required", [])

@@ -120,8 +120,7 @@ class DeprecationInfo(BaseModel):
     )
     sunset_date: date | None = Field(
         default=None,
-        description="Planned removal date (RFC 8594 Sunset). "
-        "None = deprecated but no firm removal date yet.",
+        description="Planned removal date (RFC 8594 Sunset). None = deprecated but no firm removal date yet.",
     )
     replacement_slug: str | None = Field(
         default=None,
@@ -131,7 +130,7 @@ class DeprecationInfo(BaseModel):
     migration_url: str | None = Field(
         default=None,
         description="URL to migration documentation (RFC 9745 §3 "
-        "Link rel=\"deprecation\" / RFC 8594 §6 Link rel=\"sunset\").",
+        'Link rel="deprecation" / RFC 8594 §6 Link rel="sunset").',
     )
     notice: str = Field(
         description="Human-readable deprecation notice shown to workflow-definition authors.",
@@ -220,20 +219,51 @@ class WorkflowNodeManifest(BaseModel):
         "stays active until retired).",
     )
 
-    @model_serializer(mode="wrap")
-    def _drop_deprecation_when_none(
-        self, handler: Callable[[WorkflowNodeManifest], dict[str, Any]]
-    ) -> dict[str, Any]:
-        """Serialize the manifest, omitting ``deprecation`` when it is None.
+    # SDK compatibility range (optional — exported via registry constraints; DA-1955)
+    minimum_sdk_version: str | None = Field(
+        default=None,
+        description="Minimum canvastekk-workflow-sdk version this node requires "
+        "(X.Y.Z). Exported in the register payload constraints so the engine can "
+        "flag incompatible hosts (drift report engine_compatible).",
+    )
+    maximum_sdk_version: str | None = Field(
+        default=None,
+        description="Maximum canvastekk-workflow-sdk version this node supports "
+        "(X.Y.Z, inclusive). Exported in the register payload constraints.",
+    )
 
-        Non-deprecated nodes then serialize byte-identically to the pre-deprecation
-        shape, which protects the ``/manifest`` endpoint and contract/stability
-        consumers that compare serialized output. Covers every instance-serialization
-        path (``to_dict`` / ``model_dump``); does not affect ``model_json_schema``.
+    # Documentation links (optional — DA-1937 preview surface)
+    docs_url: str | None = Field(
+        default=None,
+        description="HTTP(S) URL to this node's documentation.",
+    )
+    changelog_url: str | None = Field(
+        default=None,
+        description="HTTP(S) URL to this node's changelog.",
+    )
+
+    @model_serializer(mode="wrap")
+    def _drop_optional_when_none(self, handler: Callable[[WorkflowNodeManifest], dict[str, Any]]) -> dict[str, Any]:
+        """Serialize the manifest, omitting optional keys when they are None.
+
+        Covers ``deprecation`` plus the DA-1955 optional fields
+        (``minimum_sdk_version``/``maximum_sdk_version``/``docs_url``/
+        ``changelog_url``). Nodes that do not set them serialize
+        byte-identically to the pre-DA-1955 shape, which protects the
+        ``/manifest`` endpoint and contract/stability consumers that compare
+        serialized output. Covers every instance-serialization path
+        (``to_dict`` / ``model_dump``); does not affect ``model_json_schema``.
         """
         data = handler(self)
-        if data.get("deprecation") is None:
-            data.pop("deprecation", None)
+        for optional_key in (
+            "deprecation",
+            "minimum_sdk_version",
+            "maximum_sdk_version",
+            "docs_url",
+            "changelog_url",
+        ):
+            if data.get(optional_key) is None:
+                data.pop(optional_key, None)
         return data
 
     @computed_field  # type: ignore[misc]
@@ -256,6 +286,24 @@ class WorkflowNodeManifest(BaseModel):
     def _validate_version(cls, v: str) -> str:
         if not _SEMVER_PATTERN.fullmatch(v):
             raise ValueError(f"Node version must be semantic version (X.Y.Z). Got: '{v}'")
+        return v
+
+    @field_validator("minimum_sdk_version", "maximum_sdk_version")
+    @classmethod
+    def _validate_sdk_versions(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not _SEMVER_PATTERN.fullmatch(v):
+            raise ValueError(f"SDK version bounds must be semantic version (X.Y.Z). Got: '{v}'")
+        return v
+
+    @field_validator("docs_url", "changelog_url")
+    @classmethod
+    def _validate_http_urls(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not (v.startswith("http://") or v.startswith("https://")):
+            raise ValueError(f"URL must use http(s) scheme. Got: '{v}'")
         return v
 
     @property
@@ -357,15 +405,17 @@ def export_definition(
     constraints: dict[str, Any] | None = None,
 ) -> Path:
     """
-    Export a WorkflowNodeManifest as a WorkflowNode-compatible JSON file.
+    Export a WorkflowNodeManifest as a full node-manifest JSON file.
 
-    The output matches the engine's ``RegisterNodeRequest`` schema, which
-    registers a ``WorkflowNode`` (registry-level node type). This is distinct
-    from ``WorkflowDefinitionNode``, which represents a node instance within
-    a specific workflow definition.
+    DA-1955: the output is the FULL manifest shape (includes ``node_role``,
+    ``retry``, ``node_status``, ``deprecation``) consumed by the node's
+    ``/manifest`` endpoint and the engine's SDKNodeDefinition model. It is NOT
+    a valid body for ``POST /api/workflows/nodes/`` (that request schema is
+    ``extra="forbid"`` without those fields) — use ``register_node()`` for the
+    HTTP registration path, which emits the aligned payload.
 
     Maps SDK WorkflowNodeManifest fields to the registry schema and writes the result
-    as a clean JSON file suitable for CI/CD registration via POST /api/workflows/nodes/.
+    as a clean JSON file.
 
     Field mapping:
         WorkflowNodeManifest.title  -> label
@@ -398,6 +448,15 @@ def export_definition(
         constraints=constraints,
         node_status=node_status,
     )
+
+    # DA-1955: full manifest shape. The exported file targets the node's
+    # /manifest endpoint format (SDKNodeDefinition, extra-tolerant), not the
+    # engine's extra="forbid" registration request — re-add registry-only keys.
+    registry_dict["node_role"] = definition.role.value
+    registry_dict["retry"] = definition.default_retry.model_dump(mode="json")
+    registry_dict["node_status"] = node_status
+    if definition.deprecation is not None:
+        registry_dict["deprecation"] = definition.deprecation.model_dump(mode="json")
 
     if styles is not None:
         registry_dict["styles"] = styles
