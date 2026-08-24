@@ -5,7 +5,7 @@ import {
   boundingBoxCenter,
   boundingBoxSize,
 } from "../src/contracts/point3d.js";
-import type { Point3D, BoundingBox3D } from "../src/contracts/point3d.js";
+import type { BoundingBox3D } from "../src/contracts/point3d.js";
 import {
   instanceNumPoints,
   getInstancesByClass,

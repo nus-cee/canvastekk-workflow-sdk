@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { existsSync, rmSync, statSync } from "node:fs";
+import { describe, it, expect, afterEach } from "vitest";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { ExecutionContext } from "../src/context.js";
 

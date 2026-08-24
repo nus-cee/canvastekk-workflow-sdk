@@ -3,13 +3,12 @@ import { join } from "node:path";
 import { WorkflowBuilder } from "../src/workflow/builder.js";
 import { WorkflowRunner } from "../src/workflow/runner.js";
 import { InProcessExecutor } from "../src/workflow/executor.js";
-import { ExecutionContext } from "../src/context.js";
 
 describe("WorkflowRunner", () => {
   it("sequential execution (start → node → end)", async () => {
     const executor = new InProcessExecutor();
     executor.register("echo-v1.0.0", {
-      execute: async (inputs, ctx) => ({ result: inputs.message }),
+      execute: async (inputs, _ctx) => ({ result: inputs.message }),
     });
 
     const spec = await new WorkflowBuilder()
@@ -33,10 +32,10 @@ describe("WorkflowRunner", () => {
   it("parallel execution within a level", async () => {
     const executor = new InProcessExecutor();
     executor.register("node-a-v1", {
-      execute: async (inputs, ctx) => ({ value: "A" }),
+      execute: async (_inputs, _ctx) => ({ value: "A" }),
     });
     executor.register("node-b-v1", {
-      execute: async (inputs, ctx) => ({ value: "B" }),
+      execute: async (_inputs, _ctx) => ({ value: "B" }),
     });
 
     const spec = await new WorkflowBuilder()
@@ -325,7 +324,7 @@ describe("WorkflowRunner", () => {
   it("Handles nodeOutputs injection from initial inputs", async () => {
     const executor = new InProcessExecutor();
     executor.register("read-v1", {
-      execute: async (inputs, ctx) => ({ value: inputs.inputKey }),
+      execute: async (inputs, _ctx) => ({ value: inputs.inputKey }),
     });
 
     const spec = await new WorkflowBuilder()

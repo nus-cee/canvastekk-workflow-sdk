@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { BaseNode } from "../src/base-node.js";
 import type { WorkflowNodeManifest } from "../src/definition.js";
 import type { ExecutionContext } from "../src/context.js";
-import { NodeValidationError, NodeOutputValidationError } from "../src/exceptions.js";
 import { TimingMiddleware } from "../src/middleware.js";
 
 class EchoNode extends BaseNode {
@@ -185,11 +184,9 @@ describe("BaseNode", () => {
 // NOTE: IPv4 literals are constructed from fragments because the vibeguard
 // secret-masking layer rewrites full dotted-quad literals in agent output.
 
-
 import { readdirSync, readFileSync, rmSync, existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { NodeIOError } from "../src/exceptions.js";
 
 const PUBLIC_HOST = "s3.example.com";
 const PRIVATE_IP = ["192", "168", "1", "10"].join(".");
@@ -293,7 +290,7 @@ describe("download policy (Phase 1)", () => {
     let calls = 0;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (url: string) => {
+      vi.fn(async (_url: string) => {
         calls += 1;
         if (calls === 1) {
           return makeResponse({ status: 302, headers: { location: `https://${PUBLIC_HOST}/hop2.ply` } });
