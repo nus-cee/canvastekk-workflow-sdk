@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { createNodeApp } from "../src/app.js";
 import { writeFileSync } from "node:fs";

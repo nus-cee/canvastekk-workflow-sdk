@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, unlinkSync, statSync } from "node:fs";
+import { unlinkSync, statSync } from "node:fs";
 import { createWriteStream } from "node:fs";
 import { join, basename } from "node:path";
 import { once } from "node:events";
@@ -252,7 +252,6 @@ export abstract class BaseNode {
   ): Promise<string> {
     const maxBytes = this.maxDownloadBytes(fieldName);
     const deadline = downloadDeadline(this.getDefinition().timeout_seconds);
-    const cancelSignal = context.cancelSignal;
 
     try {
       return await this.downloadOneInner(fieldName, url, context, maxBytes, deadline);
@@ -276,7 +275,7 @@ export abstract class BaseNode {
     let filename = `${fieldName}_${extractFilename(currentUrl, undefined)}`;
 
     let hops = 0;
-    // eslint-disable-next-line no-constant-condition
+     
     while (true) {
       if (cancelSignal?.aborted) {
         throw new NodeIOError(`Download for field '${fieldName}' was cancelled`);

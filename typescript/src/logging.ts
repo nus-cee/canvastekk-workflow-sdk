@@ -1,4 +1,3 @@
-import { inspect } from "node:util";
 
 /** Log level severity. */
 export type LogLevel = "debug" | "info" | "warn" | "error" | "fatal";
