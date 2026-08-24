@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import httpx
@@ -67,6 +68,9 @@ class S3PresignedUploader:
     downstream consumers (DA-1711 4.1).
     """
 
+    _MAX_ATTEMPTS = 3
+    _INITIAL_BACKOFF_SECONDS = 0.5
+
     def upload_file(self, file_path: str, presigned_url: str) -> None:
         """Upload a single file to a pre-signed S3 PUT URL.
 
@@ -78,24 +82,54 @@ class S3PresignedUploader:
         preserve the multi-GB upload contract. ``timeout`` is per-operation
         (connect/read/write/pool), not a wall-clock deadline.
 
+        Retries transient failures (network/transport errors and HTTP 5xx)
+        up to 3 attempts with exponential backoff (0.5s, 1s). Deterministic
+        client errors (4xx) are never retried. The file is reopened per
+        attempt because the request consumed the stream.
+
         Args:
             file_path: Local path to the file.
             presigned_url: Pre-signed S3 PUT URL.
 
         Raises:
-            httpx.HTTPStatusError: If the upload fails.
+            httpx.HTTPStatusError: If the upload fails after retries.
+            httpx.TransportError: If the connection fails after retries.
         """
-        with open(file_path, "rb") as f:
-            resp = httpx.put(
-                presigned_url,
-                content=f,
-                headers={
-                    "Content-Type": "application/octet-stream",
-                    "Content-Length": str(os.path.getsize(file_path)),
-                },
-                timeout=_UPLOAD_TIMEOUT_SECONDS,
-            )
-            resp.raise_for_status()
+        last_error: Exception | None = None
+        for attempt in range(1, self._MAX_ATTEMPTS + 1):
+            try:
+                with open(file_path, "rb") as f:
+                    resp = httpx.put(
+                        presigned_url,
+                        content=f,
+                        headers={
+                            "Content-Type": "application/octet-stream",
+                            "Content-Length": str(os.path.getsize(file_path)),
+                        },
+                        timeout=_UPLOAD_TIMEOUT_SECONDS,
+                    )
+                    resp.raise_for_status()
+                return
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code < 500:
+                    raise
+                last_error = e
+            except httpx.TransportError as e:
+                last_error = e
+
+            if attempt < self._MAX_ATTEMPTS:
+                backoff = self._INITIAL_BACKOFF_SECONDS * (2 ** (attempt - 1))
+                logger.warning(
+                    "Upload attempt %d/%d failed (%s); retrying in %.1fs",
+                    attempt,
+                    self._MAX_ATTEMPTS,
+                    last_error,
+                    backoff,
+                )
+                time.sleep(backoff)
+
+        assert last_error is not None
+        raise last_error
 
     def upload_outputs(
         self,

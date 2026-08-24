@@ -276,3 +276,100 @@ class TestUploadWireFormat:
         assert captured["content_length"] == str(len(payload))
         assert captured["transfer_encoding"] is None
         assert captured["body"] == payload
+
+
+class TestUploadRetry:
+    """Retry semantics for S3PresignedUploader.upload_file (DA-1955)."""
+
+    def _write_file(self, tmp_path: Path) -> Path:
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+        return test_file
+
+    def test_transport_error_retries_then_succeeds(self, tmp_path: Path) -> None:
+        """Two transport failures then success = 3 attempts, uploads."""
+        uploader = S3PresignedUploader()
+        test_file = self._write_file(tmp_path)
+
+        mock_success = MagicMock()
+        mock_success.raise_for_status = MagicMock()
+
+        with patch(
+            "canvastekk_workflow_sdk.uploads.httpx.put",
+            side_effect=[httpx.TransportError("boom"), httpx.TransportError("boom"), mock_success],
+        ) as mock_put:
+            uploader.upload_file(str(test_file), "https://example.com/presigned")
+
+        assert mock_put.call_count == 3
+
+    def test_500_retries_then_raises_after_max_attempts(self, tmp_path: Path) -> None:
+        """Persistent 500s exhaust 3 attempts then raise."""
+        uploader = S3PresignedUploader()
+        test_file = self._write_file(tmp_path)
+
+        mock_500 = MagicMock()
+        mock_500.status_code = 500
+        mock_500.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError("500", request=MagicMock(), response=mock_500)
+        )
+
+        with (
+            patch("canvastekk_workflow_sdk.uploads.httpx.put", return_value=mock_500) as mock_put,
+            patch("canvastekk_workflow_sdk.uploads.time.sleep") as mock_sleep,
+        ):
+            with pytest.raises(httpx.HTTPStatusError):
+                uploader.upload_file(str(test_file), "https://example.com/presigned")
+
+        assert mock_put.call_count == 3
+        assert mock_sleep.call_count == 2
+
+    def test_403_never_retries(self, tmp_path: Path) -> None:
+        """Deterministic 4xx client errors raise immediately."""
+        uploader = S3PresignedUploader()
+        test_file = self._write_file(tmp_path)
+
+        mock_403 = MagicMock()
+        mock_403.status_code = 403
+        mock_403.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError("403", request=MagicMock(), response=mock_403)
+        )
+
+        with patch("canvastekk_workflow_sdk.uploads.httpx.put", return_value=mock_403) as mock_put:
+            with pytest.raises(httpx.HTTPStatusError):
+                uploader.upload_file(str(test_file), "https://example.com/presigned")
+
+        mock_put.assert_called_once()
+
+    def test_success_single_attempt(self, tmp_path: Path) -> None:
+        """Successful upload makes exactly one attempt."""
+        uploader = S3PresignedUploader()
+        test_file = self._write_file(tmp_path)
+
+        mock_success = MagicMock()
+        mock_success.raise_for_status = MagicMock()
+
+        with patch("canvastekk_workflow_sdk.uploads.httpx.put", return_value=mock_success) as mock_put:
+            uploader.upload_file(str(test_file), "https://example.com/presigned")
+
+        mock_put.assert_called_once()
+
+    def test_backoff_schedule_exponential(self, tmp_path: Path) -> None:
+        """Backoff is 0.5s then 1.0s (0.5 * 2^(n-1))."""
+        uploader = S3PresignedUploader()
+        test_file = self._write_file(tmp_path)
+
+        mock_500 = MagicMock()
+        mock_500.status_code = 500
+        mock_500.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError("500", request=MagicMock(), response=mock_500)
+        )
+
+        with (
+            patch("canvastekk_workflow_sdk.uploads.httpx.put", return_value=mock_500),
+            patch("canvastekk_workflow_sdk.uploads.time.sleep") as mock_sleep,
+        ):
+            with pytest.raises(httpx.HTTPStatusError):
+                uploader.upload_file(str(test_file), "https://example.com/presigned")
+
+        delays = [call.args[0] for call in mock_sleep.call_args_list]
+        assert delays == [0.5, 1.0]

@@ -8,12 +8,23 @@ subprocess.run.
 """
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 PYTHON_BIN = Path(sys.executable)
+REPO_PYTHON_DIR = Path(__file__).resolve().parents[1]
+
+
+def _cli_env() -> dict[str, str]:
+    """Env that forces the CLI subprocess to import THIS repo's SDK code."""
+    env = dict(os.environ)
+    existing = env.get("PYTHONPATH", "")
+    repo_dir = str(REPO_PYTHON_DIR)
+    env["PYTHONPATH"] = f"{repo_dir}{os.pathsep}{existing}" if existing else repo_dir
+    return env
 
 
 def test_validate_valid_definition():
@@ -315,3 +326,65 @@ def test_diff_json_flag_outputs_valid_json():
         assert "non_breaking_changes" in payload
         assert payload["old_version"] == "1.0.0"
         assert payload["new_version"] == "1.1.0"
+
+
+def test_validate_invalid_draft7_schema_exit_1():
+    """Test that a structurally-invalid input_schema fails validation (DA-1955)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test_node.py"
+        test_file.write_text("""
+from canvastekk_workflow_sdk import WorkflowNodeManifest
+
+definition = WorkflowNodeManifest(
+    name="test-node",
+    version="1.0.0",
+    title="Test Node",
+    description="A test node",
+    input_schema={"type": "strng", "properties": {"input": {"type": "string"}}},
+    output_schema={"type": "object"},
+)
+""")
+
+        result = subprocess.run(
+            [str(PYTHON_BIN), "-m", "canvastekk_workflow_sdk", "validate", "test_node:definition"],
+            cwd=tmpdir,
+            capture_output=True,
+            text=True,
+            env=_cli_env(),
+        )
+
+        assert result.returncode == 1, (
+            f"Expected exit 1, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )
+        assert "input_schema" in result.stdout
+        assert "draft-7" in result.stdout
+
+
+def test_validate_valid_draft7_schema_exit_0():
+    """Test that well-formed schemas still pass (regression guard)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test_node.py"
+        test_file.write_text("""
+from canvastekk_workflow_sdk import WorkflowNodeManifest
+
+definition = WorkflowNodeManifest(
+    name="test-node",
+    version="1.0.0",
+    title="Test Node",
+    description="A test node",
+    input_schema={"type": "object", "properties": {"input": {"type": "string"}}, "required": []},
+    output_schema={"type": "object", "properties": {"output": {"type": "string"}}},
+)
+""")
+
+        result = subprocess.run(
+            [str(PYTHON_BIN), "-m", "canvastekk_workflow_sdk", "validate", "test_node:definition"],
+            cwd=tmpdir,
+            capture_output=True,
+            text=True,
+            env=_cli_env(),
+        )
+
+        assert result.returncode == 0, (
+            f"Expected exit 0, got {result.returncode}. stdout: {result.stdout}, stderr: {result.stderr}"
+        )

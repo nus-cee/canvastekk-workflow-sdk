@@ -15,6 +15,9 @@ from importlib.resources import as_file
 from importlib.resources import files as pkg_files
 from pathlib import Path
 
+from jsonschema import Draft7Validator
+from jsonschema import exceptions as _jsonschema_exceptions
+
 
 def _load_definition(module_path: str):
     """Load a WorkflowNodeManifest from a module:attribute path."""
@@ -83,6 +86,15 @@ def _validate_definition(definition) -> dict:
         schema = definition.output_schema.get("properties", {}).get(name, {})
         field_report = {"name": name, "format": schema.get("format"), "type": schema.get("type")}
         report["file_output_fields"].append(field_report)
+
+    # Draft-7 structural validation of the JSON schemas (DA-1955).
+    # Catches broken schemas at authoring time instead of at engine registration.
+    for label, schema in (("input_schema", definition.input_schema), ("output_schema", definition.output_schema)):
+        try:
+            Draft7Validator.check_schema(schema)
+        except _jsonschema_exceptions.SchemaError as exc:
+            report["valid"] = False
+            report["errors"].append(f"{label} is not a valid draft-7 JSON schema: {exc.message}")
 
     return report
 

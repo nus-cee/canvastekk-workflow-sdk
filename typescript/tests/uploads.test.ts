@@ -144,3 +144,84 @@ describe("S3PresignedUploader", () => {
     });
   });
 });
+
+describe("S3PresignedUploader retry (DA-1955)", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "sdk-uploads-retry-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  async function startScriptedServer(script: Array<[number, string]>) {
+    let requestCount = 0;
+    const server: Server = createServer((_req, res) => {
+      const [status, statusText] = script[Math.min(requestCount, script.length - 1)];
+      requestCount += 1;
+      res.writeHead(status, statusText);
+      res.end(status >= 200 && status < 300 ? undefined : "error-detail");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    return {
+      url: `http://127.0.0.1:${port}/presigned-put`,
+      getRequestCount: () => requestCount,
+      close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    };
+  }
+
+  it("retries 5xx then succeeds on third attempt", async () => {
+    const server = await startScriptedServer([
+      [500, "Internal Server Error"],
+      [500, "Internal Server Error"],
+      [200, "OK"],
+    ]);
+    const filePath = join(tmpDir, "test.txt");
+    writeFileSync(filePath, "test content");
+    const uploader = new S3PresignedUploader();
+
+    try {
+      await uploader.uploadFile(filePath, server.url);
+      expect(server.getRequestCount()).toBe(3);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("never retries 4xx client errors", async () => {
+    const server = await startScriptedServer([[403, "Forbidden"]]);
+    const filePath = join(tmpDir, "test.txt");
+    writeFileSync(filePath, "test content");
+    const uploader = new S3PresignedUploader();
+
+    try {
+      await expect(uploader.uploadFile(filePath, server.url)).rejects.toMatchObject({
+        name: "UploadHttpError",
+        statusCode: 403,
+      });
+      expect(server.getRequestCount()).toBe(1);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("exhausts retries on persistent 5xx and raises UploadHttpError", async () => {
+    const server = await startScriptedServer([[500, "Internal Server Error"]]);
+    const filePath = join(tmpDir, "test.txt");
+    writeFileSync(filePath, "test content");
+    const uploader = new S3PresignedUploader();
+
+    try {
+      await expect(uploader.uploadFile(filePath, server.url)).rejects.toMatchObject({
+        name: "UploadHttpError",
+        statusCode: 500,
+      });
+      expect(server.getRequestCount()).toBe(3);
+    } finally {
+      await server.close();
+    }
+  });
+});
