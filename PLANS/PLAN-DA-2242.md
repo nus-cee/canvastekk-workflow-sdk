@@ -21,17 +21,17 @@ v0.24.0 (feat: → minor, `.github/workflows/release.yml`).
 
 ## Acceptance Criteria
 
-- [ ] `NodeExecutionRequest` accepts an optional `account_id: int | None`
+- [x] `NodeExecutionRequest` accepts an optional `account_id: int | None`
       (default `None`, absent = local/back-compat runs).
-- [ ] `ExecutionContext.account_id` returns the request's value (or `None`
+- [x] `ExecutionContext.account_id` returns the request's value (or `None`
       when no request is attached).
-- [ ] `/execute` reads the `X-Account-Id` header; valid integer → set on the
+- [x] `/execute` reads the `X-Account-Id` header; valid integer → set on the
       request; malformed (non-integer) → HTTP 400; absent → `None`.
-- [ ] Tests cover field parsing, context property, and all three header
+- [x] Tests cover field parsing, context property, and all three header
       cases.
-- [ ] `docs/EXTERNAL-AUTHOR-GUIDE.md` and `python/README.md` document the new
+- [x] `docs/EXTERNAL-AUTHOR-GUIDE.md` and `python/README.md` document the new
       context surface.
-- [ ] `poetry run ruff check canvastekk_workflow_sdk/ tests/` and
+- [x] `poetry run ruff check canvastekk_workflow_sdk/ tests/` and
       `poetry run pytest -v` both green in `python/`.
 
 ## Scope
@@ -71,48 +71,48 @@ v0.24.0 (feat: → minor, `.github/workflows/release.yml`).
 
 ### Phase 1: transport field + context accessor
 
-- [ ] **1.1** Add `account_id: int | None = Field(default=None, ge=1, le=2**63-1)` to `NodeExecutionRequest` and pin `extra="ignore"` in `model_config`
+- [x] **1.1** Add `account_id: int | None = Field(default=None, ge=1, le=2**63-1)` to `NodeExecutionRequest` and pin `extra="ignore"` in `model_config`
     — **Why:** the header value needs a typed, bounded home (DB int64 downstream); explicit `extra="ignore"` pins the cross-version compat contract that today rests on a pydantic default.
     — **Done when:** `NodeExecutionRequest(run_id="r", node_id="n")` validates with `account_id=None`; `account_id=42` round-trips; `0`/`-1`/`2**63` raise ValidationError.
     — **Consumers affected:** `app.py` /execute, `context.py`.
-- [ ] **1.2** Add `account_id` property to `ExecutionContext` in `context.py`
+- [x] **1.2** Add `account_id` property to `ExecutionContext` in `context.py`
     — **Why:** node handlers only ever see the context (publisher's `execute(inputs, context)`), so this is the surface DA-2236 consumes; reading from `self._request` keeps it in sync with the parsed request (mirrors the `run_id` property pattern, `context.py:83-87`).
     — **Done when:** context built with a request carrying `account_id=7` returns `7`; request-less context returns `None`.
     — **Consumers affected:** canvastekk-workflow-nodes handlers (DA-2236).
 
 ### Phase 2: header capture in /execute
 
-- [ ] **2.1** Capture `X-Account-Id` in `app.py` `/execute`; header is the exclusive source (body-supplied `account_id` stripped), inject via constructor
+- [x] **2.1** Capture `X-Account-Id` in `app.py` `/execute`; header is the exclusive source (body-supplied `account_id` stripped), inject via constructor
     — **Why:** the engine sends the account as a header, never in the body; leaving the body field live would let any caller forge account identity (`NodeExecutionRequest(**body)` at `app.py:287`) — defeating the ticket's purpose. Fail-fast 400 on malformed instead of silently dropping context. Ordering: after body JSON parse, before `node.run`.
     — **Done when:** valid header → context sees the int; malformed/negative/out-of-range → HTTP 400; absent or empty-after-strip → `None`; body-only `account_id` → `None`; conflicting body+header → header wins. OpenAPI 400 description mentions the header case.
     — **Consumers affected:** every node's runtime path (engine → node).
 
 ### Phase 3: tests
 
-- [ ] **3.1** Extend `tests/test_request.py` for the new field
+- [x] **3.1** Extend `tests/test_request.py` for the new field
     — **Why:** pins the additive-optional + bounded contract against regressions.
     — **Done when:** tests assert default `None`, int accepted, `0`/negative/`2**63` rejected.
     — **Consumers affected:** none (CI gate).
-- [ ] **3.2** Extend `tests/test_context.py` for the property
+- [x] **3.2** Extend `tests/test_context.py` for the property
     — **Why:** the property is the public surface nodes consume; both request-attached and request-less paths must be pinned.
     — **Done when:** tests assert property returns the request value and `None` without a request.
     — **Consumers affected:** none (CI gate).
-- [ ] **3.3** Extend `tests/test_app.py` for header capture (TestClient `headers={...}` precedent exists in auth/413 tests) using a context-capturing echo node (mirrors `FileProcessingNode` → derived outputs pattern)
+- [x] **3.3** Extend `tests/test_app.py` for header capture (TestClient `headers={...}` precedent exists in auth/413 tests) using a context-capturing echo node (mirrors `FileProcessingNode` → derived outputs pattern)
     — **Why:** the /execute wiring is the whole point of the ticket; header cases AND the body-spoof guard need HTTP-level coverage.
     — **Done when:** tests assert (a) valid header → context value in outputs, (b) malformed → 400, (c) empty-after-strip → absent/`None`, (d) absent → `None`, (e) body-only `account_id` → context sees `None`, (f) conflicting body+header → header wins, (g) lowercase `x-account-id` variant works (Starlette headers are case-insensitive), (h) one boundary: `0` → 400.
     — **Consumers affected:** none (CI gate).
 
 ### Phase 4: docs + gates
 
-- [ ] **4.1** Document `context.account_id` in `docs/EXTERNAL-AUTHOR-GUIDE.md` and `python/README.md`
+- [x] **4.1** Document `context.account_id` in `docs/EXTERNAL-AUTHOR-GUIDE.md` and `python/README.md`
     — **Why:** repo AGENTS.md makes docs sync mandatory for auth/node-workflow changes; docs must state the header → context flow, `None` semantics for local runs, that `account_id` is engine-asserted routing identity (not a credential), and show the `NodeExecutionRequest(..., account_id=7)` unit-test pattern for node authors (DA-2236).
     — **Done when:** both docs cover those four points.
     — **Consumers affected:** node authors.
-- [ ] **4.2** Run `poetry run ruff check canvastekk_workflow_sdk/ tests/` and `poetry run pytest -v` in `python/`
+- [x] **4.2** Run `poetry run ruff check canvastekk_workflow_sdk/ tests/` and `poetry run pytest -v` in `python/`
     — **Why:** repo-mandated pre-merge gates.
     — **Done when:** both exit 0.
     — **Consumers affected:** CI / release automation.
-- [ ] **4.3** Commit as `feat(sdk): propagate X-Account-Id into node execution context (DA-2242)`
+- [x] **4.3** Commit as `feat(sdk): propagate X-Account-Id into node execution context (DA-2242)`
     — **Why:** git-cliff maps `feat:` to a minor bump — merge to `main` auto-releases v0.24.0 and dispatches `sdk-released` to canvastekk-workflow-nodes; a non-feat type would ship nothing.
     — **Done when:** commit message type is `feat`; PR merged to `main`; release workflow publishes the v0.24.0 wheel.
     — **Consumers affected:** canvastekk-workflow-nodes pin bump (DA-2236).
