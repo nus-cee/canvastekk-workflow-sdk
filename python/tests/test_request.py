@@ -53,11 +53,12 @@ class TestAccountIdField:
 
     def test_rejects_zero_negative_and_int64_overflow(self) -> None:
         import pytest
+        from pydantic import ValidationError
 
         from canvastekk_workflow_sdk.request import NodeExecutionRequest
 
         for bad in (0, -1, 2**63):
-            with pytest.raises(Exception):
+            with pytest.raises(ValidationError):
                 NodeExecutionRequest(run_id="r1", node_id="n1", inputs={}, account_id=bad)
 
     def test_unknown_body_keys_still_ignored(self) -> None:

@@ -1128,6 +1128,16 @@ class TestAccountIdHeaderPropagation:
         resp = account_client.post("/execute", json=self._BODY, headers={"X-Account-Id": str(2**63)})
         assert resp.status_code == 400
 
+    def test_absurdly_long_header_400_not_500(self, account_client: TestClient) -> None:
+        """CVE-2020-10735: >19-digit strings are rejected before int() — no 500."""
+        resp = account_client.post("/execute", json=self._BODY, headers={"X-Account-Id": "1" * 5000})
+        assert resp.status_code == 400
+
+    def test_upper_boundary_accepted(self, account_client: TestClient) -> None:
+        resp = account_client.post("/execute", json=self._BODY, headers={"X-Account-Id": str(2**63 - 1)})
+        assert resp.status_code == 200
+        assert resp.json()["outputs"] == {"account_id": 2**63 - 1}
+
     def test_body_account_id_ignored_without_header(self, account_client: TestClient) -> None:
         """Spoof guard: body-supplied account_id is stripped."""
         body = {**self._BODY, "account_id": 999}

@@ -39,7 +39,13 @@ from canvastekk_workflow_sdk.uploads import get_default_uploader
 _ACTIVE_CANCELS: dict[str, threading.Event] = {}
 
 # DA-2242: canonical X-Account-Id values (the engine sends str(int)).
-_ACCOUNT_ID_RE = re.compile(r"^\d+$")
+# ASCII-only: canonical str(int) never contains non-ASCII digits.
+_ACCOUNT_ID_RE = re.compile(r"^[0-9]+$")
+
+# 2**63 - 1 is 19 digits — longer strings are provably out of range and are
+# rejected before int() so absurdly long headers can't trip CPython's
+# CVE-2020-10735 digit-conversion limit (ValueError → unhandled 500).
+_ACCOUNT_ID_MAX_DIGITS = 19
 
 # Default request body limit — parity with the TypeScript SDK's 50 MB
 # express.json limit. Override with CANVASTEKK_MAX_BODY_BYTES.
@@ -300,6 +306,11 @@ def create_node_app(
                 return JSONResponse(
                     status_code=400,
                     content={"detail": "Malformed X-Account-Id header"},
+                )
+            if len(candidate) > _ACCOUNT_ID_MAX_DIGITS:
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "X-Account-Id header out of range"},
                 )
             parsed = int(candidate)
             if not (1 <= parsed <= 2**63 - 1):
