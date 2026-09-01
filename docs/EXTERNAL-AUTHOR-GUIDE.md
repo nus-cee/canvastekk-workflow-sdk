@@ -267,6 +267,24 @@ The auto-download pipeline enforces an SSRF protection policy:
 
 Uploads changed too: a failed output upload now **fails the execution** with `error_code: "UPLOAD_FAILED"` instead of silently passing with a local-only path.
 
+### Account Context (v0.24.0+)
+
+When the workflow engine invokes your node's `POST /execute`, it forwards the run's active account as the `X-Account-Id` header. The SDK surfaces it on the execution context:
+
+```python
+def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+    account_id = context.account_id  # int | None
+```
+
+Rules to rely on:
+
+- **Routing identity, not a credential.** Use it to route account-scoped calls (e.g. forwarding `X-Account-Id` to account-gated CDS endpoints). Endpoint access is still gated by node auth.
+- **Header-only, engine-asserted.** The SDK strips any body-supplied `account_id` and sets the field exclusively from the header — callers cannot forge it.
+- **`None` when absent** (local runs, engines that don't send the header). Treat `None` as "no account context": either degrade gracefully or fail with a clear error if the account is required.
+- **Strict parsing.** Blank headers are treated as absent; non-numeric, negative, zero, or int64-overflowing values fail with HTTP 400.
+
+In unit tests, skip the header plumbing — construct the request directly: `NodeExecutionRequest(run_id="r1", node_id="n1", inputs={}, account_id=7)`.
+
 ### Validate Locally
 
 Before deploying, validate your node definition offline:

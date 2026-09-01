@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class NodeExecutionRequest(BaseModel):
@@ -51,6 +51,17 @@ class NodeExecutionRequest(BaseModel):
         default_factory=dict,
         description="Input values (may include signed URLs for file access)",
     )
+    account_id: int | None = Field(
+        default=None,
+        ge=1,
+        le=2**63 - 1,
+        description=(
+            "Active account ID asserted by the orchestrator (DA-2242). "
+            "Engine-controlled: /execute sets this exclusively from the "
+            "X-Account-Id header — body-supplied values are stripped. "
+            "None for local runs."
+        ),
+    )
     callback_url: str | None = Field(
         default=None,
         description="For async execution - URL to POST result to when complete",
@@ -60,16 +71,19 @@ class NodeExecutionRequest(BaseModel):
         description="Mapping of output field name to pre-signed S3 PUT URL for uploading output files",
     )
 
-    model_config = {
-        "json_schema_extra": {
+    model_config = ConfigDict(
+        # Tolerate unknown body keys both directions (old engine ↔ new SDK).
+        extra="ignore",
+        json_schema_extra={
             "examples": [
                 {
                     "run_id": "run-abc123",
                     "node_id": "echo-1",
                     "inputs": {"message": "Hello, World!"},
+                    "account_id": 42,
                     "callback_url": None,
                     "output_upload_url": None,
                 }
             ]
-        }
-    }
+        },
+    )

@@ -94,6 +94,18 @@ class ExecutionContext:
         return self._output_dir.name
 
     @property
+    def account_id(self) -> int | None:
+        """Active account ID asserted by the orchestrator (DA-2242).
+
+        Engine-controlled routing identity (not an auth credential) — set
+        exclusively from the ``X-Account-Id`` header on ``/execute``.
+        ``None`` for local runs and request-less contexts.
+        """
+        if self._request is not None:
+            return self._request.account_id
+        return None
+
+    @property
     def output_dir(self) -> Path:
         """Local temp directory for outputs."""
         return self._output_dir

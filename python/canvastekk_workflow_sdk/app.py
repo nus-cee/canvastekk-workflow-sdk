@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import shutil
 import threading
 from collections.abc import Sequence
@@ -36,6 +37,15 @@ from canvastekk_workflow_sdk.uploads import get_default_uploader
 # Registry of cancel events for in-flight timed executions (cooperative
 # cancellation — see BaseNode._set_cancel_event / context.cancel_event).
 _ACTIVE_CANCELS: dict[str, threading.Event] = {}
+
+# DA-2242: canonical X-Account-Id values (the engine sends str(int)).
+# ASCII-only: canonical str(int) never contains non-ASCII digits.
+_ACCOUNT_ID_RE = re.compile(r"^[0-9]+$")
+
+# 2**63 - 1 is 19 digits — longer strings are provably out of range and are
+# rejected before int() so absurdly long headers can't trip CPython's
+# CVE-2020-10735 digit-conversion limit (ValueError → unhandled 500).
+_ACCOUNT_ID_MAX_DIGITS = 19
 
 # Default request body limit — parity with the TypeScript SDK's 50 MB
 # express.json limit. Override with CANVASTEKK_MAX_BODY_BYTES.
@@ -247,7 +257,7 @@ def create_node_app(
         responses={
             200: {"description": "Node executed successfully"},
             400: {
-                "description": "Bad request — invalid or missing inputs",
+                "description": "Bad request — invalid or missing inputs, or malformed X-Account-Id header",
                 "content": {"application/json": {"example": {"detail": "Missing required input: file_path"}}},
             },
             422: {
@@ -283,8 +293,35 @@ def create_node_app(
                 status_code=422,
                 content={"detail": "Request body must be a JSON object"},
             )
+
+        # DA-2242: account_id is engine-controlled — the X-Account-Id header
+        # is the EXCLUSIVE source. Body-supplied values are stripped so no
+        # caller can forge account identity. Absent/empty → None (local runs).
+        body.pop("account_id", None)
+        account_id: int | None = None
+        account_header = request.headers.get("x-account-id")
+        if account_header is not None and account_header.strip():
+            candidate = account_header.strip()
+            if not _ACCOUNT_ID_RE.match(candidate):
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "Malformed X-Account-Id header"},
+                )
+            if len(candidate) > _ACCOUNT_ID_MAX_DIGITS:
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "X-Account-Id header out of range"},
+                )
+            parsed = int(candidate)
+            if not (1 <= parsed <= 2**63 - 1):
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "X-Account-Id header out of range"},
+                )
+            account_id = parsed
+
         try:
-            exec_request = NodeExecutionRequest(**body)
+            exec_request = NodeExecutionRequest(**body, account_id=account_id)
         except ValidationError:
             return JSONResponse(
                 status_code=422,
