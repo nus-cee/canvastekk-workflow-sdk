@@ -36,6 +36,8 @@ v0.24.0 (feat: → minor, `.github/workflows/release.yml`).
 
 ## Scope
 
+**Python SDK only.** The repo's parallel TypeScript SDK (`typescript/src/app.ts`) also drops the header today — out of scope for DA-2242 (the DA-2236 publisher is a Python node); TS parity gets a follow-up ticket before any TS node needs account context. Non-goal: callback/`/hook` flows — the engine only sends the header on the `/execute` POST; `callback_url` is node→engine.
+
 - `python/canvastekk_workflow_sdk/request.py`
 - `python/canvastekk_workflow_sdk/context.py`
 - `python/canvastekk_workflow_sdk/app.py`
@@ -44,13 +46,14 @@ v0.24.0 (feat: → minor, `.github/workflows/release.yml`).
 
 ## Technical Notes
 
-- Pydantic default `extra="ignore"` on `NodeExecutionRequest` keeps old
-  engines/new SDKs and new engines/old SDKs compatible in both directions.
-- No manual version bump — releases are automated via git-cliff on
-  conventional commits; the merge commit MUST be `feat:` type.
-- The engine omits the header entirely when `account_id` is `None`; the SDK
-  must never treat "absent" as an error (local `run_server` runs have no
-  header).
+- **`account_id` is engine-controlled.** The HTTP header is the EXCLUSIVE source: `/execute` strips any body-supplied `account_id` before validation and injects the header value via the constructor. Body-only `account_id` → `None` (no spoof path).
+- **Header parsing (fail-fast 400):** read via Starlette `request.headers.get("x-account-id")` (case-insensitive). Absent or empty-after-strip → `None`. Otherwise the stripped value must match `^\d+$` and satisfy `1 <= v <= 2**63-1`; anything else → HTTP 400 (never silently drop account context — that recreates the DA-2236 silent-403 class).
+- Field bounds pinned on the model too: `Field(default=None, ge=1, le=2**63-1)` (defense for direct construction).
+- `model_config = ConfigDict(extra="ignore", json_schema_extra=...)` — pin the cross-version compat contract explicitly (today it rests on the pydantic default).
+- Header capture ordering: after body JSON parse, injected into `NodeExecutionRequest(**...)` validation, before `node.run()` (`app.py:305/:321`).
+- The engine omits the header when `account_id` is `None` (`canvastekk-workflow-engine fastapi_app/temporal/activities.py:595-596`); absent is never an error (local runs via `workflow/runner.py` and direct `BaseNode.run()` have no header).
+- Docs must state `account_id` is engine-asserted identity for routing, **not** an auth credential (NodeAuth still gates the endpoint).
+- No manual version bump — git-cliff; merge commit MUST be `feat:` type.
 
 ## Dependency & Consumer Map
 
@@ -58,7 +61,9 @@ v0.24.0 (feat: → minor, `.github/workflows/release.yml`).
 |---|---|---|---|
 | `request.py` NodeExecutionRequest.account_id | — | app.py /execute, context.py, all node handlers (via context) | low (additive optional) |
 | `context.py` ExecutionContext.account_id | request.py field | canvastekk-workflow-nodes handlers (DA-2236) | low (additive property) |
-| `app.py` /execute header capture | request.py field | every node's runtime | med (request path; 400 on malformed only) |
+| `app.py` /execute header capture | request.py field | every node's runtime; must sit between body validation and `node.run` | med (request path; 400 on malformed only) |
+| `base.py:575` `_record_error` context | (unchanged) | `on_error` middleware gains the field for free — same request object | none |
+| `workflow/runner.py:250/:337` request-less contexts | (unchanged) | local runs → `account_id=None` by design; DA-2236 no-op-on-None contract covers it | none |
 | tests (3 files) | the above | CI gate | low |
 | docs (2 files) | the above | node authors | low |
 
@@ -66,42 +71,42 @@ v0.24.0 (feat: → minor, `.github/workflows/release.yml`).
 
 ### Phase 1: transport field + context accessor
 
-- [ ] **1.1** Add `account_id: int | None = None` to `NodeExecutionRequest` in `request.py`
-    — **Why:** the header value needs a typed home the rest of the SDK can read; optional-with-None keeps local runs and old callers valid.
-    — **Done when:** `NodeExecutionRequest(run_id="r", node_id="n")` still validates; `account_id=42` round-trips through the model.
+- [ ] **1.1** Add `account_id: int | None = Field(default=None, ge=1, le=2**63-1)` to `NodeExecutionRequest` and pin `extra="ignore"` in `model_config`
+    — **Why:** the header value needs a typed, bounded home (DB int64 downstream); explicit `extra="ignore"` pins the cross-version compat contract that today rests on a pydantic default.
+    — **Done when:** `NodeExecutionRequest(run_id="r", node_id="n")` validates with `account_id=None`; `account_id=42` round-trips; `0`/`-1`/`2**63` raise ValidationError.
     — **Consumers affected:** `app.py` /execute, `context.py`.
 - [ ] **1.2** Add `account_id` property to `ExecutionContext` in `context.py`
-    — **Why:** node handlers only ever see the context (publisher's `execute(inputs, context)`), so this is the surface DA-2236 consumes; reading from `self._request` keeps it in sync with the parsed request.
+    — **Why:** node handlers only ever see the context (publisher's `execute(inputs, context)`), so this is the surface DA-2236 consumes; reading from `self._request` keeps it in sync with the parsed request (mirrors the `run_id` property pattern, `context.py:83-87`).
     — **Done when:** context built with a request carrying `account_id=7` returns `7`; request-less context returns `None`.
     — **Consumers affected:** canvastekk-workflow-nodes handlers (DA-2236).
 
 ### Phase 2: header capture in /execute
 
-- [ ] **2.1** Capture `X-Account-Id` in `app.py` `/execute` and set it on `exec_request`
-    — **Why:** the engine sends the account as a header, never in the body — without this step the field from 1.1 is never populated at runtime. Malformed values must fail fast (400) rather than silently drop account context (that recreates the DA-2236 silent-403 class of bug).
-    — **Done when:** POST /execute with `X-Account-Id: 42` results in the node's context seeing `account_id == 42`; `X-Account-Id: abc` returns HTTP 400; no header → `None`.
+- [ ] **2.1** Capture `X-Account-Id` in `app.py` `/execute`; header is the exclusive source (body-supplied `account_id` stripped), inject via constructor
+    — **Why:** the engine sends the account as a header, never in the body; leaving the body field live would let any caller forge account identity (`NodeExecutionRequest(**body)` at `app.py:287`) — defeating the ticket's purpose. Fail-fast 400 on malformed instead of silently dropping context. Ordering: after body JSON parse, before `node.run`.
+    — **Done when:** valid header → context sees the int; malformed/negative/out-of-range → HTTP 400; absent or empty-after-strip → `None`; body-only `account_id` → `None`; conflicting body+header → header wins. OpenAPI 400 description mentions the header case.
     — **Consumers affected:** every node's runtime path (engine → node).
 
 ### Phase 3: tests
 
 - [ ] **3.1** Extend `tests/test_request.py` for the new field
-    — **Why:** pins the additive-optional contract (present/absent) against future regressions.
-    — **Done when:** tests assert `account_id` defaults to `None` and accepts an int.
+    — **Why:** pins the additive-optional + bounded contract against regressions.
+    — **Done when:** tests assert default `None`, int accepted, `0`/negative/`2**63` rejected.
     — **Consumers affected:** none (CI gate).
 - [ ] **3.2** Extend `tests/test_context.py` for the property
     — **Why:** the property is the public surface nodes consume; both request-attached and request-less paths must be pinned.
     — **Done when:** tests assert property returns the request value and `None` without a request.
     — **Consumers affected:** none (CI gate).
-- [ ] **3.3** Extend `tests/test_app.py` for header capture
-    — **Why:** the /execute wiring is the whole point of the ticket; all three header cases (valid/malformed/absent) need HTTP-level coverage.
-    — **Done when:** tests assert 200+context value for a valid header, 400 for malformed, and `None` when absent.
+- [ ] **3.3** Extend `tests/test_app.py` for header capture (TestClient `headers={...}` precedent exists in auth/413 tests) using a context-capturing echo node (mirrors `FileProcessingNode` → derived outputs pattern)
+    — **Why:** the /execute wiring is the whole point of the ticket; header cases AND the body-spoof guard need HTTP-level coverage.
+    — **Done when:** tests assert (a) valid header → context value in outputs, (b) malformed → 400, (c) empty-after-strip → absent/`None`, (d) absent → `None`, (e) body-only `account_id` → context sees `None`, (f) conflicting body+header → header wins, (g) lowercase `x-account-id` variant works (Starlette headers are case-insensitive), (h) one boundary: `0` → 400.
     — **Consumers affected:** none (CI gate).
 
 ### Phase 4: docs + gates
 
 - [ ] **4.1** Document `context.account_id` in `docs/EXTERNAL-AUTHOR-GUIDE.md` and `python/README.md`
-    — **Why:** repo AGENTS.md makes docs sync mandatory for auth/node-workflow changes; external node authors must discover the field without reading source.
-    — **Done when:** both docs mention the header → context flow and the `None` semantics for local runs.
+    — **Why:** repo AGENTS.md makes docs sync mandatory for auth/node-workflow changes; docs must state the header → context flow, `None` semantics for local runs, that `account_id` is engine-asserted routing identity (not a credential), and show the `NodeExecutionRequest(..., account_id=7)` unit-test pattern for node authors (DA-2236).
+    — **Done when:** both docs cover those four points.
     — **Consumers affected:** node authors.
 - [ ] **4.2** Run `poetry run ruff check canvastekk_workflow_sdk/ tests/` and `poetry run pytest -v` in `python/`
     — **Why:** repo-mandated pre-merge gates.
