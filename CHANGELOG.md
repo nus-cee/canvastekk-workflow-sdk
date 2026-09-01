@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.24.0] - 2026-09-01
+
+### Features
+
+- **sdk**: Propagate X-Account-Id into node execution context (DA-2242) (#58)
+
+
 ## [0.23.1] - 2026-08-24
 
 ### Bug Fixes
 
 - **lint**: Commit eslint 9 flat config so npm run lint gates CI [DA-1968] (#57)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.23.1
 
 
 ## [0.23.0] - 2026-08-24
