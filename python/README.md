@@ -224,6 +224,43 @@ The payload sent to `POST /execute`:
 | `inputs` | `dict` | No | Input values (validated against `input_schema`) |
 | `callback_url` | `str` | No | URL to POST result to (for async execution) |
 | `output_upload_url` | `dict[str, str]` | No | Mapping of output field name to pre-signed S3 PUT URL |
+| `account_id` | `int \| None` | No | Active account ID — **engine-controlled**: the SDK sets it exclusively from the `X-Account-Id` request header; any body-supplied value is stripped. Bounds: 1…2⁶³−1 |
+
+### X-Account-Id header (v0.24.0+)
+
+When the workflow engine invokes `POST /execute`, it forwards the run's active
+account as the `X-Account-Id` header (`canvastekk-workflow-engine`
+`fastapi_app/temporal/activities.py`). The SDK captures it and surfaces it as
+`context.account_id`:
+
+```python
+def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+    account_id = context.account_id  # int | None
+```
+
+Semantics:
+
+- **Routing identity, not a credential.** It tells your node which account the
+  run belongs to (e.g. which `X-Account-Id` header to forward when calling
+  account-gated CDS endpoints). Endpoint access is still gated by node auth.
+- **Header-only source.** A body-supplied `account_id` is stripped before
+  validation — nodes always see the engine-asserted value, never a
+  caller-forged one.
+- **`None` when absent.** Local runs (`WorkflowRunner`, direct `BaseNode.run()`
+  in tests) and engines that don't send the header get `None`. Nodes should
+  treat `None` as "no account context" and keep working (or fail with a clear
+  error if the account is required).
+- **Strict parsing.** Blank/whitespace-only headers are treated as absent;
+  non-numeric, negative, zero, or int64-overflowing values fail the request
+  with HTTP 400.
+
+Unit-test pattern — construct the request directly, no header plumbing needed:
+
+```python
+req = NodeExecutionRequest(run_id="r1", node_id="n1", inputs={}, account_id=7)
+ctx = ExecutionContext(req)
+assert ctx.account_id == 7
+```
 
 ### NodeExecutionResponse
 

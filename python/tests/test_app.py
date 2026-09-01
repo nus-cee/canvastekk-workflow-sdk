@@ -1064,3 +1064,79 @@ class TestCreateNodeAppAuthParam:
             headers={"X-API-Key": "test-key-123"},
         )
         assert with_key.status_code == 200
+
+
+class AccountEchoNode(BaseNode):
+    """Echoes context.account_id into outputs (DA-2242 header-capture tests)."""
+
+    definition = WorkflowNodeManifest(
+        name="account-echo",
+        version="1.0.0",
+        title="Account Echo",
+        description="Returns context.account_id",
+        input_schema={"type": "object"},
+        output_schema={"type": "object"},
+    )
+
+    def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+        return {"account_id": context.account_id}
+
+
+@pytest.fixture
+def account_client() -> TestClient:
+    return TestClient(create_node_app(AccountEchoNode()))
+
+
+class TestAccountIdHeaderPropagation:
+    """DA-2242: X-Account-Id header is the EXCLUSIVE account_id source."""
+
+    _BODY = {"run_id": "r1", "node_id": "n1", "inputs": {}}
+
+    def test_valid_header_reaches_context(self, account_client: TestClient) -> None:
+        resp = account_client.post("/execute", json=self._BODY, headers={"X-Account-Id": "42"})
+        assert resp.status_code == 200
+        assert resp.json()["outputs"] == {"account_id": 42}
+
+    def test_lowercase_header_variant(self, account_client: TestClient) -> None:
+        resp = account_client.post("/execute", json=self._BODY, headers={"x-account-id": "7"})
+        assert resp.status_code == 200
+        assert resp.json()["outputs"] == {"account_id": 7}
+
+    def test_absent_header_yields_none(self, account_client: TestClient) -> None:
+        resp = account_client.post("/execute", json=self._BODY)
+        assert resp.status_code == 200
+        assert resp.json()["outputs"] == {"account_id": None}
+
+    def test_empty_header_treated_as_absent(self, account_client: TestClient) -> None:
+        resp = account_client.post("/execute", json=self._BODY, headers={"X-Account-Id": "  "})
+        assert resp.status_code == 200
+        assert resp.json()["outputs"] == {"account_id": None}
+
+    def test_malformed_header_400(self, account_client: TestClient) -> None:
+        resp = account_client.post("/execute", json=self._BODY, headers={"X-Account-Id": "abc"})
+        assert resp.status_code == 400
+
+    def test_negative_header_400(self, account_client: TestClient) -> None:
+        resp = account_client.post("/execute", json=self._BODY, headers={"X-Account-Id": "-1"})
+        assert resp.status_code == 400
+
+    def test_zero_header_400(self, account_client: TestClient) -> None:
+        resp = account_client.post("/execute", json=self._BODY, headers={"X-Account-Id": "0"})
+        assert resp.status_code == 400
+
+    def test_out_of_range_header_400(self, account_client: TestClient) -> None:
+        resp = account_client.post("/execute", json=self._BODY, headers={"X-Account-Id": str(2**63)})
+        assert resp.status_code == 400
+
+    def test_body_account_id_ignored_without_header(self, account_client: TestClient) -> None:
+        """Spoof guard: body-supplied account_id is stripped."""
+        body = {**self._BODY, "account_id": 999}
+        resp = account_client.post("/execute", json=body)
+        assert resp.status_code == 200
+        assert resp.json()["outputs"] == {"account_id": None}
+
+    def test_header_wins_over_conflicting_body(self, account_client: TestClient) -> None:
+        body = {**self._BODY, "account_id": 999}
+        resp = account_client.post("/execute", json=body, headers={"X-Account-Id": "42"})
+        assert resp.status_code == 200
+        assert resp.json()["outputs"] == {"account_id": 42}

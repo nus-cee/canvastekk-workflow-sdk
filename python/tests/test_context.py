@@ -128,3 +128,17 @@ class TestOutputDirEnvironmentVariable:
         ctx = ExecutionContext(exec_request, output_dir=custom_dir)
         assert ctx.output_dir == custom_dir
         assert "/tmp/should-not-use" not in str(ctx.output_dir)
+
+
+class TestAccountIdProperty:
+    """DA-2242: ExecutionContext.account_id surfaces the request value."""
+
+    def test_returns_request_account_id(self) -> None:
+        req = NodeExecutionRequest(run_id="r1", node_id="n1", inputs={}, account_id=7)
+        assert ExecutionContext(req).account_id == 7
+
+    def test_none_when_request_has_none(self, context: ExecutionContext) -> None:
+        assert context.account_id is None
+
+    def test_none_without_request(self) -> None:
+        assert ExecutionContext(run_id="r1", node_id="n1").account_id is None
