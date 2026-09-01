@@ -1084,6 +1084,7 @@ class AccountEchoNode(BaseNode):
 
 @pytest.fixture
 def account_client() -> TestClient:
+    """TestClient around an AccountEchoNode /execute endpoint."""
     return TestClient(create_node_app(AccountEchoNode()))
 
 
