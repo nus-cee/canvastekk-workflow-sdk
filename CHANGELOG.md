@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.26.2] - 2026-09-03
+
+### Testing
+
+- **sdk**: Make deprecation tests timezone-independent (DA-2337) (#62)
+
+
 ## [0.26.1] - 2026-09-03
 
 ### Bug Fixes
 
 - **sdk**: Fail node when declared file output is not a local file (DA-2337) (#61)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.26.1
 
 
 ## [0.26.0] - 2026-09-03
