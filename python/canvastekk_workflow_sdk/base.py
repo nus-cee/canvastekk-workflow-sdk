@@ -15,7 +15,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -432,7 +432,7 @@ class BaseNode(ABC):
         if dep is None:
             return
         replacement = dep.replacement_slug or "unspecified"
-        if dep.sunset_date is not None and date.today() > dep.sunset_date:
+        if dep.sunset_date is not None and datetime.now(UTC).date() > dep.sunset_date:
             raise NodeConfigurationError(
                 f"Node '{self.definition.name}' was sunset on {dep.sunset_date.isoformat()} "
                 f"and refuses to run; migrate to '{replacement}' ({dep.notice})"

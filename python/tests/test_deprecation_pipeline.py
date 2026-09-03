@@ -8,7 +8,7 @@ validation, and ``BaseNode`` runtime sunset/refusal semantics.
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -31,7 +31,7 @@ def _manifest(deprecation: DeprecationInfo | None) -> WorkflowNodeManifest:
     )
 
 
-def _make_node(deprecation: DeprecationInfo | None) -> type[BaseNode]:
+def _make_node(deprecation: DeprecationInfo | None) -> BaseNode:
     """Build an instantiated echo node whose definition carries the given deprecation."""
 
     class _DeprecationEchoNode(BaseNode):
@@ -120,6 +120,19 @@ class TestRuntimeSunsetLifecycle:
         error_text = str(response.error)
         assert "was sunset" in error_text
         assert "cds-file" in error_text
+
+    def test_sunset_day_is_inclusive_node_still_runs(self) -> None:
+        """The sunset date itself is the last day of service (RFC 8594 reading)."""
+        node = _make_node(
+            DeprecationInfo(
+                deprecated_at=date.today() - timedelta(days=30),
+                sunset_date=datetime.now(UTC).date(),
+                replacement_slug="cds-file",
+                notice="Final day of service.",
+            )
+        )
+        response = node.run(self._request())
+        assert response.status == "pass"
 
     def test_deprecated_not_sunset_warns_and_passes(self, caplog: pytest.LogCaptureFixture) -> None:
         node = _make_node(

@@ -422,11 +422,14 @@ def export_definition(
     Export a WorkflowNodeManifest as a full node-manifest JSON file.
 
     DA-1955: the output is the FULL manifest shape (includes ``node_role``,
-    ``retry``, ``node_status``, ``deprecation``) consumed by the node's
-    ``/manifest`` endpoint and the engine's SDKNodeDefinition model. It is NOT
-    a valid body for ``POST /api/workflows/nodes/`` (that request schema is
+    ``retry``, ``node_status``) consumed by the node's ``/manifest``
+    endpoint and the engine's SDKNodeDefinition model. It is NOT a valid
+    body for ``POST /api/workflows/nodes/`` (that request schema is
     ``extra="forbid"`` without those fields) — use ``register_node()`` for the
-    HTTP registration path, which emits the aligned payload.
+    HTTP registration path, which emits the aligned payload. ``deprecation``
+    is the one overlap: it is an accepted engine register field (DA-2305) and
+    is emitted by ``build_registry_payload`` itself, so it needs no re-adding
+    here.
 
     Maps SDK WorkflowNodeManifest fields to the registry schema and writes the result
     as a clean JSON file.
@@ -469,8 +472,6 @@ def export_definition(
     registry_dict["node_role"] = definition.role.value
     registry_dict["retry"] = definition.default_retry.model_dump(mode="json")
     registry_dict["node_status"] = node_status
-    if definition.deprecation is not None:
-        registry_dict["deprecation"] = definition.deprecation.model_dump(mode="json")
 
     if styles is not None:
         registry_dict["styles"] = styles
