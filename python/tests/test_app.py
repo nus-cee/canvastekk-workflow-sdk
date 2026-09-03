@@ -312,6 +312,27 @@ class FailingOutputNode(BaseNode):
         raise RuntimeError("Node execution failed")
 
 
+class BogusPathOutputNode(BaseNode):
+    """Node whose file output points at a missing path (DA-2337)."""
+
+    definition = WorkflowNodeManifest(
+        name="bogus-path-output",
+        version="1.0.0",
+        title="Bogus Path Output",
+        description="Returns a file output that does not exist on disk",
+        input_schema={"type": "object", "properties": {}},
+        output_schema={
+            "type": "object",
+            "properties": {
+                "result_path": {"type": "string", "format": "file"},
+            },
+        },
+    )
+
+    def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+        return {"result_path": "/nonexistent/does-not-exist.ply"}
+
+
 @pytest.fixture
 def file_output_client() -> TestClient:
     """Create test client for file output node."""
@@ -324,6 +345,14 @@ def file_output_client() -> TestClient:
 def failing_output_client() -> TestClient:
     """Create test client for failing output node."""
     node = FailingOutputNode()
+    app = create_node_app(node)
+    return TestClient(app)
+
+
+@pytest.fixture
+def bogus_path_output_client() -> TestClient:
+    """Create test client for bogus-path output node (DA-2337)."""
+    node = BogusPathOutputNode()
     app = create_node_app(node)
     return TestClient(app)
 
@@ -377,6 +406,31 @@ class TestOutputUploadToS3:
 
             # Upload should NOT have been called
             mock_upload.assert_not_called()
+
+    def test_missing_file_output_fails_with_upload_failed(self, bogus_path_output_client: TestClient) -> None:
+        """A passing node whose file output is not a local file fails (DA-2337).
+
+        Pins the app.py seam: the uploader's NodeIOError converts to
+        fail/UPLOAD_FAILED instead of a silent pass (or a raw 500 if the
+        broad except is ever narrowed).
+        """
+        response = bogus_path_output_client.post(
+            "/execute",
+            json={
+                "run_id": "run-1",
+                "node_id": "node-1",
+                "inputs": {},
+                "output_upload_url": {
+                    "result_path": "https://s3.amazonaws.com/presigned-put",
+                },
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "fail"
+        assert data["error_code"] == "UPLOAD_FAILED"
+        assert "result_path" in data["error"]
 
     def test_output_upload_url_skipped_when_not_provided(self, file_output_client: TestClient) -> None:
         """When output_upload_url is None, no upload is attempted."""

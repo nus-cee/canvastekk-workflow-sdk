@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import httpx
 
+from canvastekk_workflow_sdk.exceptions import NodeIOError
+
 # Explicit generous timeout for output uploads: httpx's implicit default
 # (5 s per operation) aborts legitimate multi-GB uploads on slower links.
 _UPLOAD_TIMEOUT_SECONDS = 600.0
@@ -49,6 +51,12 @@ class OutputUploader(Protocol):
         file_output_fields: list[str],
     ) -> None:
         """Upload multiple output files to storage.
+
+        Implementations MUST raise (not skip) when a file-output field that
+        is present in ``response.outputs`` and has a pre-signed URL holds a
+        value that is not an existing local file — silently skipping would
+        report success while the engine stamps a storage URI for the
+        missing object, corrupting downstream consumers (DA-2337).
 
         Args:
             response: The node execution response.
@@ -139,10 +147,21 @@ class S3PresignedUploader:
     ) -> None:
         """Upload binary output files to S3 via pre-signed URLs.
 
+        A declared file-output field that HAS a pre-signed URL but whose
+        value is not a string referencing an existing local file RAISES
+        :class:`NodeIOError` — the engine stamps an ``s3://`` URI for every
+        present output field on pass, so skipping the upload would report
+        success while corrupting every downstream consumer (DA-2337).
+
         Args:
             response: The node execution response containing output values.
             upload_urls: Mapping of output field name to pre-signed PUT URL.
             file_output_fields: Output field names that produce files.
+
+        Raises:
+            NodeIOError: If a present file-output field with a pre-signed
+                URL holds a non-string value or a path that is not an
+                existing local file.
         """
         if not response.outputs:
             return
@@ -151,13 +170,24 @@ class S3PresignedUploader:
             if field_name not in upload_urls:
                 continue
 
-            value = response.outputs.get(field_name)
-            if not isinstance(value, str):
+            if field_name not in response.outputs:
+                # Omitted output: the engine stamps s3:// URIs only for
+                # fields present in the response, so omission is legal.
                 continue
 
+            value = response.outputs[field_name]
+            if not isinstance(value, str):
+                logger.error("Output field '%s' value is not a string: %s", field_name, type(value).__name__)
+                raise NodeIOError(
+                    f"Output field '{field_name}' value is not a string: {type(value).__name__}"
+                )
+
             if not os.path.isfile(value):
-                logger.warning("Output field '%s' value is not a local file: %s", field_name, value)
-                continue
+                logger.error("Output field '%s' value is not a local file: %s", field_name, value)
+                raise NodeIOError(
+                    f"Output field '{field_name}' value is not a local file: {value}",
+                    path=value,
+                )
 
             presigned_url = upload_urls[field_name]
             self.upload_file(value, presigned_url)

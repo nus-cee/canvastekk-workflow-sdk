@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
+from canvastekk_workflow_sdk.exceptions import NodeIOError
 from canvastekk_workflow_sdk.response import NodeExecutionResponse
 from canvastekk_workflow_sdk.uploads import OutputUploader, S3PresignedUploader, get_default_uploader
 
@@ -115,8 +116,8 @@ class TestS3PresignedUploader:
 
         mock_put.assert_called_once()
 
-    def test_upload_outputs_skips_non_file_values(self) -> None:
-        """Test that upload_outputs skips non-string file values."""
+    def test_upload_outputs_raises_on_non_string_value(self) -> None:
+        """A present non-string file-output value fails the node (DA-2337)."""
         uploader = S3PresignedUploader()
         response = NodeExecutionResponse.success(
             execution_id="exec-1",
@@ -128,8 +129,97 @@ class TestS3PresignedUploader:
 
         mock_put = MagicMock()
         with patch("canvastekk_workflow_sdk.uploads.httpx.put", mock_put):
+            with pytest.raises(NodeIOError) as excinfo:
+                uploader.upload_outputs(response, upload_urls, file_output_fields)
+
+        assert "Output field 'result'" in str(excinfo.value)
+        assert "not a string" in str(excinfo.value)
+        assert excinfo.value.path is None
+        mock_put.assert_not_called()
+
+    def test_upload_outputs_raises_on_nonexistent_file(self) -> None:
+        """A present path that does not exist fails the node with path detail (DA-2337)."""
+        uploader = S3PresignedUploader()
+        response = NodeExecutionResponse.success(
+            execution_id="exec-1",
+            outputs={"result_path": "/nonexistent/file.ply", "summary": "done"},
+            duration_ms=100,
+        )
+        upload_urls = {"result_path": "https://s3.amazonaws.com/upload"}
+        file_output_fields = ["result_path"]
+
+        mock_put = MagicMock()
+        with patch("canvastekk_workflow_sdk.uploads.httpx.put", mock_put):
+            with pytest.raises(NodeIOError) as excinfo:
+                uploader.upload_outputs(response, upload_urls, file_output_fields)
+
+        assert "Output field 'result_path' value is not a local file" in str(excinfo.value)
+        assert excinfo.value.path == "/nonexistent/file.ply"
+        mock_put.assert_not_called()
+
+    def test_upload_outputs_raises_on_directory_value(self, tmp_path: Path) -> None:
+        """A directory path is not a file — fails like a missing path (DA-2337)."""
+        uploader = S3PresignedUploader()
+        response = NodeExecutionResponse.success(
+            execution_id="exec-1",
+            outputs={"result_path": str(tmp_path), "summary": "done"},
+            duration_ms=100,
+        )
+        upload_urls = {"result_path": "https://s3.amazonaws.com/upload"}
+        file_output_fields = ["result_path"]
+
+        with patch("canvastekk_workflow_sdk.uploads.httpx.put", MagicMock()):
+            with pytest.raises(NodeIOError) as excinfo:
+                uploader.upload_outputs(response, upload_urls, file_output_fields)
+
+        assert "not a local file" in str(excinfo.value)
+        assert excinfo.value.path == str(tmp_path)
+
+    def test_upload_outputs_skips_absent_output_field(self) -> None:
+        """An omitted file-output field is skipped, not failed (DA-2337)."""
+        uploader = S3PresignedUploader()
+        response = NodeExecutionResponse.success(
+            execution_id="exec-1",
+            outputs={"summary": "done"},
+            duration_ms=100,
+        )
+        upload_urls = {"result_path": "https://s3.amazonaws.com/upload"}
+        file_output_fields = ["result_path"]
+
+        mock_put = MagicMock()
+        with patch("canvastekk_workflow_sdk.uploads.httpx.put", mock_put):
             uploader.upload_outputs(response, upload_urls, file_output_fields)
-            mock_put.assert_not_called()
+
+        mock_put.assert_not_called()
+
+    def test_upload_outputs_partial_failure_orphans_earlier_uploads(self, tmp_path: Path) -> None:
+        """A bad later field raises AFTER earlier valid fields uploaded (DA-2337)."""
+        uploader = S3PresignedUploader()
+        test_file = tmp_path / "good.ply"
+        test_file.write_bytes(b"ply data")
+
+        response = NodeExecutionResponse.success(
+            execution_id="exec-1",
+            outputs={"good_path": str(test_file), "bad_path": "/nonexistent/bad.ply"},
+            duration_ms=100,
+        )
+        upload_urls = {
+            "good_path": "https://s3.amazonaws.com/good",
+            "bad_path": "https://s3.amazonaws.com/bad",
+        }
+        file_output_fields = ["good_path", "bad_path"]
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+
+        mock_put = MagicMock(return_value=mock_response)
+        with patch("canvastekk_workflow_sdk.uploads.httpx.put", mock_put):
+            with pytest.raises(NodeIOError) as excinfo:
+                uploader.upload_outputs(response, upload_urls, file_output_fields)
+
+        assert mock_put.call_count == 1
+        assert mock_put.call_args[0][0] == "https://s3.amazonaws.com/good"
+        assert "bad_path" in str(excinfo.value)
 
     def test_upload_outputs_skips_missing_urls(self, tmp_path: Path) -> None:
         """Test that upload_outputs skips fields without upload URLs."""
@@ -149,22 +239,6 @@ class TestS3PresignedUploader:
         with patch("canvastekk_workflow_sdk.uploads.httpx.put", mock_put):
             uploader.upload_outputs(response, upload_urls, file_output_fields)
             mock_put.assert_not_called()
-
-    def test_upload_outputs_logs_warning_for_nonexistent_file(self, tmp_path: Path) -> None:
-        """Test that upload_outputs logs warning for non-existent file."""
-        uploader = S3PresignedUploader()
-        response = NodeExecutionResponse.success(
-            execution_id="exec-1",
-            outputs={"result_path": "/nonexistent/file.ply"},
-            duration_ms=100,
-        )
-        upload_urls = {"result_path": "https://s3.amazonaws.com/upload"}
-        file_output_fields = ["result_path"]
-
-        with patch("canvastekk_workflow_sdk.uploads.logger") as mock_logger:
-            uploader.upload_outputs(response, upload_urls, file_output_fields)
-            mock_logger.warning.assert_called_once()
-            assert "Output field '%s' value is not a local file" in str(mock_logger.warning.call_args)
 
     def test_upload_outputs_raises_on_upload_failure(self, tmp_path: Path) -> None:
         """Upload failures now raise so the execution fails (DA-1711 4.1)."""
