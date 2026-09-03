@@ -145,14 +145,14 @@ node-handler changes (url-loader current code is correct).
     — **Why:** repo-mandated pre-merge gates.
     — **Done when:** both exit 0.
     — **Consumers affected:** CI / release automation.
-- [ ] **4.2** Commit as `fix(sdk): fail node when declared file output is not a local file [DA-2337]` and merge to `main`
+- [x] **4.2** Commit as `fix(sdk): fail node when declared file output is not a local file [DA-2337]` and merge to `main`
     — **Why:** git-cliff maps `fix:` → patch bump v0.26.1; merge auto-publishes the wheel and dispatches `sdk-released` to canvastekk-workflow-nodes.
     — **Done when:** release workflow publishes v0.26.1; dispatch observed.
     — **Consumers affected:** nodes repo pin bump (Phase 5).
 
 ### Phase 5: consumer bump (executed in canvastekk-workflow-nodes repo)
 
-- [ ] **5.1** PR in canvastekk-workflow-nodes bumping the wheel pin to v0.26.1 in `fastapi_app/pyproject.toml`, `fastapi_app_ml/pyproject.toml`, `fastapi_app_open3d/pyproject.toml`; commit `fix(nodes): bump SDK to v0.26.1 — fatal missing-file output upload [DA-2337]`; merge + gateway redeploy. Redeploy mechanism: the `sdk-released` dispatch fired at release time rebuilds with the OLD pin (expected interim rebuild); confirm whether `deploy-lambda.yml` also triggers on push to `main` — if not, manually dispatch it after the pin-bump merge
+- [x] **5.1** PR in canvastekk-workflow-nodes bumping the wheel pin to v0.26.1 in `fastapi_app/pyproject.toml`, `fastapi_app_ml/pyproject.toml`, `fastapi_app_open3d/pyproject.toml`; commit `fix(nodes): bump SDK to v0.26.1 — fatal missing-file output upload [DA-2337]`; merge + gateway redeploy. Redeploy mechanism: the `sdk-released` dispatch fired at release time rebuilds with the OLD pin (expected interim rebuild); confirm whether `deploy-lambda.yml` also triggers on push to `main` — if not, manually dispatch it after the pin-bump merge
     — **Why:** the gateway bundles the SDK wheel — the fix is inert until consumers pick it up (user-confirmed requirement: SDK consumers must be updated); a dispatch-only deploy pipeline would otherwise never see the new pin.
     — **Done when:** gateway runs v0.26.1; a node returning a non-path file output fails at the producer with `UPLOAD_FAILED`.
     — **Consumers affected:** all deployed nodes.
