@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.26.3] - 2026-09-03
+
+### Documentation
+
+- **plan**: Tick DA-2337 phases 4.2 and 5.1 (DA-2337) (#63)
+
+
 ## [0.26.2] - 2026-09-03
 
 ### Testing
 
 - **sdk**: Make deprecation tests timezone-independent (DA-2337) (#62)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.26.2
 
 
 ## [0.26.1] - 2026-09-03
