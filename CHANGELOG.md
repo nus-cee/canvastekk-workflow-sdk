@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.26.0] - 2026-09-03
+
+### Features
+
+- **deprecation**: Sunset validator + runtime lifecycle parity with Python v0.25.0 [DA-2312] (#60)
+
+
 ## [0.25.0] - 2026-09-03
 
 ### Features
 
 - **sdk**: Emit deprecation in registry payload + sunset lifecycle enforcement [DA-2305] (#59)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.25.0
 
 
 ## [0.24.0] - 2026-09-01
