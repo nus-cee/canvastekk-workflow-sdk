@@ -116,32 +116,32 @@ node-handler changes (url-loader current code is correct).
 
 ### Phase 1: Python fix
 
-- [ ] **1.1** In `upload_outputs` (`python/canvastekk_workflow_sdk/uploads.py`), for fields where `field_name in upload_urls`: keep `continue` when the field is ABSENT from `response.outputs`; when present, non-str value → `NodeIOError("Output field '{field}' value is not a string: {type}")`; non-existent file (or directory) → `NodeIOError("Output field '{field}' value is not a local file: {value}", path=value)`
+- [x] **1.1** In `upload_outputs` (`python/canvastekk_workflow_sdk/uploads.py`), for fields where `field_name in upload_urls`: keep `continue` when the field is ABSENT from `response.outputs`; when present, non-str value → `NodeIOError("Output field '{field}' value is not a string: {type}")`; non-existent file (or directory) → `NodeIOError("Output field '{field}' value is not a local file: {value}", path=value)`
     — **Why:** the engine presigned a URL and stamps `s3://` on pass for every PRESENT field — skipping the upload guarantees a downstream 404 cascade attributed to the wrong node; failing at the producer is the only correct signal. Absent fields are never stamped, so omission must stay legal (optional file outputs).
     — **Done when:** a response whose present file-output value is `None`/dict or points at a missing path raises `NodeIOError` (missing-path case carries `path` in details); absent field and `field not in upload_urls` skips are untouched.
     — **Consumers affected:** `app.py` failure conversion (already broad-catches); all Python node runtimes.
-- [ ] **1.2** Update the `OutputUploader` Protocol docstring in `uploads.py` to state the MUST-fail contract (implementations MUST raise when a declared, URL-presigned file output is not a local file)
+- [x] **1.2** Update the `OutputUploader` Protocol docstring in `uploads.py` to state the MUST-fail contract (implementations MUST raise when a declared, URL-presigned file output is not a local file)
     — **Why:** custom implementers learn the new contract from the seam that owns it.
     — **Done when:** docstring updated; ruff green.
     — **Consumers affected:** none (documentation).
 
 ### Phase 2: Python tests
 
-- [ ] **2.1** In `python/tests/test_uploads.py` (existing `TestS3PresignedUploader` class, docstrings referencing "(DA-2337)"): REWRITE `test_upload_outputs_skips_non_file_values` (now expects `NodeIOError`, `path is None` for non-str) and `test_upload_outputs_logs_warning_for_nonexistent_file` (now expects raise with `excinfo.value.path == value`, message contains field name); ADD: directory value → raise; field absent from `response.outputs` but URL presigned → skipped; partial failure (two fields, first valid + second missing → raises AND first upload still executed — pins orphan semantics); empty outputs → no-op. Happy path stays via the existing module-attr patch of `canvastekk_workflow_sdk.uploads.httpx.put` (`test_upload_outputs_with_valid_file_and_url` — extend if needed, don't duplicate)
+- [x] **2.1** In `python/tests/test_uploads.py` (existing `TestS3PresignedUploader` class, docstrings referencing "(DA-2337)"): REWRITE `test_upload_outputs_skips_non_file_values` (now expects `NodeIOError`, `path is None` for non-str) and `test_upload_outputs_logs_warning_for_nonexistent_file` (now expects raise with `excinfo.value.path == value`, message contains field name); ADD: directory value → raise; field absent from `response.outputs` but URL presigned → skipped; partial failure (two fields, first valid + second missing → raises AND first upload still executed — pins orphan semantics); empty outputs → no-op. Happy path stays via the existing module-attr patch of `canvastekk_workflow_sdk.uploads.httpx.put` (`test_upload_outputs_with_valid_file_and_url` — extend if needed, don't duplicate)
     — **Why:** three existing tests pin the OLD silent-skip contract and would fail the Phase 4 gate; the new cases pin the fail-loud contract, the absent-field local-run skips, and the partial-failure semantics against regression.
     — **Done when:** `poetry run pytest -v` green; rewritten tests fail against the pre-fix code; no-URL skip and empty-outputs tests unchanged-green.
     — **Consumers affected:** none (CI gate).
 
 ### Phase 3: TypeScript parity
 
-- [ ] **3.1** Mirror in `typescript/src/uploads.ts::uploadOutputs`: keep `continue` when field absent from `response.outputs`; when present, non-string value → `throw new Error("Output field '{field}' value is not a string: {type}")`; `!statSync(value).isFile()` → `throw new Error("Output field '{field}' value is not a local file: {value}")` (drop `console.warn` + `continue`; directory now throws — parity with Python's `os.path.isfile`); keep the `!(fieldName in uploadUrls)` skip; update the `OutputUploader` interface docstring. Rewrite the existing "skips non-file values" test to expect throws; new `describe("uploadOutputs fail-loud (DA-2337)")` block mirroring Phase 2 cases (assert message via `rejects.toThrow(/Output field 'x' value is not a local file/)`); reuse the `startServer()` local-HTTP convention for happy-path assertions
+- [x] **3.1** Mirror in `typescript/src/uploads.ts::uploadOutputs`: keep `continue` when field absent from `response.outputs`; when present, non-string value → `throw new Error("Output field '{field}' value is not a string: {type}")`; `!statSync(value).isFile()` → `throw new Error("Output field '{field}' value is not a local file: {value}")` (drop `console.warn` + `continue`; directory now throws — parity with Python's `os.path.isfile`); keep the `!(fieldName in uploadUrls)` skip; update the `OutputUploader` interface docstring. Rewrite the existing "skips non-file values" test to expect throws; new `describe("uploadOutputs fail-loud (DA-2337)")` block mirroring Phase 2 cases (assert message via `rejects.toThrow(/Output field 'x' value is not a local file/)`); reuse the `startServer()` local-HTTP convention for happy-path assertions
     — **Why:** identical corruption path exists in TS (uploads.ts:186-197); DA-2242 deferred TS parity but this bug class must not ship divergent; `statSync` alone lets directories slip through to a mid-upload EISDIR.
     — **Done when:** `npm test` green in `typescript/`; rewritten tests fail against pre-fix code.
     — **Consumers affected:** `app.ts` failure conversion (unchanged); TS node runtimes.
 
 ### Phase 4: gates + release
 
-- [ ] **4.1** Run `poetry run ruff check canvastekk_workflow_sdk/ tests/ && poetry run pytest -v` (python/) and `npm test` (typescript/)
+- [x] **4.1** Run `poetry run ruff check canvastekk_workflow_sdk/ tests/ && poetry run pytest -v` (python/) and `npm test` (typescript/)
     — **Why:** repo-mandated pre-merge gates.
     — **Done when:** both exit 0.
     — **Consumers affected:** CI / release automation.
