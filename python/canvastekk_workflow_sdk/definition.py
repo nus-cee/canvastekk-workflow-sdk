@@ -136,6 +136,20 @@ class DeprecationInfo(BaseModel):
         description="Human-readable deprecation notice shown to workflow-definition authors.",
     )
 
+    @model_validator(mode="after")
+    def _validate_sunset_after_deprecation(self) -> DeprecationInfo:
+        """Require ``sunset_date`` to fall on/after ``deprecated_at`` (DA-2305).
+
+        Raises:
+            ValueError: When both dates are set and the sunset precedes the
+                deprecation start.
+        """
+        if self.sunset_date is not None and self.deprecated_at is not None and self.sunset_date < self.deprecated_at:
+            raise ValueError(
+                f"DeprecationInfo sunset_date {self.sunset_date} is before deprecated_at {self.deprecated_at}"
+            )
+        return self
+
 
 class WorkflowNodeManifest(BaseModel):
     """
@@ -408,11 +422,14 @@ def export_definition(
     Export a WorkflowNodeManifest as a full node-manifest JSON file.
 
     DA-1955: the output is the FULL manifest shape (includes ``node_role``,
-    ``retry``, ``node_status``, ``deprecation``) consumed by the node's
-    ``/manifest`` endpoint and the engine's SDKNodeDefinition model. It is NOT
-    a valid body for ``POST /api/workflows/nodes/`` (that request schema is
+    ``retry``, ``node_status``) consumed by the node's ``/manifest``
+    endpoint and the engine's SDKNodeDefinition model. It is NOT a valid
+    body for ``POST /api/workflows/nodes/`` (that request schema is
     ``extra="forbid"`` without those fields) — use ``register_node()`` for the
-    HTTP registration path, which emits the aligned payload.
+    HTTP registration path, which emits the aligned payload. ``deprecation``
+    is the one overlap: it is an accepted engine register field (DA-2305) and
+    is emitted by ``build_registry_payload`` itself, so it needs no re-adding
+    here.
 
     Maps SDK WorkflowNodeManifest fields to the registry schema and writes the result
     as a clean JSON file.
@@ -455,8 +472,6 @@ def export_definition(
     registry_dict["node_role"] = definition.role.value
     registry_dict["retry"] = definition.default_retry.model_dump(mode="json")
     registry_dict["node_status"] = node_status
-    if definition.deprecation is not None:
-        registry_dict["deprecation"] = definition.deprecation.model_dump(mode="json")
 
     if styles is not None:
         registry_dict["styles"] = styles

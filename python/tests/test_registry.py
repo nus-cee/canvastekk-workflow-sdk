@@ -578,6 +578,7 @@ class TestBuildRegistryPayload:
             "constraints",
             "token_cost",
             "timeout_seconds",
+            "deprecation",
         }
         definition = self._make_definition(
             minimum_sdk_version="0.22.0",
@@ -598,8 +599,8 @@ class TestBuildRegistryPayload:
         payload = build_registry_payload(definition)
         assert "deprecation" not in payload
 
-    def test_deprecation_not_in_request_payload_when_set(self) -> None:
-        """DA-1955 B1: deprecation lives in the export full shape, not the request."""
+    def test_deprecation_in_request_payload_when_set(self) -> None:
+        """DA-2305: deprecation IS emitted to the engine register endpoint."""
         from datetime import date
 
         definition = self._make_definition(
@@ -609,7 +610,13 @@ class TestBuildRegistryPayload:
             )
         )
         payload = build_registry_payload(definition)
-        assert "deprecation" not in payload
+        assert payload["deprecation"] == {
+            "deprecated_at": "2026-08-01",
+            "sunset_date": None,
+            "replacement_slug": None,
+            "migration_url": None,
+            "notice": "use test-v2",
+        }
 
 
 class TestExtractNodeDataNewFormat:
