@@ -110,7 +110,7 @@ class TestRuntimeSunsetLifecycle:
         node = _make_node(
             DeprecationInfo(
                 deprecated_at=date(2025, 1, 1),
-                sunset_date=date.today() - timedelta(days=1),
+                sunset_date=datetime.now(UTC).date() - timedelta(days=1),
                 replacement_slug="cds-file",
                 notice="Sunset yesterday.",
             )
@@ -125,7 +125,7 @@ class TestRuntimeSunsetLifecycle:
         """The sunset date itself is the last day of service (RFC 8594 reading)."""
         node = _make_node(
             DeprecationInfo(
-                deprecated_at=date.today() - timedelta(days=30),
+                deprecated_at=datetime.now(UTC).date() - timedelta(days=30),
                 sunset_date=datetime.now(UTC).date(),
                 replacement_slug="cds-file",
                 notice="Final day of service.",
@@ -137,8 +137,8 @@ class TestRuntimeSunsetLifecycle:
     def test_deprecated_not_sunset_warns_and_passes(self, caplog: pytest.LogCaptureFixture) -> None:
         node = _make_node(
             DeprecationInfo(
-                deprecated_at=date.today() - timedelta(days=30),
-                sunset_date=date.today() + timedelta(days=365),
+                deprecated_at=datetime.now(UTC).date() - timedelta(days=30),
+                sunset_date=datetime.now(UTC).date() + timedelta(days=365),
                 replacement_slug="cds-file",
                 notice="Deprecation window open.",
             )
