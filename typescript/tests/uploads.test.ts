@@ -119,7 +119,7 @@ describe("S3PresignedUploader", () => {
   });
 
   describe("uploadOutputs", () => {
-    it("uploads local file outputs and skips non-file values", async () => {
+    it("uploads local file outputs", async () => {
       const srv = await startServer();
       try {
         const fragPath = join(tmpDir, "converted.frag");
@@ -127,17 +127,100 @@ describe("S3PresignedUploader", () => {
 
         const response = {
           success: true,
-          outputs: { frag_file: fragPath, note: "not-a-file" },
+          outputs: { frag_file: fragPath },
         } as Parameters<S3PresignedUploader["uploadOutputs"]>[0];
 
         await new S3PresignedUploader().uploadOutputs(
           response,
-          { frag_file: srv.url, note: `${srv.url}/note` },
-          ["frag_file", "note"],
+          { frag_file: srv.url },
+          ["frag_file"],
         );
 
         expect(srv.captured).toHaveLength(1);
         expect(srv.captured[0].url).toBe("/presigned-put");
+      } finally {
+        await srv.close();
+      }
+    });
+  });
+
+  describe("uploadOutputs fail-loud (DA-2337)", () => {
+    it("throws when a present file-output value is not a string", async () => {
+      const uploader = new S3PresignedUploader();
+      const response = {
+        success: true,
+        outputs: { count: 123 },
+      } as Parameters<S3PresignedUploader["uploadOutputs"]>[0];
+
+      await expect(
+        uploader.uploadOutputs(response, { count: "http://127.0.0.1:1/put" }, ["count"]),
+      ).rejects.toThrow(/Output field 'count' value is not a string: number/);
+    });
+
+    it("throws when the value is not an existing local file", async () => {
+      const uploader = new S3PresignedUploader();
+      const response = {
+        success: true,
+        outputs: { frag_file: "/nonexistent/converted.frag" },
+      } as Parameters<S3PresignedUploader["uploadOutputs"]>[0];
+
+      await expect(
+        uploader.uploadOutputs(response, { frag_file: "http://127.0.0.1:1/put" }, ["frag_file"]),
+      ).rejects.toThrow(/Output field 'frag_file' value is not a local file/);
+    });
+
+    it("throws when the value is a directory (not a regular file)", async () => {
+      const uploader = new S3PresignedUploader();
+      const response = {
+        success: true,
+        outputs: { frag_file: tmpDir },
+      } as Parameters<S3PresignedUploader["uploadOutputs"]>[0];
+
+      await expect(
+        uploader.uploadOutputs(response, { frag_file: "http://127.0.0.1:1/put" }, ["frag_file"]),
+      ).rejects.toThrow(/Output field 'frag_file' value is not a local file/);
+    });
+
+    it("skips fields absent from outputs (omission is legal)", async () => {
+      const srv = await startServer();
+      try {
+        const response = {
+          success: true,
+          outputs: { note: "done" },
+        } as Parameters<S3PresignedUploader["uploadOutputs"]>[0];
+
+        await new S3PresignedUploader().uploadOutputs(
+          response,
+          { frag_file: srv.url },
+          ["frag_file"],
+        );
+
+        expect(srv.captured).toHaveLength(0);
+      } finally {
+        await srv.close();
+      }
+    });
+
+    it("uploads earlier valid fields before a bad later field throws", async () => {
+      const srv = await startServer();
+      try {
+        const fragPath = join(tmpDir, "good.frag");
+        writeFileSync(fragPath, Buffer.from("frag-bytes"));
+
+        const response = {
+          success: true,
+          outputs: { good_file: fragPath, bad_file: "/nonexistent/bad.frag" },
+        } as Parameters<S3PresignedUploader["uploadOutputs"]>[0];
+
+        await expect(
+          new S3PresignedUploader().uploadOutputs(
+            response,
+            { good_file: srv.url, bad_file: `${srv.url}/bad` },
+            ["good_file", "bad_file"],
+          ),
+        ).rejects.toThrow(/Output field 'bad_file' value is not a local file/);
+
+        expect(srv.captured).toHaveLength(1);
       } finally {
         await srv.close();
       }

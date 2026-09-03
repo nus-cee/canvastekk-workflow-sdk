@@ -8,6 +8,13 @@ import type { NodeExecutionResponse } from "./response.js";
  */
 export interface OutputUploader {
   uploadFile(filePath: string, presignedUrl: string): Promise<void>;
+  /**
+   * Implementations MUST throw (not skip) when a file-output field that is
+   * present in `response.outputs` and has a presigned URL holds a value
+   * that is not an existing local file — silently skipping would report
+   * success while the engine stamps a storage URI for the missing object,
+   * corrupting downstream consumers (DA-2337).
+   */
   uploadOutputs(
     response: NodeExecutionResponse,
     uploadUrls: Record<string, string>,
@@ -171,9 +178,17 @@ export class S3PresignedUploader implements OutputUploader {
    * silently reporting success with local-only paths would strand
    * downstream consumers (DA-1711 4.1).
    *
+   * A declared file-output field that HAS a presigned URL but whose value
+   * is not a string referencing an existing regular file THROWS — the
+   * engine stamps an `s3://` URI for every present output field on pass,
+   * so skipping the upload would report success while corrupting every
+   * downstream consumer (DA-2337). Fields ABSENT from the response are
+   * skipped (omission is legal — the engine never stamps them).
+   *
    * @param response - Node execution response
    * @param uploadUrls - Mapping of field names to presigned URLs
    * @param fileOutputFields - Names of file output fields
+   * @throws Error when a present file-output field is not a local file
    */
   async uploadOutputs(
     response: NodeExecutionResponse,
@@ -185,14 +200,27 @@ export class S3PresignedUploader implements OutputUploader {
     for (const fieldName of fileOutputFields) {
       if (!(fieldName in uploadUrls)) continue;
 
-      const value = response.outputs[fieldName];
-      if (typeof value !== "string") continue;
-
-      try {
-        statSync(value);
-      } catch {
-        console.warn(`Output field '${fieldName}' value is not a local file: ${value}`);
+      if (!(fieldName in response.outputs)) {
+        // Omitted output: the engine stamps s3:// URIs only for fields
+        // present in the response, so omission is legal.
         continue;
+      }
+
+      const value = response.outputs[fieldName];
+      if (typeof value !== "string") {
+        throw new Error(`Output field '${fieldName}' value is not a string: ${typeof value}`);
+      }
+
+      let isRegularFile = false;
+      try {
+        isRegularFile = statSync(value).isFile();
+      } catch {
+        isRegularFile = false;
+      }
+
+      if (!isRegularFile) {
+        console.error(`Output field '${fieldName}' value is not a local file: ${value}`);
+        throw new Error(`Output field '${fieldName}' value is not a local file: ${value}`);
       }
 
       await this.uploadFile(value, uploadUrls[fieldName]);
