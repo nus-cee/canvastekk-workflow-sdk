@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.25.0] - 2026-09-03
+
+### Features
+
+- **sdk**: Emit deprecation in registry payload + sunset lifecycle enforcement [DA-2305] (#59)
+
+
 ## [0.24.0] - 2026-09-01
 
 ### Features
 
 - **sdk**: Propagate X-Account-Id into node execution context (DA-2242) (#58)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.24.0
 
 
 ## [0.23.1] - 2026-08-24
