@@ -164,9 +164,16 @@ describe("S3PresignedUploader", () => {
         outputs: { frag_file: "/nonexistent/converted.frag" },
       } as Parameters<S3PresignedUploader["uploadOutputs"]>[0];
 
-      await expect(
-        uploader.uploadOutputs(response, { frag_file: "http://127.0.0.1:1/put" }, ["frag_file"]),
-      ).rejects.toThrow(/Output field 'frag_file' value is not a local file/);
+      const promise = uploader.uploadOutputs(
+        response,
+        { frag_file: "http://127.0.0.1:1/put" },
+        ["frag_file"],
+      );
+      await expect(promise).rejects.toThrow(/Output field 'frag_file' value is not a local file/);
+      await expect(promise).rejects.toMatchObject({
+        name: "NodeIOError",
+        path: "/nonexistent/converted.frag",
+      });
     });
 
     it("throws when the value is a directory (not a regular file)", async () => {

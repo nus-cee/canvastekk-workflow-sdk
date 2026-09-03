@@ -177,6 +177,7 @@ class S3PresignedUploader:
 
             value = response.outputs[field_name]
             if not isinstance(value, str):
+                logger.error("Output field '%s' value is not a string: %s", field_name, type(value).__name__)
                 raise NodeIOError(
                     f"Output field '{field_name}' value is not a string: {type(value).__name__}"
                 )

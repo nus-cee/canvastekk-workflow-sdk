@@ -2,6 +2,7 @@ import { createReadStream, statSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import type { NodeExecutionResponse } from "./response.js";
+import { NodeIOError } from "./exceptions.js";
 
 /**
  * Interface for uploading node output files.
@@ -188,7 +189,8 @@ export class S3PresignedUploader implements OutputUploader {
    * @param response - Node execution response
    * @param uploadUrls - Mapping of field names to presigned URLs
    * @param fileOutputFields - Names of file output fields
-   * @throws Error when a present file-output field is not a local file
+   * @throws NodeIOError when a present file-output field is not a string
+   * or not an existing local file
    */
   async uploadOutputs(
     response: NodeExecutionResponse,
@@ -200,7 +202,7 @@ export class S3PresignedUploader implements OutputUploader {
     for (const fieldName of fileOutputFields) {
       if (!(fieldName in uploadUrls)) continue;
 
-      if (!(fieldName in response.outputs)) {
+      if (!Object.hasOwn(response.outputs, fieldName)) {
         // Omitted output: the engine stamps s3:// URIs only for fields
         // present in the response, so omission is legal.
         continue;
@@ -208,7 +210,9 @@ export class S3PresignedUploader implements OutputUploader {
 
       const value = response.outputs[fieldName];
       if (typeof value !== "string") {
-        throw new Error(`Output field '${fieldName}' value is not a string: ${typeof value}`);
+        throw new NodeIOError(
+          `Output field '${fieldName}' value is not a string: ${typeof value}`,
+        );
       }
 
       let isRegularFile = false;
@@ -219,8 +223,10 @@ export class S3PresignedUploader implements OutputUploader {
       }
 
       if (!isRegularFile) {
-        console.error(`Output field '${fieldName}' value is not a local file: ${value}`);
-        throw new Error(`Output field '${fieldName}' value is not a local file: ${value}`);
+        throw new NodeIOError(
+          `Output field '${fieldName}' value is not a local file: ${value}`,
+          { path: value },
+        );
       }
 
       await this.uploadFile(value, uploadUrls[fieldName]);
