@@ -250,12 +250,14 @@ def build_registry_payload(
     distinct from ``WorkflowDefinitionNode`` (a node instance in a workflow
     definition).
 
-    DA-1955 payload alignment:
+    DA-1955 payload alignment (amended by DA-2305):
         The engine request model is ``extra="forbid"`` and has no
-        ``node_role`` / ``retry`` / ``node_status`` / ``deprecation`` fields,
-        so those keys are NOT emitted here (the engine derives defaults for
-        them). ``export_definition()`` re-adds them for the full manifest
-        shape consumed by the node's ``/manifest`` endpoint.
+        ``node_role`` / ``retry`` / ``node_status`` fields, so those keys are
+        NOT emitted here (the engine derives defaults for them).
+        ``deprecation`` is now an accepted engine field (DA-2305): it is
+        emitted whenever the manifest sets it. ``export_definition()``
+        re-adds the rest for the full manifest shape consumed by the node's
+        ``/manifest`` endpoint.
 
     Versioning note:
         The ``version`` field in the payload is the node's semantic version
@@ -314,6 +316,8 @@ def build_registry_payload(
         payload["invoke_config"] = invoke_config
     if resolved_constraints:
         payload["constraints"] = resolved_constraints
+    if definition.deprecation is not None:
+        payload["deprecation"] = definition.deprecation.model_dump(mode="json")
 
     return payload
 

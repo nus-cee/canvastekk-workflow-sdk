@@ -136,6 +136,20 @@ class DeprecationInfo(BaseModel):
         description="Human-readable deprecation notice shown to workflow-definition authors.",
     )
 
+    @model_validator(mode="after")
+    def _validate_sunset_after_deprecation(self) -> DeprecationInfo:
+        """Require ``sunset_date`` to fall on/after ``deprecated_at`` (DA-2305).
+
+        Raises:
+            ValueError: When both dates are set and the sunset precedes the
+                deprecation start.
+        """
+        if self.sunset_date is not None and self.deprecated_at is not None and self.sunset_date < self.deprecated_at:
+            raise ValueError(
+                f"DeprecationInfo sunset_date {self.sunset_date} is before deprecated_at {self.deprecated_at}"
+            )
+        return self
+
 
 class WorkflowNodeManifest(BaseModel):
     """

@@ -15,6 +15,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import date
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -31,6 +32,7 @@ from canvastekk_workflow_sdk._url import (
 from canvastekk_workflow_sdk.context import ExecutionContext
 from canvastekk_workflow_sdk.definition import WorkflowNodeManifest
 from canvastekk_workflow_sdk.exceptions import (
+    NodeConfigurationError,
     NodeExecutionError,
     NodeIOError,
     NodeOutputValidationError,
@@ -293,37 +295,25 @@ class BaseNode(ABC):
                         follow_redirects=False,
                     )
                 except httpx.TimeoutException as exc:
-                    raise NodeIOError(
-                        f"Timeout downloading file for field '{field_name}': {exc}"
-                    ) from exc
+                    raise NodeIOError(f"Timeout downloading file for field '{field_name}': {exc}") from exc
                 except httpx.HTTPError as exc:
-                    raise NodeIOError(
-                        f"Failed to download file for field '{field_name}': {exc}"
-                    ) from exc
+                    raise NodeIOError(f"Failed to download file for field '{field_name}': {exc}") from exc
 
                 if resp.status_code in (301, 302, 303, 307, 308):
                     hops += 1
                     if hops > MAX_REDIRECT_HOPS:
-                        raise NodeIOError(
-                            f"Too many redirects downloading file for field '{field_name}'"
-                        )
+                        raise NodeIOError(f"Too many redirects downloading file for field '{field_name}'")
                     next_url = resp.headers.get("location")
                     if not next_url:
-                        raise NodeIOError(
-                            f"Redirect without Location header downloading file for field '{field_name}'"
-                        )
+                        raise NodeIOError(f"Redirect without Location header downloading file for field '{field_name}'")
                     current_url = validate_external_url(
-                        next_url
-                        if "://" in next_url
-                        else str(urljoin(current_url, next_url))
+                        next_url if "://" in next_url else str(urljoin(current_url, next_url))
                     )
                     filename = f"{field_name}_{self._extract_filename(current_url)}"
                     continue
 
                 if resp.status_code >= 400:
-                    raise NodeIOError(
-                        f"HTTP {resp.status_code} downloading file for field '{field_name}'"
-                    )
+                    raise NodeIOError(f"HTTP {resp.status_code} downloading file for field '{field_name}'")
 
                 local_path = context.downloads_dir / filename
 
@@ -336,8 +326,7 @@ class BaseNode(ABC):
                 if content_length and content_length.isdigit():
                     if int(content_length) > max_bytes:
                         raise NodeIOError(
-                            f"File for field '{field_name}' exceeds size cap "
-                            f"({content_length} > {max_bytes} bytes)"
+                            f"File for field '{field_name}' exceeds size cap ({content_length} > {max_bytes} bytes)"
                         )
 
                 try:
@@ -345,28 +334,21 @@ class BaseNode(ABC):
                         running = 0
                         for chunk in resp.iter_bytes(chunk_size=65536):
                             if cancel_event is not None and cancel_event.is_set():
-                                raise NodeIOError(
-                                    f"Download for field '{field_name}' was cancelled"
-                                )
+                                raise NodeIOError(f"Download for field '{field_name}' was cancelled")
                             running += len(chunk)
                             if running > max_bytes:
                                 raise NodeIOError(
-                                    f"File for field '{field_name}' exceeds size cap "
-                                    f"({running} > {max_bytes} bytes)"
+                                    f"File for field '{field_name}' exceeds size cap ({running} > {max_bytes} bytes)"
                                 )
                             if time.monotonic() > deadline:
-                                raise NodeIOError(
-                                    f"Download deadline exceeded for field '{field_name}'"
-                                )
+                                raise NodeIOError(f"Download deadline exceeded for field '{field_name}'")
                             f.write(chunk)
                 except BaseException:
                     local_path.unlink(missing_ok=True)
                     raise
                 return local_path
         except UrlPolicyError as exc:
-            raise NodeIOError(
-                f"Blocked URL for field '{field_name}': {exc}"
-            ) from exc
+            raise NodeIOError(f"Blocked URL for field '{field_name}': {exc}") from exc
 
     def _prepare_file_inputs(
         self,
@@ -436,6 +418,33 @@ class BaseNode(ABC):
         """
         self._cancel_event = event
 
+    def _check_deprecation_lifecycle(self) -> None:
+        """Enforce the manifest's deprecation lifecycle (DA-2305).
+
+        Warns on every execution of a deprecated node (naming the
+        replacement) and refuses execution once ``sunset_date`` has passed.
+
+        Raises:
+            NodeConfigurationError: When the node's ``sunset_date`` is in
+                the past — the node has been sunset and must not run.
+        """
+        dep = self.definition.deprecation
+        if dep is None:
+            return
+        replacement = dep.replacement_slug or "unspecified"
+        if dep.sunset_date is not None and date.today() > dep.sunset_date:
+            raise NodeConfigurationError(
+                f"Node '{self.definition.name}' was sunset on {dep.sunset_date.isoformat()} "
+                f"and refuses to run; migrate to '{replacement}' ({dep.notice})"
+            )
+        logger.warning(
+            "Node '%s' is deprecated (since %s): %s — migrate to '%s'",
+            self.definition.name,
+            dep.deprecated_at.isoformat() if dep.deprecated_at else "unknown date",
+            dep.notice,
+            replacement,
+        )
+
     def run(self, request: NodeExecutionRequest) -> NodeExecutionResponse:
         """
         Run the node with full error handling, validation, and timing.
@@ -460,6 +469,8 @@ class BaseNode(ABC):
         start_time = time.perf_counter()
 
         try:
+            self._check_deprecation_lifecycle()
+
             self._validate_inputs(request.inputs)
 
             context = ExecutionContext(request, cancel_event=getattr(self, "_cancel_event", None))
