@@ -65,13 +65,32 @@ export type WorkflowNodeRole = z.infer<typeof WorkflowNodeRoleSchema>;
  * data-model level. Dates are ISO 8601 strings (not `Date`) to stay
  * JSON-round-trip compatible with the Python SDK and the engine wire format.
  */
-export const DeprecationInfoSchema = z.object({
-  deprecated_at: z.string().nullable().default(null),
-  sunset_date: z.string().nullable().default(null),
-  replacement_slug: z.string().nullable().default(null),
-  migration_url: z.string().nullable().default(null),
-  notice: z.string(),
-});
+export const DeprecationInfoSchema = z
+  .object({
+    // Strict YYYY-MM-DD (zod .date()) so lexicographic ordering in the
+    // superRefine check and the runtime sunset guard stays chronological —
+    // Python types these as pydantic `date` (DA-2312 parity).
+    deprecated_at: z.string().date().nullable().default(null),
+    sunset_date: z.string().date().nullable().default(null),
+    replacement_slug: z.string().nullable().default(null),
+    migration_url: z.string().nullable().default(null),
+    notice: z.string(),
+  })
+  .superRefine((dep, ctx) => {
+    // ISO 8601 dates (YYYY-MM-DD) compare lexicographically = chronologically.
+    // Boundary sunset_date == deprecated_at is allowed (DA-2312, parity with
+    // Python DeprecationInfo._validate_sunset_after_deprecation).
+    if (
+      dep.deprecated_at !== null &&
+      dep.sunset_date !== null &&
+      dep.sunset_date < dep.deprecated_at
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `DeprecationInfo sunset_date ${dep.sunset_date} is before deprecated_at ${dep.deprecated_at}`,
+      });
+    }
+  });
 
 /** Deprecation metadata for a node manifest. */
 export type DeprecationInfo = z.infer<typeof DeprecationInfoSchema>;
