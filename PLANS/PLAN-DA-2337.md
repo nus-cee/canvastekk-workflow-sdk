@@ -32,15 +32,26 @@ remaining isfile-skip path.
 
 ## Acceptance Criteria
 
-- [ ] A `format: file` output whose value is not a `str`, or not an
-      existing local file, FAILS the node (`fail` / `UPLOAD_FAILED`) —
-      never warn+continue+success — in both Python and TypeScript SDKs.
+- [ ] A `format: file` output **present in `response.outputs`** whose value
+      is not a `str`, or not an existing local file, FAILS the node
+      (`fail` / `UPLOAD_FAILED`) — never warn+continue+success — in both
+      Python and TypeScript SDKs.
+- [ ] A file output field **absent from `response.outputs`** (omitted) stays
+      a silent skip (engine stamps `s3://` only for present fields —
+      omission was never corrupted).
 - [ ] Skipping when NO upload URL was presigned for the field
       (`field not in upload_urls`) remains valid local-run behavior —
       unchanged.
-- [ ] Python unit tests cover: non-str value, non-existent path, happy
-      path (existing temp file uploads), no-URL skip.
-- [ ] TypeScript tests mirror the Python cases.
+- [ ] Existing tests that pin the old silent-skip contract
+      (`test_uploads.py::test_upload_outputs_skips_non_file_values`,
+      `::test_upload_outputs_logs_warning_for_nonexistent_file`,
+      `uploads.test.ts` "skips non-file values") are rewritten to expect
+      raises.
+- [ ] Python unit tests cover: present non-str value, non-existent path,
+      directory path, absent-field skip, happy path, no-URL skip, empty
+      outputs, partial-failure (earlier valid field still uploaded).
+- [ ] TypeScript tests mirror the Python cases (incl. directory → throw
+      via `statSync().isFile()`).
 - [ ] `poetry run ruff check canvastekk_workflow_sdk/ tests/` and
       `poetry run pytest -v` green in `python/`; `npm test` green in
       `typescript/`.
@@ -52,7 +63,11 @@ remaining isfile-skip path.
 
 ## Scope
 
-**Both SDK languages** (bug exists in both; consumers of each exist).
+**Both SDK languages** (bug exists in both). Consumers: the Python wheel is
+pinned by canvastekk-workflow-nodes (gateway bundles it — Phase 5); the TS
+package has **no known consumers** in the 6-repo system (nodes gateway is
+Python) — the TS fix ships for parity/prevention, npm consumers would pick it
+up on their next pin.
 Out of scope: engine head-object verification before the `s3://` rewrite
 (follow-up ticket in canvastekk-workflow-engine — see Dependencies);
 node-handler changes (url-loader current code is correct).
@@ -70,10 +85,17 @@ node-handler changes (url-loader current code is correct).
   `app.py`'s broad `except` converts any exception to
   `fail`/`UPLOAD_FAILED`, so no `app.py` change needed.
 - TS throw: `throw new Error(...)` — same message shape; `app.ts` catch
-  already converts.
-- Only raise when `field_name in upload_urls` (engine stamped a URL →
-  engine WILL rewrite → not uploading is corruption). No URL → skip stays
-  (local/UI run, value legitimately remains a local path).
+  already converts. (Pre-existing divergence: `app.ts:138` renders `${err}`
+  with an `Error:` prefix Python lacks — out of scope.)
+- Raise only when `field_name in upload_urls` **AND** `field_name in
+  response.outputs` (present-but-invalid — mirrors the engine's stamp
+  condition `activities.py:708`, which rewrites only present fields;
+  explicit `None` counts as present → raise). No URL → skip stays
+  (local/UI run, value legitimately remains a local path). Absent from
+  outputs → skip stays (omission was never corrupted).
+- TS must use `statSync(value).isFile()` — bare `statSync` succeeds for
+  directories (EISDIR would surface mid-upload with a misleading message;
+  Python's `os.path.isfile` is already directory-safe).
 - Engine stamps on `status==pass` regardless of object existence
   (`activities.py` "Replaced output … with S3 URI", `s3_uri += f"?ext="`).
 - No version bump by hand — git-cliff; commit MUST be `fix:` type →
@@ -94,23 +116,27 @@ node-handler changes (url-loader current code is correct).
 
 ### Phase 1: Python fix
 
-- [ ] **1.1** In `upload_outputs` (`python/canvastekk_workflow_sdk/uploads.py`), replace both silent skips with a raise when `field_name in upload_urls`: non-str value → `NodeIOError("Output field '{field}' value is not a string: {type}")`; non-existent file → `NodeIOError("Output field '{field}' value is not a local file: {value}", path=value)`
-    — **Why:** the engine presigned a URL and stamps `s3://` on pass unconditionally — skipping the upload guarantees a downstream 404 cascade attributed to the wrong node; failing at the producer is the only correct signal.
-    — **Done when:** a response whose file-output value is `None`/dict or points at a missing path raises `NodeIOError`; the `field not in upload_urls` skip is untouched.
+- [ ] **1.1** In `upload_outputs` (`python/canvastekk_workflow_sdk/uploads.py`), for fields where `field_name in upload_urls`: keep `continue` when the field is ABSENT from `response.outputs`; when present, non-str value → `NodeIOError("Output field '{field}' value is not a string: {type}")`; non-existent file (or directory) → `NodeIOError("Output field '{field}' value is not a local file: {value}", path=value)`
+    — **Why:** the engine presigned a URL and stamps `s3://` on pass for every PRESENT field — skipping the upload guarantees a downstream 404 cascade attributed to the wrong node; failing at the producer is the only correct signal. Absent fields are never stamped, so omission must stay legal (optional file outputs).
+    — **Done when:** a response whose present file-output value is `None`/dict or points at a missing path raises `NodeIOError` (missing-path case carries `path` in details); absent field and `field not in upload_urls` skips are untouched.
     — **Consumers affected:** `app.py` failure conversion (already broad-catches); all Python node runtimes.
+- [ ] **1.2** Update the `OutputUploader` Protocol docstring in `uploads.py` to state the MUST-fail contract (implementations MUST raise when a declared, URL-presigned file output is not a local file)
+    — **Why:** custom implementers learn the new contract from the seam that owns it.
+    — **Done when:** docstring updated; ruff green.
+    — **Consumers affected:** none (documentation).
 
 ### Phase 2: Python tests
 
-- [ ] **2.1** Add pytest coverage in `python/tests/test_uploads.py`: (a) non-str output value → raises, (b) str path that does not exist → raises with `path` in details, (c) real temp file → upload_file called with the presigned URL, (d) field without URL → skipped silently, (e) `response.outputs` empty → no-op
-    — **Why:** pins the fail-loud contract and the preserved local-run skip against regression; (c)/(d) guard against over-tightening.
-    — **Done when:** `poetry run pytest -v` green, new tests fail against the old code.
+- [ ] **2.1** In `python/tests/test_uploads.py` (existing `TestS3PresignedUploader` class, docstrings referencing "(DA-2337)"): REWRITE `test_upload_outputs_skips_non_file_values` (now expects `NodeIOError`, `path is None` for non-str) and `test_upload_outputs_logs_warning_for_nonexistent_file` (now expects raise with `excinfo.value.path == value`, message contains field name); ADD: directory value → raise; field absent from `response.outputs` but URL presigned → skipped; partial failure (two fields, first valid + second missing → raises AND first upload still executed — pins orphan semantics); empty outputs → no-op. Happy path stays via the existing module-attr patch of `canvastekk_workflow_sdk.uploads.httpx.put` (`test_upload_outputs_with_valid_file_and_url` — extend if needed, don't duplicate)
+    — **Why:** three existing tests pin the OLD silent-skip contract and would fail the Phase 4 gate; the new cases pin the fail-loud contract, the absent-field local-run skips, and the partial-failure semantics against regression.
+    — **Done when:** `poetry run pytest -v` green; rewritten tests fail against the pre-fix code; no-URL skip and empty-outputs tests unchanged-green.
     — **Consumers affected:** none (CI gate).
 
 ### Phase 3: TypeScript parity
 
-- [ ] **3.1** Mirror in `typescript/src/uploads.ts::uploadOutputs`: non-string value → `throw new Error(...)`; `statSync` failure → `throw new Error(...)` (drop the `console.warn` + `continue`); keep the `!(fieldName in uploadUrls)` skip
-    — **Why:** identical corruption path exists in TS (uploads.ts:186-197); DA-2242 deferred TS parity but this bug class must not ship divergent.
-    — **Done when:** TS upload tests mirror Phase 2 cases; `npm test` green in `typescript/`.
+- [ ] **3.1** Mirror in `typescript/src/uploads.ts::uploadOutputs`: keep `continue` when field absent from `response.outputs`; when present, non-string value → `throw new Error("Output field '{field}' value is not a string: {type}")`; `!statSync(value).isFile()` → `throw new Error("Output field '{field}' value is not a local file: {value}")` (drop `console.warn` + `continue`; directory now throws — parity with Python's `os.path.isfile`); keep the `!(fieldName in uploadUrls)` skip; update the `OutputUploader` interface docstring. Rewrite the existing "skips non-file values" test to expect throws; new `describe("uploadOutputs fail-loud (DA-2337)")` block mirroring Phase 2 cases (assert message via `rejects.toThrow(/Output field 'x' value is not a local file/)`); reuse the `startServer()` local-HTTP convention for happy-path assertions
+    — **Why:** identical corruption path exists in TS (uploads.ts:186-197); DA-2242 deferred TS parity but this bug class must not ship divergent; `statSync` alone lets directories slip through to a mid-upload EISDIR.
+    — **Done when:** `npm test` green in `typescript/`; rewritten tests fail against pre-fix code.
     — **Consumers affected:** `app.ts` failure conversion (unchanged); TS node runtimes.
 
 ### Phase 4: gates + release
@@ -126,8 +152,8 @@ node-handler changes (url-loader current code is correct).
 
 ### Phase 5: consumer bump (executed in canvastekk-workflow-nodes repo)
 
-- [ ] **5.1** PR in canvastekk-workflow-nodes bumping the wheel pin to v0.26.1 in `fastapi_app/pyproject.toml`, `fastapi_app_ml/pyproject.toml`, `fastapi_app_open3d/pyproject.toml`; commit `fix(nodes): bump SDK to v0.26.1 — fatal missing-file output upload [DA-2337]`; merge + gateway redeploy
-    — **Why:** the gateway bundles the SDK wheel — the fix is inert until consumers pick it up (user-confirmed requirement: SDK consumers must be updated).
+- [ ] **5.1** PR in canvastekk-workflow-nodes bumping the wheel pin to v0.26.1 in `fastapi_app/pyproject.toml`, `fastapi_app_ml/pyproject.toml`, `fastapi_app_open3d/pyproject.toml`; commit `fix(nodes): bump SDK to v0.26.1 — fatal missing-file output upload [DA-2337]`; merge + gateway redeploy. Redeploy mechanism: the `sdk-released` dispatch fired at release time rebuilds with the OLD pin (expected interim rebuild); confirm whether `deploy-lambda.yml` also triggers on push to `main` — if not, manually dispatch it after the pin-bump merge
+    — **Why:** the gateway bundles the SDK wheel — the fix is inert until consumers pick it up (user-confirmed requirement: SDK consumers must be updated); a dispatch-only deploy pipeline would otherwise never see the new pin.
     — **Done when:** gateway runs v0.26.1; a node returning a non-path file output fails at the producer with `UPLOAD_FAILED`.
     — **Consumers affected:** all deployed nodes.
 
