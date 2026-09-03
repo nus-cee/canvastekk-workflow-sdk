@@ -1,6 +1,7 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { WorkflowNodeManifest } from "./definition.js";
+import { DeprecationInfoSchema } from "./definition.js";
 import { RegistrationError } from "./exceptions.js";
 
 /** Node invocation type. */
@@ -80,7 +81,9 @@ export function buildRegistryPayload(
   }
 
   // DA-1955: engine RegisterWorkflowNodeRequest is extra="forbid" without
-  // node_role/retry/node_status/deprecation — those keys are NOT emitted here.
+  // node_role/retry/node_status — those keys are NOT emitted here.
+  // (`deprecation` is accepted by the engine since DA-2305/#319 and is
+  // emitted below when set — DA-2312, parity with Python v0.25.0.)
   const payload: Record<string, unknown> = {
     name: definition.name,
     label: definition.title,
@@ -104,6 +107,11 @@ export function buildRegistryPayload(
   }
   if (Object.keys(resolvedConstraints).length > 0) {
     payload.constraints = resolvedConstraints;
+  }
+  if (definition.deprecation != null) {
+    // DA-2312: parse-before-emit — always the full 5-key dump (defaults
+    // applied), parity with Python model_dump emission (SDK v0.25.0 / PR #59).
+    payload.deprecation = DeprecationInfoSchema.parse(definition.deprecation);
   }
 
   return payload;
@@ -255,9 +263,6 @@ export function exportDefinition(
   registryDict.node_role = definition.role;
   registryDict.retry = definition.default_retry;
   registryDict.node_status = opts.nodeStatus ?? "active";
-  if (definition.deprecation !== null) {
-    registryDict.deprecation = definition.deprecation;
-  }
 
   if (opts.styles !== undefined && opts.styles !== null) {
     registryDict.styles = opts.styles;

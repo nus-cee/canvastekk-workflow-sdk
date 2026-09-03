@@ -71,7 +71,7 @@ describe("buildRegistryPayload", () => {
     expect(payload).not.toHaveProperty("deprecation");
   });
 
-  it("omits deprecation from request payload when set (DA-1955)", () => {
+  it("includes deprecation in request payload when set (DA-2312)", () => {
     const deprecated = {
       ...testDef,
       deprecation: {
@@ -83,7 +83,13 @@ describe("buildRegistryPayload", () => {
       },
     };
     const payload = buildRegistryPayload(deprecated);
-    expect(payload).not.toHaveProperty("deprecation");
+    expect(payload.deprecation).toEqual({
+      deprecated_at: "2026-08-01",
+      sunset_date: "2027-01-01",
+      replacement_slug: "echo-v2",
+      migration_url: "https://example.com/migrate",
+      notice: "use echo-v2",
+    });
   });
 
   it("merges manifest compat fields into constraints (DA-1955)", () => {
@@ -137,7 +143,7 @@ describe("buildRegistryPayload", () => {
       "name", "version", "label", "description",
       "input_schema", "output_schema", "invoke_type", "invoke_url",
       "invoke_config", "category", "tags", "styles", "constraints",
-      "token_cost", "timeout_seconds",
+      "token_cost", "timeout_seconds", "deprecation",
     ]);
     for (const key of Object.keys(payload)) {
       expect(engineRequestFields.has(key)).toBe(true);
@@ -268,7 +274,15 @@ describe("exportDefinition full manifest shape (DA-1955 review fix)", () => {
       expect(exported["node_role"]).toBe("operation");
       expect(exported["retry"]).toEqual(testDef.default_retry);
       expect(exported["node_status"]).toBe("active");
-      expect(exported["deprecation"]).toEqual(deprecation);
+      // DA-2312: emission parses via DeprecationInfoSchema, so partial objects
+      // are normalized to the full 5-key dump (parity with Python model_dump).
+      expect(exported["deprecation"]).toEqual({
+        deprecated_at: "2026-08-24",
+        sunset_date: null,
+        replacement_slug: null,
+        migration_url: null,
+        notice: "Use echo-v2",
+      });
     } finally {
       rmSync(outPath, { force: true });
     }

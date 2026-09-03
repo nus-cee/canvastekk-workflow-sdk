@@ -25,11 +25,15 @@ import {
   NodeValidationError,
   NodeOutputValidationError,
   NodeIOError,
+  NodeConfigurationError,
 } from "./exceptions.js";
+import { createLogger } from "./logging.js";
 import { createNodeApp } from "./app.js";
 import type { CreateNodeAppOptions } from "./app.js";
 
 const ajv = new Ajv({ strict: false });
+
+const logger = createLogger("base-node");
 
 // Fraction of the node's timeout_seconds reserved for execute() after all
 // file downloads complete; downloads share the remainder of the budget.
@@ -384,6 +388,37 @@ export abstract class BaseNode {
   }
 
   /**
+   * Enforces the advisory deprecation lifecycle at run time (DA-2312,
+   * parity with Python BaseNode._check_deprecation_lifecycle).
+   *
+   * Deprecation is advisory: a deprecated node still runs, with a warning
+   * naming the replacement. Once `sunset_date` passes — day-inclusive, UTC —
+   * the node refuses to run.
+   *
+   * @throws {NodeConfigurationError} If the node's sunset date has passed
+   */
+  private checkDeprecationLifecycle(): void {
+    const dep = this.getDefinition().deprecation;
+    if (!dep) return;
+
+    const name = this.getDefinition().name;
+    const replacement = dep.replacement_slug || "unspecified";
+
+    if (dep.sunset_date) {
+      const today = new Date().toISOString().slice(0, 10);
+      if (today > dep.sunset_date) {
+        throw new NodeConfigurationError(
+          `Node '${name}' was sunset on ${dep.sunset_date} and refuses to run; migrate to '${replacement}' (${dep.notice})`,
+        );
+      }
+    }
+
+    logger.warn(
+      `Node '${name}' is deprecated (since ${dep.deprecated_at ?? "unknown date"}): ${dep.notice} — migrate to '${replacement}'`,
+    );
+  }
+
+  /**
    * Validates inputs against the node's input schema.
    * @param inputs - Input data to validate
    * @throws {NodeValidationError} If validation fails
@@ -500,6 +535,8 @@ export abstract class BaseNode {
     const def = this.getDefinition();
 
     try {
+      this.checkDeprecationLifecycle();
+
       this.validateInputs(request.inputs);
 
       const context = new ExecutionContext({
