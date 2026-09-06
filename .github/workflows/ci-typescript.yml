@@ -22,6 +22,9 @@ jobs:
   # (org secret) degrades gracefully to ubuntu-latest — all-GitHub-hosted behavior.
   pick-runner:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
     outputs:
       labels: ${{ steps.pick.outputs.labels }}
     steps:
