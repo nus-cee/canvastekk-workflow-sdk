@@ -17,8 +17,29 @@ defaults:
     working-directory: typescript
 
 jobs:
-  typecheck-test-build:
+  # Local-if-idle: use an org `local` self-hosted runner (nus-cee pool on topc-ubuntu1)
+  # when one is online+idle, else ubuntu-latest. Missing/invalid ORG_RUNNER_PAT
+  # (org secret) degrades gracefully to ubuntu-latest — all-GitHub-hosted behavior.
+  pick-runner:
     runs-on: ubuntu-latest
+    outputs:
+      labels: ${{ steps.pick.outputs.labels }}
+    steps:
+      - id: pick
+        env:
+          GH_TOKEN: ${{ secrets.ORG_RUNNER_PAT }}
+        run: |
+          if idle=$(gh api orgs/nus-cee/actions/runners --paginate \
+               --jq '[.runners[] | select(.labels[].name=="local") | select(.status=="online" and .busy==false)] | length' 2>/dev/null) \
+             && [ "$idle" -gt 0 ]; then
+            echo 'labels=["self-hosted","local"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'labels=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+          fi
+
+  typecheck-test-build:
+    needs: [pick-runner]
+    runs-on: ${{ fromJSON(needs.pick-runner.outputs.labels) }}
     strategy:
       fail-fast: false
       matrix:
