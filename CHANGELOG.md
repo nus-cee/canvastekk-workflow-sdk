@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.26.4] - 2026-09-14
+
+### Bug Fixes
+
+- **config**: Replace V1 atlassian MCP stub with full v2 servers entry
+
+
 ## [0.26.3] - 2026-09-03
 
 ### Documentation
 
 - **plan**: Tick DA-2337 phases 4.2 and 5.1 (DA-2337) (#63)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.26.3
 
 
 ## [0.26.2] - 2026-09-03
