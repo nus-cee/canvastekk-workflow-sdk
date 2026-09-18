@@ -169,3 +169,50 @@ class TestProbeValueDomain:
 
         m = _manifest(minimum_sdk_version="0.27.0", docs_url="https://docs.example.com")
         assert _build_engine_request(m) == build_registry_payload(m, invoke_url=None)
+
+
+class TestRegisterManifestFileInput:
+    """DA-2604: register --manifest <file|URL> — parity with the ts CLI."""
+
+    def test_manifest_file_registers(self, tmp_path) -> None:
+
+        path = tmp_path / "manifest.json"
+        # Realistic served-manifest shape: extra keys (id, sdk_version, mode,
+        # code_digest) must be ignored by the model.
+        path.write_text(
+            json.dumps(
+                {
+                    "slug": "echo",
+                    "version": "1.0.0",
+                    "name": "Echo",
+                    "description": "Echo node",
+                    "input_schema": {"type": "object"},
+                    "output_schema": {"type": "object"},
+                    "id": "echo-v1.0.0",
+                    "sdk_version": "0.28.0",
+                    "mode": "production",
+                    "code_digest": "ab" * 32,
+                }
+            )
+        )
+        calls = []
+
+        def fake_urlopen(req, timeout=None):
+            calls.append((req.method, req.full_url))
+            response = io.BytesIO(json.dumps({"id": "node-1"}).encode())
+            response.status = 201
+            if req.method == "GET":
+                response = io.BytesIO(json.dumps({"id": "node-1"}).encode())
+                response.status = 200
+            return response
+
+        with patch.dict("os.environ", {"CANVASTEKK_REGISTRY_TOKEN": "t"}), patch(
+            "urllib.request.urlopen", side_effect=fake_urlopen
+        ):
+            code = _run_register(["--manifest", str(path), "--engine-url", "https://eng", "--json"])
+        assert code == 0
+        assert calls[0][1] == "https://eng/api/workflows/nodes/"
+
+    def test_manifest_missing_file_is_usage_error(self, tmp_path) -> None:
+        with patch.dict("os.environ", {"CANVASTEKK_REGISTRY_TOKEN": "t"}):
+            assert _run_register(["--manifest", str(tmp_path / "nope.json"), "--engine-url", "https://eng"]) == 2
