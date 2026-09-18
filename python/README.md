@@ -1068,6 +1068,26 @@ Response from `POST /execute`:
 
 ## Utilities
 
+### CLI: register + probe (v0.28+)
+
+```bash
+# Offline registration probes (validate + engine-request mirror)
+python -m canvastekk_workflow_sdk probe my_node.handler:definition
+
+# Publish to the engine registry from CI (service identity)
+export CANVASTEKK_REGISTRY_TOKEN=<service token>
+python -m canvastekk_workflow_sdk register my_node.handler:definition \
+  --engine-url https://cwe.example.com [--invoke-url URL] [--name-suffix -lambda]
+```
+
+`register` maps the manifest to the engine vocabulary (`name`=slug, `label`=display),
+authenticates via `X-Service-Token`, POSTs to `{engine}/api/workflows/nodes/`, and
+verifies via `by-name/{name}`. Exit codes: 0 ok · 2 usage · 3 auth · 4 4xx · 5 5xx ·
+6 network. See the External Author Guide for the full contract.
+
+`GET /manifest` also serves `code_digest` (sha256 of the handler module source,
+computed at startup, never author-settable) next to `sdk_version`/`mode`.
+
 ### CLI Manifest Validation
 
 Validate your node definition offline without starting the server:

@@ -1205,3 +1205,59 @@ class TestAccountIdHeaderPropagation:
         resp = account_client.post("/execute", json=body, headers={"X-Account-Id": "42"})
         assert resp.status_code == 200
         assert resp.json()["outputs"] == {"account_id": 42}
+
+
+class TestManifestCodeDigest:
+    """DA-2603: code_digest is auto-injected, stable, and source-sensitive."""
+
+    def test_manifest_serves_code_digest(self, echo_client: TestClient) -> None:
+        data = echo_client.get("/manifest").json()
+        assert len(data["code_digest"]) == 64
+        int(data["code_digest"], 16)  # 64-char hex
+        # Stable across calls (computed once at startup)
+        assert echo_client.get("/manifest").json()["code_digest"] == data["code_digest"]
+
+    def test_manifest_still_serves_sdk_version_and_mode(self, echo_client: TestClient) -> None:
+        data = echo_client.get("/manifest").json()
+        assert "sdk_version" in data
+        assert data["mode"] in ("dev", "uat", "production")
+
+    def test_digest_changes_when_handler_source_changes(self, tmp_path, monkeypatch) -> None:
+        import importlib
+        import sys
+
+        from fastapi.testclient import TestClient
+
+        from canvastekk_workflow_sdk.app import create_node_app
+
+        from .test_base import EchoNode  # noqa: F401  (ensure echo import path exists)
+
+        mod_dir = tmp_path / "digestmod"
+        mod_dir.mkdir()
+        (mod_dir / "__init__.py").write_text("")
+        mod_file = mod_dir / "handler.py"
+
+        def _build_app(body: str):
+            mod_file.write_text(body)
+            monkeypatch.syspath_prepend(str(tmp_path))
+            if "digestmod.handler" in sys.modules:
+                del sys.modules["digestmod.handler"]
+            module = importlib.import_module("digestmod.handler")
+            return create_node_app(module.DigestNode())
+
+        base = (
+            "from canvastekk_workflow_sdk import BaseNode, WorkflowNodeManifest\n"
+            "class DigestNode(BaseNode):\n"
+            "    definition = WorkflowNodeManifest(\n"
+            "        slug='digest-node', version='1.0.0', name='Digest',\n"
+            "        description='digest probe',\n"
+            "        input_schema={'type': 'object'},\n"
+            "        output_schema={'type': 'object'},\n"
+            "    )\n"
+        )
+        app_a = _build_app(base + "    def execute(self, inputs):\n        return inputs\n")
+        app_b = _build_app(base + "    def execute(self, inputs):\n        return inputs  # b\n")
+        digest_a = TestClient(app_a).get("/manifest").json()["code_digest"]
+        digest_b = TestClient(app_b).get("/manifest").json()["code_digest"]
+        assert digest_a != digest_b
+        assert len(digest_a) == 64 and len(digest_b) == 64

@@ -15,6 +15,9 @@
   "engines": {
     "node": ">=24.0.0"
   },
+  "bin": {
+    "canvastekk-workflow-sdk": "./dist/cli.js"
+  },
   "files": [
     "dist"
   ],

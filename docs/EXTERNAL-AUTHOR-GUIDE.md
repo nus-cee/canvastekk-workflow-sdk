@@ -298,6 +298,56 @@ python -m canvastekk_workflow_sdk validate handler:definition
 
 Exit code `0` = valid, `1` = errors.
 
+### Probe Registration Locally (v0.28+)
+
+`probe` runs everything `validate` runs **plus the engine-request mirror** — the
+exact payload shape the engine's registration endpoint accepts (required keys,
+no client-set `slug`, whitelist only). Passes locally ⇔ passes registration:
+
+```bash
+python -m canvastekk_workflow_sdk probe handler:definition
+```
+
+Fully offline — no network calls. Exit code `0` = registration-ready.
+
+### Publish from CI: `register` (v0.28+)
+
+Publish a node to the engine registry from a pipeline under a service identity:
+
+```bash
+export CANVASTEKK_REGISTRY_TOKEN=<service token>
+python -m canvastekk_workflow_sdk register handler:definition \
+  --engine-url https://cwe.example.com \
+  --invoke-url https://nodes.example.com/my-node/execute \
+  [--name-suffix -lambda] [--json]
+```
+
+The CLI maps the manifest to the engine's request vocabulary automatically
+(`name` = the manifest's `slug`, `label` = the display `name`, plus schemas,
+cost, timeout, constraints, deprecation), authenticates with the
+`X-Service-Token` header, POSTs to `{engine}/api/workflows/nodes/`, and
+verifies the row via `by-name/{name}`. Exit codes: `0` ok · `2` usage ·
+`3` auth (401/403) · `4` other 4xx · `5` server · `6` network. The token is
+read from the environment and never printed.
+
+The TypeScript package ships the same CLI (`canvastekk-workflow-sdk register
+--manifest <file.json|URL> --engine-url URL …` / `canvastekk-workflow-sdk
+probe --manifest <file.json>`) with identical flags, mapping, and exit codes.
+
+### `code_digest` (v0.28+)
+
+`GET /manifest` now carries `code_digest`: a sha256 over the source bytes of
+the module that defines your node (python: the module declaring the node
+class; typescript: the module calling `createNodeApp`), computed once at
+startup and auto-injected next to `sdk_version`/`mode`. Any handler-code
+change changes the digest — it is never author-settable (not a manifest
+field). If the handler source cannot be resolved, the key is omitted and a
+warning is logged.
+
+> **Bundlers note:** if you single-file-bundle your server (esbuild/pyinstaller
+> style), the digest covers the whole bundle — any byte flip changes it. The
+> digest signals *deployed-code identity*, not source-line granularity.
+
 ---
 
 ## Step 3: Containerize

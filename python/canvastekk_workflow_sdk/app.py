@@ -11,6 +11,8 @@ Creates a FastAPI application with standard node endpoints:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import inspect
 import logging
 import os
 import re
@@ -246,6 +248,21 @@ def create_node_app(
     app.add_middleware(SDKVersionMiddleware)
     app.add_middleware(_BodySizeLimitMiddleware)
 
+    # DA-2603: code digest computed once at startup — sha256 over the source
+    # bytes of the module defining the node class. ponytail: single-module
+    # digest; walk the package if nodes grow multi-file.
+    handler_module = inspect.getmodule(type(node))
+    handler_source = inspect.getsourcefile(handler_module) if handler_module is not None else None
+    try:
+        with open(handler_source, "rb") as f:  # type: ignore[arg-type]
+            code_digest = hashlib.sha256(f.read()).hexdigest()
+    except (OSError, TypeError):
+        code_digest = None
+        logging.getLogger(__name__).warning(
+            "Could not resolve handler source for code_digest (%r); /manifest will serve without it",
+            handler_source,
+        )
+
     router = APIRouter(dependencies=router_dependencies)
 
     @router.post(
@@ -444,6 +461,8 @@ def create_node_app(
         - Metadata (category, timeout, role)
         - SDK version (sdk_version — auto-injected)
         - Node environment (mode — "dev" or "production", from CANVASTEKK_NODE_ENV)
+        - Code digest (code_digest — sha256 of the handler module source,
+          computed at startup, auto-injected; never author-settable)
 
         Used by registry for auto-discovery and manifest cross-checking.
         The engine reads ``mode`` to decide routing and test behaviour.
@@ -452,6 +471,8 @@ def create_node_app(
 
         content = node.definition.to_dict()
         content["sdk_version"] = canvastekk_workflow_sdk.__version__
+        if code_digest is not None:
+            content["code_digest"] = code_digest
         raw_env = os.environ.get("CANVASTEKK_NODE_ENV", "dev").lower()
         if raw_env in ("dev", "development", "test"):
             mode = "dev"
