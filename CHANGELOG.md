@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.28.1] - 2026-09-18
+
+### Bug Fixes
+
+- **cli**: Register --manifest <file|URL> input, ts parity [DA-2604]
+
+
 ## [0.28.0] - 2026-09-18
 
 ### Features
@@ -32,6 +39,11 @@ All notable changes to this project will be documented in this file.
 
 - **cli**: Scope manifestPath in appended ts describe [DA-2603]
 - **cli**: Hoist manifest fixtures to module scope [DA-2603]
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.28.0
 
 
 ## [0.27.0] - 2026-09-18
