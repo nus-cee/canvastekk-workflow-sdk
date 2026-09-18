@@ -305,3 +305,31 @@ describe("auth middleware detection (DA-1955 review fix)", () => {
     expect((plain as unknown as Record<string, unknown>)["_canvastekkAuth"]).toBeUndefined();
   });
 });
+
+describe("manifest code_digest (DA-2603)", () => {
+  it("serves a 64-hex digest of the handler module source (this test file)", async () => {
+    const { createHash } = await import("node:crypto");
+    const { readFileSync } = await import("node:fs");
+    const node = new (class extends BaseNode {
+      definition = {
+        slug: "digest-node",
+        version: "1.0.0",
+        name: "Digest",
+        description: "digest probe",
+        input_schema: { type: "object" },
+        output_schema: { type: "object" },
+        role: "operation",
+      } as unknown as WorkflowNodeManifest;
+      async execute(_inputs: Record<string, unknown>) {
+        return {};
+      }
+    })();
+    const app = createNodeApp(node);
+    const res = await request(app).get("/manifest");
+    expect(res.status).toBe(200);
+    const digest = res.body.code_digest as string;
+    expect(digest).toMatch(/^[0-9a-f]{64}$/);
+    const testFile = new URL(import.meta.url).pathname;
+    expect(digest).toBe(createHash("sha256").update(readFileSync(testFile)).digest("hex"));
+  });
+});

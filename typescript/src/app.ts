@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { VERSION } from "./version.js";
@@ -40,6 +42,29 @@ function hasAuthDependency(
   );
 }
 
+/**
+ * sha256 over the source bytes of the module that called createNodeApp.
+ * Resolved via the structured-stack trick (Node's util.getCallSite is still
+ * experimental). Returns null when the caller's file cannot be resolved —
+ * the manifest then omits code_digest (engine treats absent as unverifiable).
+ */
+function handlerCodeDigest(): string | null {
+  const original = Error.prepareStackTrace;
+  Error.prepareStackTrace = (_err: Error, sites: NodeJS.CallSite[]) => sites;
+  try {
+    const sites = new Error().stack as unknown as NodeJS.CallSite[];
+    // [0] handlerCodeDigest (Error constructed here) · [1] createNodeApp · [2] caller
+    const file = sites[2]?.getFileName?.();
+    if (!file) return null;
+    const path = file.startsWith("file://") ? new URL(file).pathname : file;
+    return createHash("sha256").update(readFileSync(path)).digest("hex");
+  } catch {
+    return null;
+  } finally {
+    Error.prepareStackTrace = original;
+  }
+}
+
 export function createNodeApp(
   node: BaseNode,
   opts: CreateNodeAppOptions = {},
@@ -47,6 +72,17 @@ export function createNodeApp(
   const app = express();
 
   app.use(express.json({ limit: "50mb" }));
+
+  // DA-2603: code digest computed once at startup — sha256 over the source
+  // bytes of the module that called createNodeApp (the handler module).
+  // ponytail: single-file digest; walk the package if nodes grow multi-file.
+  const codeDigest = handlerCodeDigest();
+  if (codeDigest === null) {
+    console.warn(
+      "[canvastekk] Could not resolve handler source for code_digest; " +
+        "/manifest will serve without it",
+    );
+  }
 
   configureLogging();
 
@@ -184,6 +220,7 @@ export function createNodeApp(
       const content: Record<string, unknown> = { ...def };
       content.id = getNodeId(def);
       content.sdk_version = VERSION;
+      if (codeDigest !== null) content.code_digest = codeDigest;
 
       // DA-1955: parity with python drop-when-none serialization — omit null
       // optional keys instead of leaking them as explicit nulls.
