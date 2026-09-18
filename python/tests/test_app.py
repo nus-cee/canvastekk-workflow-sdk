@@ -1226,7 +1226,7 @@ class TestManifestCodeDigest:
         import importlib
         import sys
 
-        from fastapi.testclient import TestClient as _TC
+        from fastapi.testclient import TestClient
 
         from canvastekk_workflow_sdk.app import create_node_app
 
@@ -1257,7 +1257,7 @@ class TestManifestCodeDigest:
         )
         app_a = _build_app(base + "    def execute(self, inputs):\n        return inputs\n")
         app_b = _build_app(base + "    def execute(self, inputs):\n        return inputs  # b\n")
-        digest_a = _TC(app_a).get("/manifest").json()["code_digest"]
-        digest_b = _TC(app_b).get("/manifest").json()["code_digest"]
+        digest_a = TestClient(app_a).get("/manifest").json()["code_digest"]
+        digest_b = TestClient(app_b).get("/manifest").json()["code_digest"]
         assert digest_a != digest_b
         assert len(digest_a) == 64 and len(digest_b) == 64
