@@ -93,3 +93,19 @@
   tested from dist.
 - Phase 4: guide + 3 READMEs updated; release rides `feat:` commits (>= 0.28.0,
   exact-pin invariant unchanged).
+
+## Review + live-AC trace (2026-09-19)
+
+- Code review: 0 BLOCK / 3 WARN / 6 NOTE — all WARNs fixed (both CLIs delegate
+  to build_registry_payload/buildRegistryPayload; probe mirrors the engine's
+  VALUE domain — category enum, timeout ceiling, name pattern; py probe exit
+  codes aligned with ts). Cheap NOTEs taken (suffix validation, 2xx alignment,
+  pathToFileURL, PLAN route prose, guide bundler note).
+- Live local-engine register (AC 2.1): integration compose (Postgres 15432 +
+  Temporal 17233), alembic to head (046), engine on :8123 with
+  DEV_MODE + REGISTRY_SERVICE_TOKEN. `python -m canvastekk_workflow_sdk register
+  tests.test_cli_register:_manifest_module_marker --engine-url http://localhost:8123
+  --invoke-url ... --name-suffix -live` → exit 0. Engine row verified via
+  by-name: name=echo-live, label=Echo, version=1.0.0, invoke_url override,
+  category=utility (id a26938f7-...). Stack torn down after.
+- Final gates: py ruff + 704 passed; ts tsc + 327 passed + tsup + eslint.
