@@ -9,6 +9,7 @@ import {
   validateFileInput,
 } from "../src/definition.js";
 import { NodeValidationError } from "../src/exceptions.js";
+import { diffManifests } from "../src/diff.js";
 
 const validDefinition = {
   slug: "my-node",
@@ -450,5 +451,30 @@ describe("WorkflowNodeManifestSchema vocabulary compatibility (DA-2627)", () => 
     for (const absent of ["title", "node_name", "node_version"] as const) {
       expect(absent in def).toBe(false);
     }
+  });
+});
+
+describe("WorkflowNodeManifestSchema safeParse parity (DA-2627 review)", () => {
+  it("returns a failure result (does not throw) for name-only construction", () => {
+    const result = WorkflowNodeManifestSchema.safeParse({
+      name: "echo",
+      version: "1.0.0",
+      description: "d",
+      input_schema: { type: "object" },
+      output_schema: { type: "object" },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toMatch(/ambiguous/);
+    }
+  });
+
+  it("diffManifests flags identity mismatch in registry-shaped (name-keyed) manifests", () => {
+    const base = { version: "1.0.0", input_schema: {}, output_schema: {} };
+    const diff = diffManifests(
+      { name: "old-node", ...base },
+      { name: "new-node", version: "2.0.0", input_schema: {}, output_schema: {} },
+    );
+    expect(diff.errors.some((e) => e.includes("slug mismatch"))).toBe(true);
   });
 });

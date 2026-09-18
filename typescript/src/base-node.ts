@@ -144,9 +144,9 @@ function formatAjvErrors(errors: import("ajv").ErrorObject[]): Record<string, un
  * ```typescript
  * class EchoNode extends BaseNode {
  *   definition = {
- *     name: "echo",
+ *     slug: "echo",
  *     version: "1.0.0",
- *     title: "Echo Node",
+ *     name: "Echo Node",
  *     description: "Passes inputs through unchanged",
  *     input_schema: { type: "object", properties: { data: { type: "string" } } },
  *     output_schema: { type: "object", properties: { data: { type: "string" } } },

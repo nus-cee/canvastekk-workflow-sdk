@@ -92,8 +92,10 @@ export function diffManifests(
     versionBump: null,
   };
 
-  const oldSlug = oldManifest["slug"];
-  const newSlug = newManifest["slug"];
+  // Registry-shaped inputs (exportDefinition output) and pre-DA-2627 manifests
+  // carry identity under "name"; when slug is absent, name IS the identity.
+  const oldSlug = oldManifest["slug"] ?? oldManifest["name"];
+  const newSlug = newManifest["slug"] ?? newManifest["name"];
   if (typeof oldSlug === "string" && typeof newSlug === "string" && oldSlug !== newSlug) {
     diff.errors.push(`slug mismatch: '${oldSlug}' -> '${newSlug}' (publish a new node, not a new version)`);
   }

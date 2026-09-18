@@ -20,6 +20,10 @@ from pydantic import BaseModel, Field, computed_field, field_validator, model_se
 
 from canvastekk_workflow_sdk.exceptions import NodeValidationError
 
+# DA-2627: DeprecationWarning is hidden by default outside __main__; surface the
+# legacy-construction warning to node authors explicitly (scoped to this module).
+warnings.filterwarnings("default", category=DeprecationWarning, module=r"canvastekk_workflow_sdk\.definition")
+
 if TYPE_CHECKING:
     from canvastekk_workflow_sdk.registry import InvokeType
 
@@ -332,7 +336,7 @@ class WorkflowNodeManifest(BaseModel):
             data["name"] = data.pop("title")
         elif not has_slug and has_name and not has_title:
             raise ValueError(
-                f"NodeDefinition received name={data['name']!r} without slug or title — ambiguous. "
+                f"Node manifest received name={data['name']!r} without slug or title — ambiguous. "
                 "Identity goes in slug=; display goes in name=. "
                 "(Legacy name=<slug>+title=<display> construction still works.)"
             )

@@ -91,7 +91,7 @@ class TestNonBreakingClassification:
 
     def test_metadata_only_change_is_not_breaking(self) -> None:
         old = _manifest(name="Old Title")
-        new = _manifest(version="1.0.1", title="New Title")
+        new = _manifest(version="1.0.1", name="New Title")
 
         diff = diff_manifests(old, new)
 
@@ -146,6 +146,15 @@ class TestVersionRules:
 
 class TestErrorCases:
     """Malformed inputs surface as errors, not exceptions (where reasonable)."""
+
+    def test_slug_mismatch_detected_from_registry_shaped_manifests(self) -> None:
+        """Registry-shaped inputs (export_definition output) carry identity under "name"."""
+        old = {"name": "old-node", "version": "1.0.0", "input_schema": {}, "output_schema": {}}
+        new = {"name": "new-node", "version": "2.0.0", "input_schema": {}, "output_schema": {}}
+
+        diff = diff_manifests(old, new)
+
+        assert any("slug mismatch" in entry for entry in diff.errors)
 
     def test_name_mismatch_is_error(self) -> None:
         old = _manifest(slug="old-node")

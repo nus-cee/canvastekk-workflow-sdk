@@ -2,6 +2,11 @@ import { z } from "zod";
 import { NodeValidationError } from "./exceptions.js";
 
 const SLUG_PATTERN = /^[a-z]([a-z0-9-]*[a-z0-9])?$/;
+// DA-2627: marker for the ambiguous name-only construction. Set by the
+// preprocess below and reported by the slug field's superRefine as a proper
+// zod issue — a throw here would escape safeParse (zod v3 does not catch
+// effect throws). Can never collide: not a valid slug by pattern.
+const AMBIGUOUS_NAME_SENTINEL = "__ambiguous_name__";
 const SEMVER_PATTERN = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/;
 
 export const ColorPresetSchema = z.union([
@@ -129,9 +134,26 @@ function validateFileFieldFormats(
 const WorkflowNodeManifestObjectSchema = z
   .object({
     id: z.unknown().optional(),
-    slug: z.string().refine((v) => SLUG_PATTERN.test(v), (v) => ({
-      message: `Node slug must be a lowercase slug (alphanumeric and hyphens only, no leading/trailing hyphens). Got: '${v}'`,
-    })),
+    slug: z.string().superRefine((v, ctx) => {
+      if (v === AMBIGUOUS_NAME_SENTINEL) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["slug"],
+          message:
+            `Node manifest received name without slug or title — ambiguous. ` +
+            "Identity goes in slug=; display goes in name=. " +
+            "(Legacy name=<slug>+title=<display> construction still works.)",
+        });
+        return;
+      }
+      if (!SLUG_PATTERN.test(v)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["slug"],
+          message: `Node slug must be a lowercase slug (alphanumeric and hyphens only, no leading/trailing hyphens). Got: '${v}'`,
+        });
+      }
+    }),
     version: z.string().refine((v) => SEMVER_PATTERN.test(v), (v) => ({
       message: `Node version must be semantic version (X.Y.Z). Got: '${v}'`,
     })),
@@ -231,11 +253,9 @@ function mapLegacyVocabulary(data: unknown): unknown {
     d.name = d.title;
     delete d.title;
   } else if (!hasSlug && hasName && !hasTitle) {
-    throw new Error(
-      `NodeDefinition received name=${String(d.name)} without slug or title — ambiguous. ` +
-        "Identity goes in slug=; display goes in name=. " +
-        "(Legacy name=<slug>+title=<display> construction still works.)",
-    );
+    // Sentinel (not a throw): zod v3 safeParse does not catch throws from
+    // effects — the slug superRefine turns this into a proper issue.
+    d.slug = AMBIGUOUS_NAME_SENTINEL;
   } else if (hasSlug && hasTitle) {
     console.warn(
       "[canvastekk-workflow-sdk] NodeDefinition received both slug= and title=; title is ignored (display name comes from name=).",
