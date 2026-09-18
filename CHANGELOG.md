@@ -2,11 +2,48 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.28.0] - 2026-09-18
+
+### Features
+
+- **manifest**: Serve handler code_digest computed at startup [DA-2603]
+- **cli**: Register subcommand + offline probe harness [DA-2603]
+- **cli,manifest**: Ts code_digest + register/probe CLI parity [DA-2603]
+
+
+### Refactoring
+
+- **cli**: Delegate to build_registry_payload, probe value domain [DA-2603] (**BREAKING**)
+
+
+### Documentation
+
+- **plan**: Add PLAN-DA-2603.md for DA-2603
+- **guide,readmes**: Code_digest, register CLI, probe harness [DA-2603]
+- **plan**: Tick DA-2603 ACs with live-engine register evidence
+
+
+### Style
+
+- **tests**: Rename TestClient alias to satisfy ruff N814 [DA-2603]
+
+
+### Testing
+
+- **cli**: Scope manifestPath in appended ts describe [DA-2603]
+- **cli**: Hoist manifest fixtures to module scope [DA-2603]
+
+
 ## [0.27.0] - 2026-09-18
 
 ### Features
 
 - **definition**: Manifest identity is slug, display is name [DA-2627] (#67) (**BREAKING**)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.27.0
 
 
 ## [0.26.4] - 2026-09-14
