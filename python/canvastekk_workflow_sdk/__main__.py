@@ -188,6 +188,29 @@ def _probe_definition(definition, *, name_suffix: str = "") -> dict:
     return report
 
 
+def _manifest_from_source(source: str):
+    """Load a WorkflowNodeManifest from a JSON file path or http(s) URL.
+
+    Returns the definition, or an int exit code (2) on failure with the
+    error printed.
+    """
+    import urllib.request
+
+    try:
+        if re.match(r"^https?://", source):
+            with urllib.request.urlopen(source, timeout=30) as resp:
+                raw = json.loads(resp.read())
+        else:
+            with open(source, encoding="utf-8") as f:
+                raw = json.load(f)
+        from canvastekk_workflow_sdk.definition import WorkflowNodeManifest
+
+        return WorkflowNodeManifest(**raw)
+    except Exception as e:
+        print(f"Error loading manifest from {source}: {e}", file=sys.stderr)
+        return 2
+
+
 def _run_register(args: list[str]) -> int:
     """Register a node manifest against the engine from CI.
 
@@ -206,8 +229,8 @@ def _run_register(args: list[str]) -> int:
 
     def _usage() -> int:
         print(
-            "Usage: register <module:attribute> --engine-url URL "
-            "[--invoke-url URL] [--name-suffix S] [--json]",
+            "Usage: register <module:attribute> | --manifest <file.json|URL> "
+            "--engine-url URL [--invoke-url URL] [--name-suffix S] [--json]",
             file=sys.stderr,
         )
         return 2
@@ -221,8 +244,9 @@ def _run_register(args: list[str]) -> int:
         return None
 
     module_path = args[0] if args and not args[0].startswith("--") else None
+    manifest_source = _flag("--manifest")
     engine_url = _flag("--engine-url")
-    if not module_path or not engine_url:
+    if (not module_path and not manifest_source) or not engine_url:
         return _usage()
 
     token = os.environ.get("CANVASTEKK_REGISTRY_TOKEN", "")
@@ -236,11 +260,19 @@ def _run_register(args: list[str]) -> int:
         return 2
 
     use_json = "--json" in args
-    try:
-        definition = _load_definition(module_path)
-    except Exception as e:
-        print(f"Error loading definition: {e}", file=sys.stderr)
-        return 2
+    if manifest_source:
+        # DA-2604: --manifest <file.json|URL> — parity with the ts CLI; CI
+        # cannot import module:attribute from a deployed Lambda, so the
+        # manifest is fetched to a file (or URL) and loaded directly.
+        definition = _manifest_from_source(manifest_source)
+        if isinstance(definition, int):
+            return definition
+    else:
+        try:
+            definition = _load_definition(module_path)
+        except Exception as e:
+            print(f"Error loading definition: {e}", file=sys.stderr)
+            return 2
 
     payload = _build_engine_request(
         definition,
