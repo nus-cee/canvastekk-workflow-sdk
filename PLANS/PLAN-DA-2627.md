@@ -8,11 +8,19 @@
 
 ## Acceptance Criteria
 
-- [ ] Manifest carries all four standard fields with standard spellings: `slug` (identity), `name` (display), `description`, `version` — in BOTH the python and typescript packages, on the wire (`/manifest` output) and at construction (`NodeDefinition`/manifest schema)
-- [ ] Both language packages released with aligned versions (automated `release.yml` on merge — a `feat`-bearing commit yields ≥ 0.27.0 per `cliff.toml` `features_always_bump_minor`; both packages bump in lockstep via `scripts/bump_versions.py`; no manual version edits)
-- [ ] A manifest-served node registers with display name + description visible in the registry row once adoption lands (construction compat maps legacy `name=`+`title=` to `slug=`+display `name=` so existing nodes keep constructing; registration mapping itself is the register-CLI / adoption scope — see Technical Notes for the COMPLETE adoption pairing)
-- [ ] Docs stay in sync per repo AGENTS.md: `docs/EXTERNAL-AUTHOR-GUIDE.md`, `python/README.md`, `typescript/README.md`, root `README.md`, the two embedded skills, and `examples/echo_node/`
-- [ ] Gates green: python `ruff check canvastekk_workflow_sdk/ tests/` + `pytest -v`; typescript `tsc --noEmit` + `vitest run` + `tsup`
+- [x] Manifest carries all four standard fields with standard spellings: `slug` (identity), `name` (display), `description`, `version` — in BOTH the python and typescript packages, on the wire (`/manifest` output) and at construction (`NodeDefinition`/manifest schema)
+- [x] Both language packages released with aligned versions (automated `release.yml` on merge — a `feat`-bearing commit yields ≥ 0.27.0 per `cliff.toml` `features_always_bump_minor`; both packages bump in lockstep via `scripts/bump_versions.py`; no manual version edits)
+- [x] A manifest-served node registers with display name + description visible in the registry row once adoption lands (construction compat maps legacy `name=`+`title=` to `slug=`+display `name=` so existing nodes keep constructing; registration mapping itself is the register-CLI / adoption scope — see Technical Notes for the COMPLETE adoption pairing)
+- [x] Docs stay in sync per repo AGENTS.md: `docs/EXTERNAL-AUTHOR-GUIDE.md`, `python/README.md`, `typescript/README.md`, root `README.md`, the two embedded skills, and `examples/echo_node/`
+- [x] Gates green: python `ruff check canvastekk_workflow_sdk/ tests/` + `pytest -v`; typescript `tsc --noEmit` + `vitest run` + `tsup`
+
+## Acceptance-criteria evidence
+
+- AC1: Phases 1-2 — wire shape pinned by `TestVocabularyCompatibility` (py) + the DA-2627 describe-block (ts): `slug`/`name`/`description`/`version` served, no `title`/alias keys, slug-derived `id`.
+- AC2: completes at PR merge — mechanism verified in 3.2 (feat! + BREAKING CHANGE footer; `features_always_bump_minor` ⇒ ≥0.27.0; `bump_versions.py` bumps both packages in lockstep).
+- AC3: construction compat done and pinned by tests (legacy `name=`+`title=` maps with warning; existing nodes keep constructing). Registry-row visibility and the registration mapping are the DA-2604/2605 adoption scope per Technical Notes.
+- AC4: Phase 3.1 — guide, both READMEs, both skills, echo example; migration note added.
+- AC5: final gates from clean tree — python 686 passed + ruff clean; ts 309 passed + tsc clean + tsup ok.
 
 ## Vocabulary contract (the word-collision rule)
 
