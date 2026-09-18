@@ -9,9 +9,9 @@ import { NodeAuth } from "../src/auth.js";
 
 class TestNode extends BaseNode {
   definition: WorkflowNodeManifest = {
-    name: "test-node",
+    slug: "test-node",
     version: "1.0.0",
-    title: "Test Node",
+    name: "Test Node",
     description: "A test node",
     input_schema: {
       type: "object",
@@ -30,9 +30,9 @@ class TestNode extends BaseNode {
 
 class HealthCheckNode extends BaseNode {
   definition: WorkflowNodeManifest = {
-    name: "health-node",
+    slug: "health-node",
     version: "2.0.0",
-    title: "Health Node",
+    name: "Health Node",
     description: "Node with health checks",
     input_schema: { type: "object" },
     output_schema: { type: "object" },
@@ -96,7 +96,7 @@ describe("Express endpoints", () => {
     it("returns node definition with sdk_version and mode", async () => {
       const resp = await request(app).get("/manifest");
       expect(resp.status).toBe(200);
-      expect(resp.body.name).toBe("test-node");
+      expect(resp.body.slug).toBe("test-node");
       expect(resp.body.version).toBe("1.0.0");
       expect(resp.body.sdk_version).toBeDefined();
       expect(resp.body.mode).toBeDefined();
@@ -205,9 +205,9 @@ describe("Auth middleware", () => {
 describe("POST /execute upload failure (DA-1711 parity)", () => {
   class FileOutputNode extends BaseNode {
     definition: WorkflowNodeManifest = {
-      name: "file-out-node",
+      slug: "file-out-node",
       version: "1.0.0",
-      title: "File Out",
+      name: "File Out",
       description: "Produces a file output",
       input_schema: { type: "object" },
       output_schema: {
@@ -264,9 +264,9 @@ describe("GET /manifest null-key stripping (DA-1955)", () => {
   it("omits null optional keys instead of leaking explicit nulls", async () => {
     class NullOptionalsNode extends BaseNode {
       definition: WorkflowNodeManifest = {
-        name: "null-opt-node",
+        slug: "null-opt-node",
         version: "1.0.0",
-        title: "Null Optionals",
+        name: "Null Optionals",
         description: "Definition carrying explicit null optionals",
         input_schema: { type: "object" },
         output_schema: { type: "object" },
@@ -289,7 +289,7 @@ describe("GET /manifest null-key stripping (DA-1955)", () => {
     expect(resp.body).not.toHaveProperty("maximum_sdk_version");
     expect(resp.body).not.toHaveProperty("docs_url");
     expect(resp.body).not.toHaveProperty("changelog_url");
-    expect(resp.body.name).toBe("null-opt-node");
+    expect(resp.body.slug).toBe("null-opt-node");
   });
 });
 

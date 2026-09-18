@@ -126,16 +126,16 @@ function validateFileFieldFormats(
   }
 }
 
-export const WorkflowNodeManifestSchema = z
+const WorkflowNodeManifestObjectSchema = z
   .object({
     id: z.unknown().optional(),
-    name: z.string().refine((v) => SLUG_PATTERN.test(v), (v) => ({
-      message: `Node name must be a lowercase slug (alphanumeric and hyphens only, no leading/trailing hyphens). Got: '${v}'`,
+    slug: z.string().refine((v) => SLUG_PATTERN.test(v), (v) => ({
+      message: `Node slug must be a lowercase slug (alphanumeric and hyphens only, no leading/trailing hyphens). Got: '${v}'`,
     })),
     version: z.string().refine((v) => SEMVER_PATTERN.test(v), (v) => ({
       message: `Node version must be semantic version (X.Y.Z). Got: '${v}'`,
     })),
-    title: z.string(),
+    name: z.string(),
     description: z.string(),
     input_schema: z.record(z.unknown()),
     output_schema: z.record(z.unknown()),
@@ -192,16 +192,67 @@ export const WorkflowNodeManifestSchema = z
     return rest;
   });
 
+export const WorkflowNodeManifestSchema = z.preprocess(mapLegacyVocabulary, WorkflowNodeManifestObjectSchema);
+
 /** Complete node manifest including metadata, schemas, and configuration. */
 export type WorkflowNodeManifest = z.infer<typeof WorkflowNodeManifestSchema>;
 
 /**
- * Generates a node ID from name and version.
- * @param def - Object containing node name and version
- * @returns Node ID in format "name-vX.Y.Z"
+ * Resolves the legacy `name`/`title` construction vocabulary (DA-2627).
+ *
+ * The manifest's identity field is `slug` and its display field is `name`.
+ * Because `name` changed meaning, compatibility is resolved here — at
+ * construction, deterministically — never on the wire:
+ *
+ * - `slug` absent AND both `name` and `title` present (legacy call):
+ *   `slug = name`, display `name = title`, with a console warning.
+ * - `name` only (no `slug`, no `title`): error — ambiguous in both
+ *   vocabularies; the message disambiguates.
+ * - `slug` present AND `title` present: `title` is ignored with a warning
+ *   (display comes from `name`).
+ * - A `slug ?? name` fallback is deliberately NOT implemented: it would
+ *   silently map a lowercase display name into identity.
  */
-export function getNodeId(def: Pick<WorkflowNodeManifest, "name" | "version">): string {
-  return `${def.name}-v${def.version}`;
+function mapLegacyVocabulary(data: unknown): unknown {
+  if (typeof data !== "object" || data === null || Array.isArray(data)) {
+    return data;
+  }
+  const d = { ...(data as Record<string, unknown>) };
+  const hasSlug = "slug" in d;
+  const hasName = "name" in d;
+  const hasTitle = "title" in d;
+
+  if (!hasSlug && hasName && hasTitle) {
+    console.warn(
+      "[canvastekk-workflow-sdk] NodeDefinition legacy construction (name=<slug>, title=<display>) is deprecated; " +
+        "use slug=<id> and name=<display>. The legacy mapping keeps working but will be removed in a future major version.",
+    );
+    d.slug = d.name;
+    d.name = d.title;
+    delete d.title;
+  } else if (!hasSlug && hasName && !hasTitle) {
+    throw new Error(
+      `NodeDefinition received name=${String(d.name)} without slug or title — ambiguous. ` +
+        "Identity goes in slug=; display goes in name=. " +
+        "(Legacy name=<slug>+title=<display> construction still works.)",
+    );
+  } else if (hasSlug && hasTitle) {
+    console.warn(
+      "[canvastekk-workflow-sdk] NodeDefinition received both slug= and title=; title is ignored (display name comes from name=).",
+    );
+    delete d.title;
+  }
+
+  return d;
+}
+
+/**
+ * Generates a node ID from slug and version.
+ * @param def - Object containing node slug and version
+ * @returns Node ID in format "slug-vX.Y.Z"
+ */
+export function getNodeId(def: Pick<WorkflowNodeManifest, "slug" | "version">): string {
+  return `${def.slug}-v${def.version}`;
 }
 
 /**

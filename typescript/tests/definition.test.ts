@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   WorkflowNodeManifestSchema,
   WorkflowNodeRoleSchema,
@@ -11,9 +11,9 @@ import {
 import { NodeValidationError } from "../src/exceptions.js";
 
 const validDefinition = {
-  name: "my-node",
+  slug: "my-node",
   version: "1.0.0",
-  title: "My Node",
+  name: "My Node",
   description: "A test node",
   input_schema: {
     type: "object",
@@ -32,9 +32,9 @@ const validDefinition = {
 describe("WorkflowNodeManifestSchema", () => {
   it("parses a valid definition", () => {
     const def = WorkflowNodeManifestSchema.parse(validDefinition);
-    expect(def.name).toBe("my-node");
+    expect(def.slug).toBe("my-node");
     expect(def.version).toBe("1.0.0");
-    expect(def.title).toBe("My Node");
+    expect(def.name).toBe("My Node");
     expect(def.token_cost).toBe(0.0);
     expect(def.category).toBe("utility");
     expect(def.timeout_seconds).toBe(30);
@@ -44,19 +44,19 @@ describe("WorkflowNodeManifestSchema", () => {
 
   it("rejects invalid slug name", () => {
     expect(() =>
-      WorkflowNodeManifestSchema.parse({ ...validDefinition, name: "MyNode" }),
+      WorkflowNodeManifestSchema.parse({ ...validDefinition, slug: "MyNode" }),
     ).toThrow(/lowercase slug/);
   });
 
   it("rejects name with leading hyphen", () => {
     expect(() =>
-      WorkflowNodeManifestSchema.parse({ ...validDefinition, name: "-node" }),
+      WorkflowNodeManifestSchema.parse({ ...validDefinition, slug: "-node" }),
     ).toThrow(/lowercase slug/);
   });
 
   it("rejects name with trailing hyphen", () => {
     expect(() =>
-      WorkflowNodeManifestSchema.parse({ ...validDefinition, name: "node-" }),
+      WorkflowNodeManifestSchema.parse({ ...validDefinition, slug: "node-" }),
     ).toThrow(/lowercase slug/);
   });
 
@@ -149,7 +149,7 @@ describe("WorkflowNodeManifestSchema", () => {
 
 describe("getNodeId", () => {
   it("derives id from name and version", () => {
-    expect(getNodeId({ name: "segment", version: "1.2.0" })).toBe(
+    expect(getNodeId({ slug: "segment", version: "1.2.0" })).toBe(
       "segment-v1.2.0",
     );
   });
@@ -379,5 +379,76 @@ describe("WorkflowNodeManifestSchema compat and docs fields (DA-1955)", () => {
         docs_url: "ftp://example.com/docs",
       }),
     ).toThrow();
+  });
+});
+
+describe("WorkflowNodeManifestSchema vocabulary compatibility (DA-2627)", () => {
+  it("maps legacy name+title construction with a console warning", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const def = WorkflowNodeManifestSchema.parse({
+        name: "echo",
+        version: "1.0.0",
+        title: "Echo",
+        description: "d",
+        input_schema: { type: "object" },
+        output_schema: { type: "object" },
+      });
+      expect(def.slug).toBe("echo");
+      expect(def.name).toBe("Echo");
+      expect("title" in def).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("slug=<id> and name=<display>"));
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("rejects name-only construction as ambiguous (no slug ?? name fallback)", () => {
+    expect(() =>
+      WorkflowNodeManifestSchema.parse({
+        name: "echo",
+        version: "1.0.0",
+        description: "d",
+        input_schema: { type: "object" },
+        output_schema: { type: "object" },
+      }),
+    ).toThrow(/ambiguous/);
+  });
+
+  it("rejects slug without display name", () => {
+    expect(() =>
+      WorkflowNodeManifestSchema.parse({
+        slug: "echo",
+        version: "1.0.0",
+        description: "d",
+        input_schema: { type: "object" },
+        output_schema: { type: "object" },
+      }),
+    ).toThrow();
+  });
+
+  it("ignores title with a warning when slug is present", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const def = WorkflowNodeManifestSchema.parse({
+        ...validDefinition,
+        title: "Stale",
+      });
+      expect(def.name).toBe("My Node");
+      expect("title" in def).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("title is ignored"));
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("wire shape: standard fields + slug-derived id, no alias keys", () => {
+    const def = WorkflowNodeManifestSchema.parse(validDefinition);
+    expect(getNodeId(def)).toBe("my-node-v1.0.0");
+    expect(def.slug).toBe("my-node");
+    expect(def.name).toBe("My Node");
+    for (const absent of ["title", "node_name", "node_version"] as const) {
+      expect(absent in def).toBe(false);
+    }
   });
 });

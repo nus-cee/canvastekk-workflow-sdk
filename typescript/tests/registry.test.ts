@@ -13,9 +13,9 @@ import * as os from "node:os";
 import type { WorkflowNodeManifest } from "../src/definition.js";
 
 const testDef: WorkflowNodeManifest = {
-  name: "echo",
+  slug: "echo",
   version: "1.0.0",
-  title: "Echo Node",
+  name: "Echo Node",
   description: "Returns input",
   input_schema: { type: "object" },
   output_schema: { type: "object" },
@@ -200,7 +200,7 @@ describe("RegisterNodeResult dict-like access", () => {
 describe("RegistrationError enrichment (DA-1955)", () => {
   it("extracts changed fields from node_version_immutable detail", () => {
     const detail = JSON.stringify({
-      name: "test-node",
+      slug: "test-node",
       version: "1.0.0",
       changed_fields: [
         { field: "input_schema", expected: {}, actual: { type: "object" } },

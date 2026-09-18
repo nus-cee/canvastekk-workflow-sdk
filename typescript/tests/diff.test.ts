@@ -6,7 +6,7 @@ import { diffManifests } from "../src/diff.js";
 
 function manifest(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    name: "test-node",
+    slug: "test-node",
     version: "1.0.0",
     input_schema: { type: "object", properties: {}, required: [] },
     output_schema: { type: "object", properties: {} },
@@ -79,19 +79,19 @@ describe("non-breaking classification", () => {
   });
 
   it("metadata-only change is not breaking", () => {
-    const old = manifest({ title: "Old Title" });
-    const next = manifest({ version: "1.0.1", title: "New Title" });
+    const old = manifest({ name: "Old Title" });
+    const next = manifest({ version: "1.0.1", name: "New Title" });
 
     const diff = diffManifests(old, next);
 
     expect(diff.breaking).toBe(false);
-    expect(diff.nonBreakingChanges.some((e) => e.includes("metadata") && e.includes("title"))).toBe(true);
+    expect(diff.nonBreakingChanges.some((e) => e.includes("metadata") && e.includes("name"))).toBe(true);
   });
 });
 
 describe("version rules", () => {
   it("same version with change is error", () => {
-    const diff = diffManifests(manifest({ title: "Old" }), manifest({ title: "New" }));
+    const diff = diffManifests(manifest({ name: "Old" }), manifest({ name: "New" }));
 
     expect(diff.breaking).toBe(false);
     expect(diff.errors.some((e) => e.includes("same version"))).toBe(true);
@@ -133,13 +133,13 @@ describe("version rules", () => {
 
 describe("error cases", () => {
   it("name mismatch is error", () => {
-    const diff = diffManifests(manifest({ name: "old-node" }), manifest({ name: "new-node", version: "2.0.0" }));
+    const diff = diffManifests(manifest({ slug: "old-node" }), manifest({ slug: "new-node", version: "2.0.0" }));
 
-    expect(diff.errors.some((e) => e.includes("name mismatch"))).toBe(true);
+    expect(diff.errors.some((e) => e.includes("slug mismatch"))).toBe(true);
   });
 
   it("missing version is error", () => {
-    const diff = diffManifests({ name: "test-node", input_schema: {} }, manifest({ version: "1.1.0" }));
+    const diff = diffManifests({ slug: "test-node", input_schema: {} }, manifest({ version: "1.1.0" }));
 
     expect(diff.errors.some((e) => e.includes("version"))).toBe(true);
   });
