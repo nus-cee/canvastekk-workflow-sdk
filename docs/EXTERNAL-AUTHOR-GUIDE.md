@@ -71,9 +71,9 @@ from canvastekk_workflow_sdk import BaseNode, WorkflowNodeManifest, ExecutionCon
 
 # Module-level definition — needed for CLI validation
 definition = WorkflowNodeManifest(
-    name="my-node",
+    slug="my-node",
     version="1.0.0",
-    title="My Node",
+    name="My Node",
     description="Does something useful",
     input_schema={
         "type": "object",
@@ -107,10 +107,13 @@ app = MyNode().create_app()
 
 ### Node ID Format
 
-The `id` field is automatically derived from `name` + `version` as `{name}-v{version}` (e.g., `my-node-v1.0.0`). Node authors must NOT provide `id` manually.
+The `id` field is automatically derived from `slug` + `version` as `{slug}-v{version}` (e.g., `my-node-v1.0.0`). Node authors must NOT provide `id` manually.
 
 **Requirements:**
-- `name` must be a valid slug: lowercase alphanumeric characters and hyphens only
+- `slug` must be a valid slug: lowercase alphanumeric characters and hyphens only
+- `name` is the human-readable display name (e.g., `My Node`)
+
+> **Migration note (DA-2627):** older SDK versions spelled identity `name=` and display `title=`. That legacy construction still works (it maps with a deprecation warning) but will be removed in a future major version — prefer `slug=` + `name=`.
 - `version` must follow semantic versioning (e.g., `1.0.0`, `2.3.1`) — the engine uses this version directly for registry storage
 
 > **Note on versioning:** The engine uses your `WorkflowNodeManifest.version` semantic version string directly. Versions are **immutable** — re-registering with the same version and changed data is rejected. You must bump the version for any schema or metadata changes.
@@ -135,9 +138,9 @@ from datetime import date
 
 class FloorFlatnessNode(BaseNode):
     definition = WorkflowNodeManifest(
-        name="floor-flatness-assessment",
+        slug="floor-flatness-assessment",
         version="1.4.2",  # bumped patch to register the deprecation metadata
-        title="Floor Flatness Assessment (deprecated)",
+        name="Floor Flatness Assessment (deprecated)",
         description="...",
         input_schema={...},
         output_schema={...},

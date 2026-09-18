@@ -57,9 +57,9 @@ from canvastekk_workflow_sdk.exceptions import NodeExecutionError
 
 definition = WorkflowNodeManifest(
     id="segment-v1.0.0",
-    name="segment",
+    slug="segment",
     version="1.0.0",
-    title="Point Cloud Segmentation",
+    name="Point Cloud Segmentation",
     description="Segments a point cloud file into detected object instances",
     input_schema={
         "type": "object",
@@ -191,9 +191,9 @@ from canvastekk_workflow_sdk.exceptions import NodeIOError
 
 definition = WorkflowNodeManifest(
     id="measure-v1.0.0",
-    name="measure",
+    slug="measure",
     version="1.0.0",
-    title="Measurement",
+    name="Measurement",
     description="Computes dimensional measurements from detected instances",
     input_schema={
         "type": "object",
@@ -312,9 +312,9 @@ from canvastekk_workflow_sdk.contracts import Plane, PlaneSet, Point3D
 
 definition = WorkflowNodeManifest(
     id="plane-detect-v1.0.0",
-    name="plane-detect",
+    slug="plane-detect",
     version="1.0.0",
-    title="Plane Detection",
+    name="Plane Detection",
     description="Detects planar surfaces (floor, ceiling, walls) in a point cloud",
     input_schema={
         "type": "object",
@@ -408,9 +408,9 @@ from canvastekk_workflow_sdk.exceptions import NodeConfigurationError, NodeExecu
 
 definition = WorkflowNodeManifest(
     id="infer-v1.0.0",
-    name="infer",
+    slug="infer",
     version="1.0.0",
-    title="Model Inference",
+    name="Model Inference",
     description="Runs ML model inference on input data",
     input_schema={
         "type": "object",
@@ -529,9 +529,9 @@ from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeMani
 
 definition = WorkflowNodeManifest(
     id="uppercase-v1.0.0",
-    name="uppercase",
+    slug="uppercase",
     version="1.0.0",
-    title="Uppercase",
+    name="Uppercase",
     description="Converts input text to uppercase",
     input_schema={
         "type": "object",
@@ -687,9 +687,9 @@ from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeMani
 
 definition = WorkflowNodeManifest(
     id="convert-v1.0.0",
-    name="convert",
+    slug="convert",
     version="1.0.0",
-    title="Format Converter",
+    name="Format Converter",
     description="Converts point cloud files between formats (PLY, PCD, XYZ)",
     input_schema={
         "type": "object",
@@ -855,8 +855,8 @@ def test_measurement_set_helpers():
     """Test MeasurementSet lookup helpers."""
     ms = MeasurementSet(
         measurements=[
-            Measurement(name="height", value=2800.0, unit="mm"),
-            Measurement(name="width", value=5000.0, unit="mm"),
+            Measurement(slug="height", value=2800.0, unit="mm"),
+            Measurement(slug="width", value=5000.0, unit="mm"),
         ],
     )
 

@@ -87,9 +87,9 @@ import {
 
 class UppercaseNode extends BaseNode {
   static override definition: WorkflowNodeManifest = {
-    name: "uppercase",
+    slug: "uppercase",
     version: "1.0.0",
-    title: "Uppercase",
+    name: "Uppercase",
     description: "Converts text to uppercase",
     input_schema: {
       type: "object",
@@ -118,7 +118,7 @@ export default app;
 The four requirements:
 
 1. **Extend `BaseNode`** — inherit from `canvastekk-workflow-sdk`'s `BaseNode`
-2. **Define `definition`** — a `WorkflowNodeManifest` with all required fields (`name`, `version`, `title`, `description`, `input_schema`, `output_schema`). Note: `id` is auto-derived from `name` + `version` and must NOT be provided manually.
+2. **Define `definition`** — a `WorkflowNodeManifest` with all required fields (`slug`, `version`, `name`, `description`, `input_schema`, `output_schema`). Note: `id` is auto-derived from `slug` + `version` and must NOT be provided manually.
 3. **Implement `execute(inputs, context)`** — return an object matching your `output_schema`
 4. **Call `.createApp()`** — get a ready-to-run Express application
 
@@ -289,9 +289,9 @@ import { existsSync } from "node:fs";
 
 class FileProcessorNode extends BaseNode {
   static override definition: WorkflowNodeManifest = {
-    name: "file-proc",
+    slug: "file-proc",
     version: "1.0.0",
-    title: "File Processor",
+    name: "File Processor",
     description: "Processes a file",
     input_schema: {
       type: "object",
@@ -329,9 +329,9 @@ Mark input fields as files using `"format": "file"` in `input_schema`. Use `x-ac
 
 ```typescript
 const definition: WorkflowNodeManifest = {
-  name: "segment",
+  slug: "segment",
   version: "1.0.0",
-  title: "Segment",
+  name: "Segment",
   description: "Segments a point cloud",
   input_schema: {
     type: "object",
@@ -425,9 +425,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 class PointCloudSegmenter extends BaseNode {
   static override definition: WorkflowNodeManifest = {
-    name: "segment",
+    slug: "segment",
     version: "1.0.0",
-    title: "Segment",
+    name: "Segment",
     description: "Segments a point cloud",
     input_schema: {
       type: "object",
@@ -479,7 +479,7 @@ export default app;
 
 Defines what a node is. Maps to the engine's **registry-level node type** (`WorkflowNodeManifest` in engine terminology).
 
-**Required fields:** `name`, `version`, `title`, `description`, `input_schema`, `output_schema`. Note: `id` is auto-derived from `name` + `version` and must NOT be provided manually.
+**Required fields:** `slug`, `version`, `name`, `description`, `input_schema`, `output_schema`. Note: `id` is auto-derived from `slug` + `version` and must NOT be provided manually.
 
 **Versioning:** The `version` field is a semantic version string (e.g. `"1.0.0"`) validated against the X.Y.Z pattern. The engine enforces immutability: re-registering with the same version and changed data is rejected. Bump the version for any schema or metadata changes.
 
@@ -487,9 +487,9 @@ Defines what a node is. Maps to the engine's **registry-level node type** (`Work
 import { WorkflowNodeManifest } from "canvastekk-workflow-sdk";
 
 const definition: WorkflowNodeManifest = {
-  name: "my-node",
+  slug: "my-node",
   version: "1.0.0",
-  title: "My Node",
+  name: "My Node",
   description: "Does something useful",
   input_schema: {
     type: "object",
@@ -528,7 +528,7 @@ behavior and does not require a `major` version bump.
 import { WorkflowNodeManifestSchema, type DeprecationInfo } from "canvastekk-workflow-sdk";
 
 const definition = WorkflowNodeManifestSchema.parse({
-  name: "floor-flatness-assessment",
+  slug: "floor-flatness-assessment",
   version: "1.4.2",
   // ...required fields...
   deprecation: {

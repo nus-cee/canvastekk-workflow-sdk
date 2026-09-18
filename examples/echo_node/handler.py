@@ -14,9 +14,9 @@ from pathlib import Path
 from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest
 
 definition = WorkflowNodeManifest(
-    name="echo",
+    slug="echo",
     version="1.0.0",  # semantic version — engine enforces immutability; bump for schema changes
-    title="Echo",
+    name="Echo",
     description="Receives a file, validates it, and writes it to output",
     input_schema={
         "type": "object",
