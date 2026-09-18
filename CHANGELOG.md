@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.28.2] - 2026-09-18
+
+### Miscellaneous Tasks
+
+- **release**: Attach TypeScript tarball to GitHub Releases [DA-2677]
+
+
 ## [0.28.1] - 2026-09-18
 
 ### Bug Fixes
 
 - **cli**: Register --manifest <file|URL> input, ts parity [DA-2604]
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.28.1
 
 
 ## [0.28.0] - 2026-09-18
