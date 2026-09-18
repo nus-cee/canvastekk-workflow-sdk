@@ -17,9 +17,9 @@ class EchoNode(BaseNode):
     """Simple echo node for testing."""
 
     definition = WorkflowNodeManifest(
-        name="echo",
+        slug="echo",
         version="1.0.0",
-        title="Echo",
+        name="Echo",
         description="Returns input unchanged",
         input_schema={
             "type": "object",
@@ -40,9 +40,9 @@ class FileProcessingNode(BaseNode):
     """Node that accepts file uploads and scalar inputs."""
 
     definition = WorkflowNodeManifest(
-        name="file-proc",
+        slug="file-proc",
         version="1.0.0",
-        title="File Processor",
+        name="File Processor",
         description="Processes uploaded files",
         input_schema={
             "type": "object",
@@ -82,9 +82,9 @@ class FailingNode(BaseNode):
     """Node that always fails."""
 
     definition = WorkflowNodeManifest(
-        name="failing",
+        slug="failing",
         version="1.0.0",
-        title="Failing",
+        name="Failing",
         description="Always fails",
         input_schema={"type": "object"},
         output_schema={"type": "object"},
@@ -98,9 +98,9 @@ class DegradedNode(BaseNode):
     """Node with mixed health checks."""
 
     definition = WorkflowNodeManifest(
-        name="degraded",
+        slug="degraded",
         version="1.0.0",
-        title="Degraded",
+        name="Degraded",
         description="Has degraded health",
         input_schema={"type": "object"},
         output_schema={"type": "object"},
@@ -252,9 +252,9 @@ class TestManifestBasic:
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == "echo-v1.0.0"
-        assert data["name"] == "echo"
+        assert data["slug"] == "echo"
         assert data["version"] == "1.0.0"
-        assert data["title"] == "Echo"
+        assert data["name"] == "Echo"
         assert data["description"] == "Returns input unchanged"
         assert data["token_cost"] == 0.0
         assert "input_schema" in data
@@ -266,9 +266,9 @@ class FileOutputNode(BaseNode):
     """Node that produces file outputs for S3 upload testing."""
 
     definition = WorkflowNodeManifest(
-        name="file-output",
+        slug="file-output",
         version="1.0.0",
-        title="File Output",
+        name="File Output",
         description="Produces a file output",
         input_schema={
             "type": "object",
@@ -295,9 +295,9 @@ class FailingOutputNode(BaseNode):
     """Node that always fails — for testing S3 upload skip on failure."""
 
     definition = WorkflowNodeManifest(
-        name="fail-output",
+        slug="fail-output",
         version="1.0.0",
-        title="Fail Output",
+        name="Fail Output",
         description="Always fails",
         input_schema={"type": "object"},
         output_schema={
@@ -316,9 +316,9 @@ class BogusPathOutputNode(BaseNode):
     """Node whose file output points at a missing path (DA-2337)."""
 
     definition = WorkflowNodeManifest(
-        name="bogus-path-output",
+        slug="bogus-path-output",
         version="1.0.0",
-        title="Bogus Path Output",
+        name="Bogus Path Output",
         description="Returns a file output that does not exist on disk",
         input_schema={"type": "object", "properties": {}},
         output_schema={
@@ -816,7 +816,7 @@ class TestIntegrationLifecycle:
 
             response = client.get("/manifest", headers=headers)
             assert response.status_code == 200
-            assert response.json()["name"] == "file-output"
+            assert response.json()["slug"] == "file-output"
 
             with patch("canvastekk_workflow_sdk.uploads.S3PresignedUploader.upload_file") as mock_upload:
                 response = client.post(
@@ -868,7 +868,7 @@ class TestManifestEndpoint:
     def test_manifest_includes_node_fields(self, echo_client: TestClient) -> None:
         response = echo_client.get("/manifest")
         data = response.json()
-        assert data["name"] == "echo"
+        assert data["slug"] == "echo"
         assert data["version"] == "1.0.0"
         assert data["id"] == "echo-v1.0.0"
         assert "input_schema" in data
@@ -947,9 +947,9 @@ class TestReadinessProbe:
     def test_readiness_returns_200_when_all_checks_pass(self, monkeypatch: pytest.MonkeyPatch) -> None:
         class HealthyNode(BaseNode):
             definition = WorkflowNodeManifest(
-                name="healthy",
+                slug="healthy",
                 version="1.0.0",
-                title="Healthy",
+                name="Healthy",
                 description="Always healthy",
                 input_schema={"type": "object"},
                 output_schema={"type": "object"},
@@ -969,9 +969,9 @@ class TestReadinessProbe:
     def test_readiness_returns_503_when_check_fails(self) -> None:
         class UnhealthyNode(BaseNode):
             definition = WorkflowNodeManifest(
-                name="unhealthy",
+                slug="unhealthy",
                 version="1.0.0",
-                title="Unhealthy",
+                name="Unhealthy",
                 description="Always unhealthy",
                 input_schema={"type": "object"},
                 output_schema={"type": "object"},
@@ -1124,9 +1124,9 @@ class AccountEchoNode(BaseNode):
     """Echoes context.account_id into outputs (DA-2242 header-capture tests)."""
 
     definition = WorkflowNodeManifest(
-        name="account-echo",
+        slug="account-echo",
         version="1.0.0",
-        title="Account Echo",
+        name="Account Echo",
         description="Returns context.account_id",
         input_schema={"type": "object"},
         output_schema={"type": "object"},

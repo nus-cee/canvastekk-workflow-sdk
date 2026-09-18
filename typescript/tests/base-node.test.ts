@@ -6,9 +6,9 @@ import { TimingMiddleware } from "../src/middleware.js";
 
 class EchoNode extends BaseNode {
   definition: WorkflowNodeManifest = {
-    name: "echo",
+    slug: "echo",
     version: "1.0.0",
-    title: "Echo",
+    name: "Echo",
     description: "Returns input unchanged",
     input_schema: {
       type: "object",
@@ -29,9 +29,9 @@ class EchoNode extends BaseNode {
 
 class FailingNode extends BaseNode {
   definition: WorkflowNodeManifest = {
-    name: "fail-node",
+    slug: "fail-node",
     version: "1.0.0",
-    title: "Fail",
+    name: "Fail",
     description: "Always fails",
     input_schema: { type: "object" },
     output_schema: { type: "object" },
@@ -44,9 +44,9 @@ class FailingNode extends BaseNode {
 
 class ValidatingNode extends BaseNode {
   definition: WorkflowNodeManifest = {
-    name: "validating",
+    slug: "validating",
     version: "1.0.0",
-    title: "Validating",
+    name: "Validating",
     description: "Tests validation",
     input_schema: {
       type: "object",
@@ -193,9 +193,9 @@ const PRIVATE_IP = ["192", "168", "1", "10"].join(".");
 
 class DownloadNode extends BaseNode {
   definition: WorkflowNodeManifest = {
-    name: "download-node",
+    slug: "download-node",
     version: "1.0.0",
-    title: "Download",
+    name: "Download",
     description: "Downloads a file input",
     input_schema: {
       type: "object",

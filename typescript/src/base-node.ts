@@ -144,9 +144,9 @@ function formatAjvErrors(errors: import("ajv").ErrorObject[]): Record<string, un
  * ```typescript
  * class EchoNode extends BaseNode {
  *   definition = {
- *     name: "echo",
+ *     slug: "echo",
  *     version: "1.0.0",
- *     title: "Echo Node",
+ *     name: "Echo Node",
  *     description: "Passes inputs through unchanged",
  *     input_schema: { type: "object", properties: { data: { type: "string" } } },
  *     output_schema: { type: "object", properties: { data: { type: "string" } } },
@@ -401,7 +401,7 @@ export abstract class BaseNode {
     const dep = this.getDefinition().deprecation;
     if (!dep) return;
 
-    const name = this.getDefinition().name;
+    const name = this.getDefinition().slug;
     const replacement = dep.replacement_slug || "unspecified";
 
     if (dep.sunset_date) {
@@ -570,7 +570,7 @@ export abstract class BaseNode {
         createExecutionMetric({
           runId: context.runId,
           nodeId: context.nodeId,
-          nodeName: def.name,
+          nodeName: def.slug,
           status: "pass",
           durationMs,
           tokenUsage,
@@ -623,7 +623,7 @@ export abstract class BaseNode {
       createExecutionMetric({
         runId: request.run_id,
         nodeId: request.node_id,
-        nodeName: this.getDefinition().name,
+        nodeName: this.getDefinition().slug,
         status: "fail",
         durationMs,
         errorType: error.constructor.name,

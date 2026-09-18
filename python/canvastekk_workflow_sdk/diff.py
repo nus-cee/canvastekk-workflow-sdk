@@ -23,7 +23,7 @@ from typing import Any
 VERSION_BUMPS = ("major", "minor", "patch")
 
 _SCHEMA_KEYS = ("input_schema", "output_schema")
-_HANDLED_KEYS = _SCHEMA_KEYS + ("name", "version", "id")
+_HANDLED_KEYS = _SCHEMA_KEYS + ("slug", "version", "id")
 
 
 def _version_tuple(version: str) -> tuple[int, ...]:
@@ -116,10 +116,12 @@ def diff_manifests(old: dict[str, Any], new: dict[str, Any]) -> ManifestDiff:
     diff.old_version = old.get("version")
     diff.new_version = new.get("version")
 
-    old_name = old.get("name")
-    new_name = new.get("name")
-    if old_name and new_name and old_name != new_name:
-        diff.errors.append(f"name mismatch: '{old_name}' -> '{new_name}' (publish a new node, not a new version)")
+    # Registry-shaped inputs (export_definition output) and pre-DA-2627 manifests
+    # carry identity under "name"; when slug is absent, name IS the identity.
+    old_slug = old.get("slug", old.get("name"))
+    new_slug = new.get("slug", new.get("name"))
+    if old_slug and new_slug and old_slug != new_slug:
+        diff.errors.append(f"slug mismatch: '{old_slug}' -> '{new_slug}' (publish a new node, not a new version)")
 
     bump: str | None = None
     versions_parsed = False

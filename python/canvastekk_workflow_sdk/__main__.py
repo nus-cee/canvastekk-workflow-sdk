@@ -56,7 +56,7 @@ def _validate_definition(definition) -> dict:
         "warnings": [],
         "file_input_fields": [],
         "file_output_fields": [],
-        "name": definition.name,
+        "slug": definition.slug,
         "version": definition.version,
         "id": definition.id,
     }

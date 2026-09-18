@@ -129,9 +129,9 @@ from canvastekk_workflow_sdk import WorkflowNodeManifest, RetryConfig, WorkflowN
 definition = WorkflowNodeManifest(
     # === REQUIRED ===
     id="segment-v1.0.0",              # Unique: "{name}-v{version}"
-    name="segment",                    # Slug for routing (lowercase, hyphens)
+    slug="segment",                    # Slug for routing (lowercase, hyphens)
     version="1.0.0",                   # Semantic version
-    title="Point Cloud Segmentation",  # Human-readable title
+    name="Point Cloud Segmentation",  # Human-readable title
     description="Segments a point cloud into instances",  # What this node does
     input_schema={...},                # JSON Schema (Draft 7)
     output_schema={...},               # JSON Schema (Draft 7)
@@ -410,10 +410,9 @@ from pathlib import Path
 from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest
 
 definition = WorkflowNodeManifest(
-    id="{{name}}-v{{version}}",
-    name="{{name}}",
+    slug="{{name}}",
     version="{{version}}",
-    title="{{title}}",
+    name="{{title}}",
     description="{{description}}",
     input_schema={...},  # From Step 2
     output_schema={...},  # From Step 2
@@ -544,7 +543,7 @@ class Test{{ClassName}}Unit:
     def test_definition_fields(self):
         """Verify WorkflowNodeManifest has all required fields."""
         assert definition.id == "{{name}}-v{{version}}"
-        assert definition.name == "{{name}}"
+        assert definition.slug == "{{name}}"
         assert definition.version == "{{version}}"
         assert definition.input_schema
         assert definition.output_schema

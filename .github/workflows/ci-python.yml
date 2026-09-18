@@ -134,7 +134,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name')
+          # --repo is required: the checkouts live in base/ and pr/ subdirectories,
+          # so gh cannot discover the repository from a .git at the workspace root
+          # (first exercised by a breaking diff — DA-2627).
+          LABELS=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name')
           if echo "$LABELS" | grep -qw 'major'; then
             echo "::warning::Breaking schema changes detected — 'major' label is present, proceeding."
           else

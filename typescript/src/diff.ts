@@ -17,7 +17,7 @@ export interface ManifestDiff {
   versionBump: "major" | "minor" | "patch" | null;
 }
 
-const HANDLED_KEYS: Set<string> = new Set(["input_schema", "output_schema", "name", "version", "id"]);
+const HANDLED_KEYS: Set<string> = new Set(["input_schema", "output_schema", "slug", "version", "id"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -92,10 +92,12 @@ export function diffManifests(
     versionBump: null,
   };
 
-  const oldName = oldManifest["name"];
-  const newName = newManifest["name"];
-  if (typeof oldName === "string" && typeof newName === "string" && oldName !== newName) {
-    diff.errors.push(`name mismatch: '${oldName}' -> '${newName}' (publish a new node, not a new version)`);
+  // Registry-shaped inputs (exportDefinition output) and pre-DA-2627 manifests
+  // carry identity under "name"; when slug is absent, name IS the identity.
+  const oldSlug = oldManifest["slug"] ?? oldManifest["name"];
+  const newSlug = newManifest["slug"] ?? newManifest["name"];
+  if (typeof oldSlug === "string" && typeof newSlug === "string" && oldSlug !== newSlug) {
+    diff.errors.push(`slug mismatch: '${oldSlug}' -> '${newSlug}' (publish a new node, not a new version)`);
   }
 
   const oldVersion = oldManifest["version"];

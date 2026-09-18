@@ -296,8 +296,8 @@ def build_registry_payload(
             resolved_constraints[key] = value
 
     payload: dict[str, Any] = {
-        "name": definition.name,
-        "label": definition.title,
+        "name": definition.slug,
+        "label": definition.name,
         "version": definition.version,
         "description": definition.description,
         "input_schema": definition.input_schema,

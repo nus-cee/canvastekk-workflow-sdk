@@ -31,9 +31,9 @@ const fullDeprecation: DeprecationInfo = {
 };
 
 const baseManifest = (deprecation?: DeprecationInfo): WorkflowNodeManifest => ({
-  name: "echo",
+  slug: "echo",
   version: "1.0.0",
-  title: "Echo",
+  name: "Echo",
   description: "Returns input",
   input_schema: {
     type: "object",

@@ -95,9 +95,9 @@ from canvastekk_workflow_sdk import BaseNode, WorkflowNodeManifest, ExecutionCon
 
 class UppercaseNode(BaseNode):
     definition = WorkflowNodeManifest(
-        name="uppercase",
+        slug="uppercase",
         version="1.0.0",
-        title="Uppercase",
+        name="Uppercase",
         description="Converts text to uppercase",
         input_schema={
             "type": "object",
@@ -121,7 +121,7 @@ app = UppercaseNode().create_app()
 The four requirements:
 
 1. **Subclass `BaseNode`** — inherit from `canvastekk_workflow_sdk.BaseNode`
-2. **Define `definition`** — a `WorkflowNodeManifest` with all required fields (`name`, `version`, `title`, `description`, `input_schema`, `output_schema`). Note: `id` is auto-derived from `name` + `version` and must NOT be provided manually.
+2. **Define `definition`** — a `WorkflowNodeManifest` with all required fields (`slug`, `version`, `name`, `description`, `input_schema`, `output_schema`). Note: `id` is auto-derived from `slug` + `version` and must NOT be provided manually.
 3. **Implement `execute(inputs, context)`** — return a dict matching your `output_schema`
 4. **Call `.create_app()`** — get a ready-to-run FastAPI application
 
@@ -319,9 +319,9 @@ from canvastekk_workflow_sdk.exceptions import NodeIOError, NodeExecutionError
 
 class FileProcessorNode(BaseNode):
     definition = WorkflowNodeManifest(
-        name="file-proc",
+        slug="file-proc",
         version="1.0.0",
-        title="File Processor",
+        name="File Processor",
         description="Processes a file",
         input_schema={"type": "object", "properties": {"path": {"type": "string"}}},
         output_schema={"type": "object", "properties": {"line_count": {"type": "integer"}}},
@@ -351,9 +351,9 @@ Mark input fields as files using `"format": "file"` in `input_schema`. Use `x-ac
 
 ```python
 definition = WorkflowNodeManifest(
-    name="segment",
+    slug="segment",
     version="1.0.0",
-    title="Segment",
+    name="Segment",
     description="Segments a point cloud",
     input_schema={
         "type": "object",
@@ -454,9 +454,9 @@ The engine provides presigned PUT URLs via the `output_upload_url` field in the 
 
 ```python
 definition = WorkflowNodeManifest(
-    name="converter",
+    slug="converter",
     version="1.0.0",
-    title="Converter",
+    name="Converter",
     description="Converts file format",
     input_schema={
         "type": "object",
@@ -500,9 +500,9 @@ from pathlib import Path
 
 class PointCloudSegmenter(BaseNode):
     definition = WorkflowNodeManifest(
-        name="segment",
+        slug="segment",
         version="1.0.0",
-        title="Segment",
+        name="Segment",
         description="Segments a point cloud",
         input_schema={
             "type": "object",
@@ -818,7 +818,7 @@ poetry run pytest tests/test_my_node.py
 
 Defines what a node is. Maps to the engine's **registry-level node type** (`WorkflowNodeManifest` in engine terminology). This is distinct from `WorkflowDefinitionNode`, which the engine uses for node instances within a workflow definition.
 
-**Required fields:** `name`, `version`, `title`, `description`, `input_schema`, `output_schema`. Note: `id` is auto-derived from `name` + `version` and must NOT be provided manually.
+**Required fields:** `slug`, `version`, `name`, `description`, `input_schema`, `output_schema`. Note: `id` is auto-derived from `slug` + `version` and must NOT be provided manually.
 
 **Versioning:** The `version` field is a semantic version string (e.g., `"1.0.0"`) validated against the X.Y.Z pattern. The engine uses this version directly and enforces immutability: re-registering with the same version and changed data is rejected. Bump the version for any schema or metadata changes.
 
@@ -827,9 +827,9 @@ from canvastekk_workflow_sdk import WorkflowNodeManifest, RetryConfig, WorkflowN
 from canvastekk_workflow_sdk.definition import ColorPreset
 
 definition = WorkflowNodeManifest(
-    name="my-node",
+    slug="my-node",
     version="1.0.0",
-    title="My Node",
+    name="My Node",
     description="Does something useful",
     input_schema={
         "type": "object",
@@ -872,7 +872,7 @@ from canvastekk_workflow_sdk import DeprecationInfo, WorkflowNodeManifest
 from datetime import date
 
 definition = WorkflowNodeManifest(
-    name="floor-flatness-assessment",
+    slug="floor-flatness-assessment",
     version="1.4.2",
     # ...required fields...
     deprecation=DeprecationInfo(
@@ -1214,7 +1214,8 @@ payload = build_registry_payload(
 
 | SDK Field | Engine API Field | Notes |
 |-----------|-----------------|-------|
-| `definition.title` | `label` | Renamed |
+| `definition.slug` | `name` | Renamed (engine identity) |
+| `definition.name` (display) | `label` | Renamed |
 | `definition.default_retry` | `retry` | Renamed |
 | `definition.id` (computed) | — | Omitted from payload |
 | — | `tags` | New optional field |

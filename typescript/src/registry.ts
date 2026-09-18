@@ -85,8 +85,8 @@ export function buildRegistryPayload(
   // (`deprecation` is accepted by the engine since DA-2305/#319 and is
   // emitted below when set — DA-2312, parity with Python v0.25.0.)
   const payload: Record<string, unknown> = {
-    name: definition.name,
-    label: definition.title,
+    name: definition.slug,
+    label: definition.name,
     version: definition.version,
     description: definition.description,
     input_schema: definition.input_schema,
