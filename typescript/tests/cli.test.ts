@@ -16,6 +16,10 @@ const canonicalManifest = {
   role: "operation",
 };
 
+const dir = mkdtempSync(join(tmpdir(), "sdk-cli-"));
+const manifestPath = join(dir, "manifest.json");
+writeFileSync(manifestPath, JSON.stringify(canonicalManifest));
+
 const legacyManifest = {
   name: "echo",
   title: "Echo",
@@ -86,10 +90,6 @@ describe("probeManifest (DA-2603, offline)", () => {
 });
 
 describe("cliMain register (DA-2603)", () => {
-  const dir = mkdtempSync(join(tmpdir(), "sdk-cli-"));
-  const manifestPath = join(dir, "manifest.json");
-  writeFileSync(manifestPath, JSON.stringify(canonicalManifest));
-
   const realFetch = globalThis.fetch;
 
   function mockFetch(status: number, body: unknown = {}) {
@@ -167,7 +167,6 @@ describe("cliMain register (DA-2603)", () => {
 });
 
 describe("probeManifest value domain (DA-2603 review)", () => {
-  const manifestPath = join(dir, "manifest.json");
   it("rejects a category outside the engine enum", () => {
     const report = probeManifest({ ...canonicalManifest, category: "transform" });
     expect(report.valid).toBe(false);
