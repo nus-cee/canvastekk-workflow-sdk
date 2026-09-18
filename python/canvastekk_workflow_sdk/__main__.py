@@ -99,6 +99,191 @@ def _validate_definition(definition) -> dict:
     return report
 
 
+# Engine registration request whitelist — mirrors the engine's
+# CreateWorkflowNodeRequest (see canvastekk-workflow-engine
+# schemas/api/nodes.py and the CI register path in
+# canvastekk-workflow-nodes deploy-lambda.yml). DA-2603/DA-2666.
+_ENGINE_REQUEST_ALLOWED = frozenset(
+    {
+        "name",
+        "version",
+        "label",
+        "description",
+        "input_schema",
+        "output_schema",
+        "invoke_type",
+        "invoke_url",
+        "invoke_config",
+        "category",
+        "tags",
+        "styles",
+        "constraints",
+        "token_cost",
+        "timeout_seconds",
+        "deprecation",
+    }
+)
+_ENGINE_REQUEST_REQUIRED = ("name", "version", "label", "description", "input_schema", "output_schema")
+
+
+def _build_engine_request(definition, *, invoke_url: str | None = None, name_suffix: str = "") -> dict:
+    """Map a canonical manifest to the engine registration request.
+
+    Vocabulary adapter (DA-2666 semantics): the manifest's ``slug`` is the
+    engine's ``name`` input; the manifest's display ``name`` is the engine's
+    ``label``. A client-sent ``slug`` key is NEVER included (the engine 422s
+    on it by design).
+    """
+    payload: dict = {
+        "name": definition.slug + name_suffix,
+        "label": definition.name,
+        "description": definition.description,
+        "version": definition.version,
+        "input_schema": definition.input_schema,
+        "output_schema": definition.output_schema,
+        "category": definition.category,
+        "token_cost": definition.token_cost,
+        "timeout_seconds": definition.timeout_seconds,
+    }
+    if definition.styles is not None:
+        payload["styles"] = definition.styles.model_dump()
+    if getattr(definition, "deprecation", None) is not None:
+        payload["deprecation"] = definition.deprecation.model_dump()
+    constraints = {
+        key: getattr(definition, key)
+        for key in ("minimum_sdk_version", "maximum_sdk_version", "docs_url", "changelog_url")
+        if getattr(definition, key, None) is not None
+    }
+    if constraints:
+        payload["constraints"] = constraints
+    if invoke_url:
+        payload["invoke_type"] = "http"
+        payload["invoke_url"] = invoke_url
+    return payload
+
+
+def _probe_definition(definition) -> dict:
+    """Offline registration probes: 'passes locally ⇔ passes registration'.
+
+    Runs the manifest probes from ``_validate_definition`` (model format,
+    draft-7 schemas, file-field extensions) plus the engine-request mirror:
+    the mapped payload must carry exactly the required keys, no client-side
+    ``slug`` key, and no keys outside the engine whitelist.
+    """
+    report = _validate_definition(definition)
+    report["probes"] = ["manifest", "engine-request-mirror"]
+
+    payload = _build_engine_request(definition)
+    missing = [k for k in _ENGINE_REQUEST_REQUIRED if payload.get(k) in (None, "", [], {})]
+    if missing:
+        report["valid"] = False
+        report["errors"].append(f"Engine request missing required keys: {missing}")
+    if "slug" in payload:
+        report["valid"] = False
+        report["errors"].append("Engine request must not carry a client-set 'slug' key (engine rejects it)")
+    extra = sorted(set(payload) - _ENGINE_REQUEST_ALLOWED)
+    if extra:
+        report["valid"] = False
+        report["errors"].append(f"Engine request carries keys outside the engine whitelist: {extra}")
+    return report
+
+
+def _run_register(args: list[str]) -> int:
+    """Register a node manifest against the engine from CI.
+
+    Mirrors the proven service-identity path (deploy-lambda.yml): POST the
+    mapped payload to ``{engine}/api/workflows/nodes/`` with the
+    ``X-Service-Token`` header, then verify via ``by-name/{name}``.
+
+    Exit codes: 0 ok · 2 usage · 3 auth (401/403) · 4 other 4xx · 5 5xx ·
+    6 network. The token is read from ``CANVASTEKK_REGISTRY_TOKEN`` and is
+    never printed.
+    """
+    import os
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    def _usage() -> int:
+        print(
+            "Usage: register <module:attribute> --engine-url URL "
+            "[--invoke-url URL] [--name-suffix S] [--json]",
+            file=sys.stderr,
+        )
+        return 2
+
+    def _flag(name: str) -> str | None:
+        for i, a in enumerate(args):
+            if a == name and i + 1 < len(args):
+                return args[i + 1]
+            if a.startswith(name + "="):
+                return a.split("=", 1)[1]
+        return None
+
+    module_path = args[0] if args and not args[0].startswith("--") else None
+    engine_url = _flag("--engine-url")
+    if not module_path or not engine_url:
+        return _usage()
+
+    token = os.environ.get("CANVASTEKK_REGISTRY_TOKEN", "")
+    if not token:
+        print("Error: CANVASTEKK_REGISTRY_TOKEN is not set (service credential)", file=sys.stderr)
+        return 2
+
+    use_json = "--json" in args
+    try:
+        definition = _load_definition(module_path)
+    except Exception as e:
+        print(f"Error loading definition: {e}", file=sys.stderr)
+        return 2
+
+    payload = _build_engine_request(
+        definition,
+        invoke_url=_flag("--invoke-url"),
+        name_suffix=_flag("--name-suffix") or "",
+    )
+    base = engine_url.rstrip("/") + "/api/workflows/nodes/"
+
+    def _request(method: str, url: str, body: bytes | None = None):
+        req = urllib.request.Request(url, data=body, method=method)
+        req.add_header("Content-Type", "application/json")
+        req.add_header("X-Service-Token", token)
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.status, resp.read()
+
+    def _exit(code: int, message: str, extra: dict | None = None) -> int:
+        if use_json:
+            out = {"ok": code == 0, "message": message, **(extra or {})}
+            print(json.dumps(out, indent=2))
+        else:
+            stream = sys.stdout if code == 0 else sys.stderr
+            print(message, file=stream)
+        return code
+
+    try:
+        status, body = _request("POST", base, json.dumps(payload).encode())
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode(errors="replace")[:300]
+        if e.code in (401, 403):
+            return _exit(3, f"Auth failed (HTTP {e.code}) for {payload['name']}")
+        if 400 <= e.code < 500:
+            return _exit(4, f"Rejected (HTTP {e.code}): {detail}", {"name": payload["name"]})
+        return _exit(5, f"Engine error (HTTP {e.code}): {detail}")
+    except (urllib.error.URLError, OSError) as e:
+        return _exit(6, f"Network error reaching {base}: {e}")
+
+    if status not in (200, 201):
+        return _exit(5, f"Unexpected HTTP {status} from engine")
+
+    try:
+        status, body = _request("GET", base + "by-name/" + urllib.parse.quote(payload["name"]))
+        node_id = json.loads(body).get("id", "")
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, json.JSONDecodeError):
+        node_id = ""
+
+    return _exit(0, f"Registered {payload['name']} v{payload['version']}", {"id": node_id})
+
+
 _CONTENT_MARKER = "CanvasTEKK Node Development"
 
 
@@ -306,6 +491,11 @@ def main() -> None:
         print()
         print("Commands:")
         print("  validate <module:attribute> [--json]  Validate a node manifest definition")
+        print("  probe <module:attribute> [--json]     Offline registration probes (validate + engine mirror)")
+        print(
+            "  register <module:attribute> --engine-url URL [--invoke-url URL] [--name-suffix S] [--json]"
+        )
+        print("                                        Publish the manifest to the engine registry")
         print("  diff <old.json> <new.json> [--json]   Classify breaking changes between manifests")
         print("  init [--agents-md] [--force]          Scaffold AI agent skills into your project")
         print()
@@ -323,6 +513,9 @@ def main() -> None:
         print(f"canvastekk-workflow-sdk {__version__}")
         sys.exit(0)
 
+    if args[0] == "register":
+        sys.exit(_run_register(args[1:]))
+
     if args[0] == "diff":
         sys.exit(_run_diff(args[1:]))
 
@@ -332,7 +525,7 @@ def main() -> None:
         _init_skills(Path.cwd(), include_agents_md=include_agents_md, force=force)
         sys.exit(0)
 
-    if args[0] != "validate":
+    if args[0] not in ("validate", "probe"):
         print(f"Unknown command: {args[0]}", file=sys.stderr)
         sys.exit(1)
 
@@ -353,7 +546,8 @@ def main() -> None:
         sys.exit(1)
 
     try:
-        report = _validate_definition(definition)
+        report_fn = _validate_definition if args[0] == "validate" else _probe_definition
+        report = report_fn(definition)
     except Exception as e:
         report = {"valid": False, "errors": [str(e)], "warnings": []}
 
