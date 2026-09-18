@@ -167,6 +167,7 @@ describe("cliMain register (DA-2603)", () => {
 });
 
 describe("probeManifest value domain (DA-2603 review)", () => {
+  const manifestPath = join(dir, "manifest.json");
   it("rejects a category outside the engine enum", () => {
     const report = probeManifest({ ...canonicalManifest, category: "transform" });
     expect(report.valid).toBe(false);
