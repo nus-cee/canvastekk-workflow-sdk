@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.27.0] - 2026-09-18
+
+### Features
+
+- **definition**: Manifest identity is slug, display is name [DA-2627] (#67) (**BREAKING**)
+
+
 ## [0.26.4] - 2026-09-14
 
 ### Bug Fixes
 
 - **config**: Replace V1 atlassian MCP stub with full v2 servers entry
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.26.4
 
 
 ## [0.26.3] - 2026-09-03
