@@ -26,7 +26,7 @@ The `/manifest` endpoint auto-injects `sdk_version` (read from the installed pac
 }
 ```
 
-`sdk_version` and `mode` are never set by node authors — they are injected at the endpoint level.
+`sdk_version` and `mode` are never set by node authors — they are injected at the endpoint level. Since v0.28 the manifest also carries `code_digest` — a sha256 of the handler module source computed at startup, so any code change changes the served manifest.
 
 ### X-SDK-Version Response Header
 

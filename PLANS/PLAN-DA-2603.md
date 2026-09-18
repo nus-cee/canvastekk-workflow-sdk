@@ -6,11 +6,11 @@
 
 ## Acceptance Criteria
 
-- [ ] `/manifest` serves `code_digest` (hash of the handler module computed at startup, auto-injected exactly like `sdk_version`/`mode` — never author-settable, i.e. NOT a model field); mutating handler code changes it; `sdk_version`/`mode`/`X-SDK-Version` behavior unchanged
-- [ ] Register CLI publishes the manifest to the engine registration endpoint from CI with a service credential — mirroring the proven nodes-repo path (`X-Service-Token` header, POST `/api/v2/workflow-nodes`, by-name verification), mapping to engine request vocabulary (`name`=slug value, `label`=display, `description`; DA-2666 adapter semantics)
-- [ ] Local probe harness runs OFFLINE and runs the same canned contract probes the registry runs (manifest model validation + Draft-7 schema checks + engine request-shape mirror) — "passes locally ⇔ passes registration"
-- [ ] Both python and typescript packages carry all three features; released with aligned versions (automated `feat:` → 0.28.0)
-- [ ] Gates green: python `ruff check canvastekk_workflow_sdk/ tests/` + `pytest -v`; typescript `tsc --noEmit` + `vitest run` + `tsup`
+- [x] `/manifest` serves `code_digest` (hash of the handler module computed at startup, auto-injected exactly like `sdk_version`/`mode` — never author-settable, i.e. NOT a model field); mutating handler code changes it; `sdk_version`/`mode`/`X-SDK-Version` behavior unchanged
+- [x] Register CLI publishes the manifest to the engine registration endpoint from CI with a service credential — mirroring the proven nodes-repo path (`X-Service-Token` header, POST `/api/v2/workflow-nodes`, by-name verification), mapping to engine request vocabulary (`name`=slug value, `label`=display, `description`; DA-2666 adapter semantics)
+- [x] Local probe harness runs OFFLINE and runs the same canned contract probes the registry runs (manifest model validation + Draft-7 schema checks + engine request-shape mirror) — "passes locally ⇔ passes registration"
+- [x] Both python and typescript packages carry all three features; released with aligned versions (automated `feat:` → 0.28.0)
+- [x] Gates green: python `ruff check canvastekk_workflow_sdk/ tests/` + `pytest -v`; typescript `tsc --noEmit` + `vitest run` + `tsup`
 
 ## Dependency & Consumer Map
 
@@ -28,36 +28,36 @@
 
 ### Phase 1: Python — code_digest in /manifest
 
-- [ ] **1.1** Add `_handler_code_digest(node)` helper: sha256 hex over the source-file bytes of the module that defines the node's handler (resolved via `inspect.getsourcefile`/`type(node).__module__`; cached on first computation). Inject `content["code_digest"] = ...` in the `/manifest` endpoint next to `sdk_version`/`mode`. NOT a `WorkflowNodeManifest` field — authors cannot set it; document the `ponytail:` single-module ceiling (upgrade to package-walk if nodes grow multi-file).
+- [x] **1.1** Add `_handler_code_digest(node)` helper: sha256 hex over the source-file bytes of the module that defines the node's handler (resolved via `inspect.getsourcefile`/`type(node).__module__`; cached on first computation). Inject `content["code_digest"] = ...` in the `/manifest` endpoint next to `sdk_version`/`mode`. NOT a `WorkflowNodeManifest` field — authors cannot set it; document the `ponytail:` single-module ceiling (upgrade to package-walk if nodes grow multi-file).
     — **Why:** ticket item 1 — engine reconciliation needs a code-change signal; endpoint injection is the established pattern (`sdk_version`, `mode`) and keeps the field un-settable by construction
     — **Done when:** `/manifest` response carries `code_digest` (64-hex); touching the handler module's bytes changes it; `sdk_version`/`mode`/`X-SDK-Version` tests unchanged and green
     — **Consumers affected:** future engine reconciliation, CI register flows, DA-2604/2605 verification
 
 ### Phase 2: Python — register CLI + probe harness
 
-- [ ] **2.1** `python -m canvastekk_workflow_sdk register <module:attr> --engine-url URL [--invoke-url URL] [--name-suffix S]`: build the engine request from the local manifest (`name=slug`(+suffix), `label=name`, `description`, version/schemas/category/tags/styles/constraints/token_cost/timeout_seconds/retry as the engine accepts, `invoke_url` override when given), `POST` with `X-Service-Token: $CANVASTEKK_REGISTRY_TOKEN` (env), then GET `by-name/{name}` to verify; non-zero exit on any failure with the HTTP status in the message.
+- [x] **2.1** `python -m canvastekk_workflow_sdk register <module:attr> --engine-url URL [--invoke-url URL] [--name-suffix S]`: build the engine request from the local manifest (`name=slug`(+suffix), `label=name`, `description`, version/schemas/category/tags/styles/constraints/token_cost/timeout_seconds/retry as the engine accepts, `invoke_url` override when given), `POST` with `X-Service-Token: $CANVASTEKK_REGISTRY_TOKEN` (env), then GET `by-name/{name}` to verify; non-zero exit on any failure with the HTTP status in the message.
     — **Why:** ticket item 2 — replaces the hand-rolled YAML-rewrite registration in node CI (the DA-2604 same-commit AC depends on this CLI existing); mirrors the proven `deploy-lambda.yml` auth path
     — **Done when:** registering a sample node against a local engine instance succeeds end-to-end (AC: "CLI registers a sample node against a local engine"); exit codes distinguish auth/4xx/5xx/network
     — **Consumers affected:** DA-2604/2605 pipelines, external authors publishing from CI
-- [ ] **2.2** `python -m canvastekk_workflow_sdk probe <module:attr>` (offline): run the canned contract probes the registry runs — manifest model validation (slug pattern, semver, display fields, schemas present), Draft-7 validity of input/output schemas (existing `validate` machinery), AND an engine-request mirror check (mapped payload validates against the engine's request shape: required keys present, no client-`slug` key, whitelisted keys only). Exit non-zero on any probe failure.
+- [x] **2.2** `python -m canvastekk_workflow_sdk probe <module:attr>` (offline): run the canned contract probes the registry runs — manifest model validation (slug pattern, semver, display fields, schemas present), Draft-7 validity of input/output schemas (existing `validate` machinery), AND an engine-request mirror check (mapped payload validates against the engine's request shape: required keys present, no client-`slug` key, whitelisted keys only). Exit non-zero on any probe failure.
     — **Why:** ticket item 3 — "passes locally ⇔ passes registration" catches drift before CI; offline by construction (no HTTP)
     — **Done when:** a deliberately broken manifest fails `probe` with a per-probe report; a valid one passes; no network calls (test asserts offline behavior)
     — **Consumers affected:** node authors, CI pre-flight
 
 ### Phase 3: TypeScript — mirror
 
-- [ ] **3.1** ts `code_digest` in the `/manifest` handler (same sha256-over-handler-source computation, node `crypto`; injected next to `sdk_version`/`mode`); `register` CLI (`typescript/bin/register.ts` + `bin` entry in package.json + tsup build config) with identical flags/auth/mapping; `probe` script mirroring 2.2 (zod parse + schema probes + engine-shape mirror).
+- [x] **3.1** ts `code_digest` in the `/manifest` handler (same sha256-over-handler-source computation, node `crypto`; injected next to `sdk_version`/`mode`); `register` CLI (`typescript/bin/register.ts` + `bin` entry in package.json + tsup build config) with identical flags/auth/mapping; `probe` script mirroring 2.2 (zod parse + schema probes + engine-shape mirror).
     — **Why:** AC — both language packages carry all three features with aligned behavior
     — **Done when:** ts tests cover digest change-on-mutation, register mapping, probe pass/fail parity with python rules; `tsc`/`vitest`/`tsup` green; `npx canvastekk-workflow-sdk register --help` works from the built package
     — **Consumers affected:** ts-package node hosts
 
 ### Phase 4: Docs + release safety + gates
 
-- [ ] **4.1** Docs sync (EXTERNAL-AUTHOR-GUIDE, READMEs ×3, embedded skills): `code_digest` behavior (what it is, when it changes, why it's not settable), `register` usage (env credential, flags, engine mapping table), `probe` usage; migration note for CI pipelines currently hand-rolling registration (deploy-lambda rewrite is DA-2604's same-commit AC, not this repo).
+- [x] **4.1** Docs sync (EXTERNAL-AUTHOR-GUIDE, READMEs ×3, embedded skills): `code_digest` behavior (what it is, when it changes, why it's not settable), `register` usage (env credential, flags, engine mapping table), `probe` usage; migration note for CI pipelines currently hand-rolling registration (deploy-lambda rewrite is DA-2604's same-commit AC, not this repo).
     — **Why:** repo rule — docs stay in sync; DA-2604/2605 implementers will read these docs to plan adoption
     — **Done when:** guide + READMEs show all three features with correct vocabulary (slug/name); no stale examples
     — **Consumers affected:** external authors, adoption tickets
-- [ ] **4.2** Final gates both packages from clean trees; merge commit carries `feat:` (→ 0.28.0, never patch — exact-pin invariant unchanged: node repos adopt deliberately); verify no consumer repo pin floats.
+- [x] **4.2** Final gates both packages from clean trees; merge commit carries `feat:` (→ 0.28.0, never patch — exact-pin invariant unchanged: node repos adopt deliberately); verify no consumer repo pin floats.
     — **Why:** AC — aligned release; the exact-wheel-pin invariant from DA-2627 stays the deploy-safety mechanism
     — **Done when:** all gates green; version math verified (cliff `features_always_bump_minor`); PR body documents the release expectation
     — **Consumers affected:** node repos, engine reconciliation ticket
@@ -80,3 +80,16 @@
 - **Register mapping drift vs engine boundary** — probe's engine-shape mirror + integration test against a local engine (AC) + the mapping table in docs; DA-2604 adoption re-verifies end-to-end.
 - **ts/python behavior divergence** — parity test list shared in the PLAN (digest mutation, register mapping, probe rules); review cross-checks.
 - **Secret leakage** — token only via env; CLI redacts it from error output (tests assert).
+
+## Execution trace (2026-09-19)
+
+- Phase 1 (py code_digest): startup sha256 of node-class module, endpoint-injected;
+  tests present/stable/mutation-sensitive. Gates green.
+- Phase 2 (py CLI): register (X-Service-Token path, by-name verify, typed exit
+  codes, token never printed) + probe (offline engine-request mirror).
+  701 py tests green.
+- Phase 3 (ts parity): code_digest via structured-stack caller resolution;
+  bin canvastekk-workflow-sdk (register/probe). 324 ts tests green; bin smoke-
+  tested from dist.
+- Phase 4: guide + 3 READMEs updated; release rides `feat:` commits (>= 0.28.0,
+  exact-pin invariant unchanged).

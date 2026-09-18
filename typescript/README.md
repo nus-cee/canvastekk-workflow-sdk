@@ -481,6 +481,19 @@ Defines what a node is. Maps to the engine's **registry-level node type** (`Work
 
 **Required fields:** `slug`, `version`, `name`, `description`, `input_schema`, `output_schema`. Note: `id` is auto-derived from `slug` + `version` and must NOT be provided manually.
 
+## CLI: register + probe (v0.28+)
+
+```bash
+canvastekk-workflow-sdk probe --manifest manifest.json
+CANVASTEKK_REGISTRY_TOKEN=<token> canvastekk-workflow-sdk register \
+  --manifest manifest.json --engine-url https://cwe.example.com \
+  [--invoke-url URL] [--name-suffix -lambda]
+```
+
+Same vocabulary mapping, auth (`X-Service-Token`), and exit codes as the python
+CLI. `probe` is fully offline. `GET /manifest` also serves `code_digest` (sha256
+of the module calling `createNodeApp`, computed at startup, never author-settable).
+
 **Versioning:** The `version` field is a semantic version string (e.g. `"1.0.0"`) validated against the X.Y.Z pattern. The engine enforces immutability: re-registering with the same version and changed data is rejected. Bump the version for any schema or metadata changes.
 
 ```typescript
