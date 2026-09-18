@@ -239,6 +239,22 @@ jobs:
         working-directory: typescript
         run: npm run build
 
+      - name: Build and upload TypeScript SDK to GitHub Release
+        if: steps.git-cliff.outputs.version != '' && hashFiles('typescript/package.json') != ''
+        working-directory: typescript
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_VERSION: ${{ steps.git-cliff.outputs.version }}
+        run: |
+          # DA-2677: attach the packed tarball so TS consumers can pin the exact
+          # released version via a public release-asset URL (mirrors the python
+          # wheel channel; no registry token needed by consumers).
+          npm pack --pack-destination .
+          VERSION_NUM="${NEW_VERSION#v}"
+          mv "nus-cee-canvastekk-workflow-sdk-${VERSION_NUM}.tgz" \
+             "canvastekk-workflow-sdk-${VERSION_NUM}.tgz"
+          gh release upload "${NEW_VERSION}" "canvastekk-workflow-sdk-${VERSION_NUM}.tgz"
+
       - name: Publish TypeScript SDK to GitHub Packages
         if: steps.git-cliff.outputs.version != '' && hashFiles('typescript/package.json') != ''
         continue-on-error: true
