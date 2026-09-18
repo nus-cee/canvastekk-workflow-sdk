@@ -147,3 +147,25 @@ class TestRunRegister:
 
 # Module-level definition for module:attribute path used by CLI tests above.
 _manifest_module_marker = _manifest()
+
+
+class TestProbeValueDomain:
+    """DA-2603 review: probe mirrors the engine's value domain, not just key shape."""
+
+    def test_rejects_category_outside_engine_enum(self) -> None:
+        # "transform" is the SDK docstring example the ENGINE rejects (maps to
+        # "conversion" only via the nodes CI rewrite) — probe must catch it.
+        report = _probe_definition(_manifest(category="transform"))
+        assert not report["valid"]
+        assert any("category" in e for e in report["errors"])
+
+    def test_rejects_timeout_over_engine_ceiling(self) -> None:
+        report = _probe_definition(_manifest(timeout_seconds=100_000))
+        assert not report["valid"]
+        assert any("timeout_seconds" in e for e in report["errors"])
+
+    def test_build_delegates_to_shipped_builder(self) -> None:
+        from canvastekk_workflow_sdk.registry import build_registry_payload
+
+        m = _manifest(minimum_sdk_version="0.27.0", docs_url="https://docs.example.com")
+        assert _build_engine_request(m) == build_registry_payload(m, invoke_url=None)

@@ -7,7 +7,7 @@
 ## Acceptance Criteria
 
 - [x] `/manifest` serves `code_digest` (hash of the handler module computed at startup, auto-injected exactly like `sdk_version`/`mode` — never author-settable, i.e. NOT a model field); mutating handler code changes it; `sdk_version`/`mode`/`X-SDK-Version` behavior unchanged
-- [x] Register CLI publishes the manifest to the engine registration endpoint from CI with a service credential — mirroring the proven nodes-repo path (`X-Service-Token` header, POST `/api/v2/workflow-nodes`, by-name verification), mapping to engine request vocabulary (`name`=slug value, `label`=display, `description`; DA-2666 adapter semantics)
+- [x] Register CLI publishes the manifest to the engine registration endpoint from CI with a service credential — mirroring the proven nodes-repo path (`X-Service-Token` header, POST `/api/workflows/nodes/`, by-name verification), mapping to engine request vocabulary (`name`=slug value, `label`=display, `description`; DA-2666 adapter semantics)
 - [x] Local probe harness runs OFFLINE and runs the same canned contract probes the registry runs (manifest model validation + Draft-7 schema checks + engine request-shape mirror) — "passes locally ⇔ passes registration"
 - [x] Both python and typescript packages carry all three features; released with aligned versions (automated `feat:` → 0.28.0)
 - [x] Gates green: python `ruff check canvastekk_workflow_sdk/ tests/` + `pytest -v`; typescript `tsc --noEmit` + `vitest run` + `tsup`

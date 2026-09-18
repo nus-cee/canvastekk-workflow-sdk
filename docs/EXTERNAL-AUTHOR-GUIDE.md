@@ -344,6 +344,10 @@ change changes the digest — it is never author-settable (not a manifest
 field). If the handler source cannot be resolved, the key is omitted and a
 warning is logged.
 
+> **Bundlers note:** if you single-file-bundle your server (esbuild/pyinstaller
+> style), the digest covers the whole bundle — any byte flip changes it. The
+> digest signals *deployed-code identity*, not source-line granularity.
+
 ---
 
 ## Step 3: Containerize

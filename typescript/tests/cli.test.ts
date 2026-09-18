@@ -165,3 +165,26 @@ describe("cliMain register (DA-2603)", () => {
     ).toBe(6);
   });
 });
+
+describe("probeManifest value domain (DA-2603 review)", () => {
+  it("rejects a category outside the engine enum", () => {
+    const report = probeManifest({ ...canonicalManifest, category: "transform" });
+    expect(report.valid).toBe(false);
+    expect(report.errors.some((e) => e.includes("category"))).toBe(true);
+  });
+
+  it("rejects timeout over the engine ceiling", () => {
+    const report = probeManifest({ ...canonicalManifest, timeout_seconds: 100000 });
+    expect(report.valid).toBe(false);
+    expect(report.errors.some((e) => e.includes("timeout_seconds"))).toBe(true);
+  });
+
+  it("register exits 2 on a malformed --name-suffix", async () => {
+    expect(
+      await cliMain([
+        "register", "--manifest", manifestPath, "--engine-url", "https://eng",
+        "--name-suffix", "bad suffix!",
+      ]),
+    ).toBe(2);
+  });
+});

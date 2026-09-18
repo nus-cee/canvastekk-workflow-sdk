@@ -19,9 +19,11 @@
  * passes registration.
  */
 import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import process from "node:process";
 
 import { WorkflowNodeManifestSchema, type WorkflowNodeManifest } from "./definition.js";
+import { buildRegistryPayload } from "./registry.js";
 
 const ENGINE_REQUEST_ALLOWED = new Set([
   "name",
@@ -51,38 +53,37 @@ const ENGINE_REQUEST_REQUIRED = [
   "output_schema",
 ] as const;
 
+const ENGINE_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+const ENGINE_CATEGORIES = new Set([
+  "control",
+  "utility",
+  "io",
+  "conversion",
+  "measurement",
+  "geometry",
+  "inspection",
+  "ai",
+  "custom",
+] as const);
+const ENGINE_MAX_TIMEOUT_SECONDS = 86400;
+
 export interface BuildEngineRequestOptions {
   invokeUrl?: string;
   nameSuffix?: string;
 }
 
-/** Map a canonical manifest to the engine registration request (DA-2666 semantics). */
+/** Map a canonical manifest to the engine registration request (DA-2666 semantics).
+ *
+ * Delegates the field mapping to the shipped, engine-boundary-tested
+ * buildRegistryPayload (single source of truth — the engine request is
+ * extra="forbid"), then applies the CLI-only name suffix.
+ */
 export function buildEngineRequest(
   def: WorkflowNodeManifest,
   opts: BuildEngineRequestOptions = {},
 ): Record<string, unknown> {
-  const payload: Record<string, unknown> = {
-    name: def.slug + (opts.nameSuffix ?? ""),
-    label: def.name,
-    description: def.description,
-    version: def.version,
-    input_schema: def.input_schema,
-    output_schema: def.output_schema,
-    category: def.category,
-    token_cost: def.token_cost,
-    timeout_seconds: def.timeout_seconds,
-  };
-  if (def.styles != null) payload.styles = def.styles;
-  if (def.deprecation != null) payload.deprecation = def.deprecation;
-  const constraints: Record<string, unknown> = {};
-  for (const key of ["minimum_sdk_version", "maximum_sdk_version", "docs_url", "changelog_url"] as const) {
-    if (def[key] != null) constraints[key] = def[key];
-  }
-  if (Object.keys(constraints).length > 0) payload.constraints = constraints;
-  if (opts.invokeUrl) {
-    payload.invoke_type = "http";
-    payload.invoke_url = opts.invokeUrl;
-  }
+  const payload = buildRegistryPayload(def, { invokeUrl: opts.invokeUrl });
+  if (opts.nameSuffix) payload.name = def.slug + opts.nameSuffix;
   return payload;
 }
 
@@ -111,6 +112,15 @@ export function probeManifest(raw: unknown): {
   if ("slug" in payload) errors.push("Engine request must not carry a client-set 'slug' key (engine rejects it)");
   const extra = Object.keys(payload).filter((k) => !ENGINE_REQUEST_ALLOWED.has(k as never));
   if (extra.length > 0) errors.push(`Engine request carries keys outside the engine whitelist: ${extra.join(", ")}`);
+  if (!ENGINE_CATEGORIES.has(parsed.data.category as never)) {
+    errors.push(`category '${parsed.data.category}' is outside the engine's enum`);
+  }
+  if (parsed.data.timeout_seconds > ENGINE_MAX_TIMEOUT_SECONDS) {
+    errors.push(`timeout_seconds ${parsed.data.timeout_seconds} exceeds the engine ceiling 86400`);
+  }
+  if (!ENGINE_NAME_PATTERN.test(String(payload.name))) {
+    errors.push(`engine name '${String(payload.name)}' does not match ${ENGINE_NAME_PATTERN}`);
+  }
   return {
     valid: errors.length === 0,
     errors,
@@ -156,6 +166,12 @@ async function runRegister(args: string[]): Promise<number> {
     return 2;
   }
 
+  const nameSuffix = flag(args, "--name-suffix") ?? "";
+  if (nameSuffix && !ENGINE_NAME_PATTERN.test(nameSuffix)) {
+    process.stderr.write(`Error: --name-suffix '${nameSuffix}' does not match ${ENGINE_NAME_PATTERN}\n`);
+    return 2;
+  }
+
   const useJson = args.includes("--json");
   const exit = (code: number, message: string, extra: Record<string, unknown> = {}): number => {
     const stream = code === 0 ? process.stdout : process.stderr;
@@ -180,7 +196,7 @@ async function runRegister(args: string[]): Promise<number> {
   const parsed = WorkflowNodeManifestSchema.parse(raw);
   const payload = buildEngineRequest(parsed, {
     invokeUrl: flag(args, "--invoke-url"),
-    nameSuffix: flag(args, "--name-suffix") ?? "",
+    nameSuffix,
   });
   const base = engineUrl.replace(/\/+$/, "") + "/api/workflows/nodes/";
   const headers = { "Content-Type": "application/json", "X-Service-Token": token };
@@ -246,6 +262,6 @@ export async function cliMain(argv: string[] = process.argv.slice(2)): Promise<n
   return usage();
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   cliMain().then((code) => process.exit(code));
 }

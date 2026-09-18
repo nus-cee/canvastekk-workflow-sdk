@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import re
 import shutil
 import sys
 from importlib.resources import as_file
@@ -126,54 +127,42 @@ _ENGINE_REQUEST_ALLOWED = frozenset(
 _ENGINE_REQUEST_REQUIRED = ("name", "version", "label", "description", "input_schema", "output_schema")
 
 
+_ENGINE_NAME_PATTERN = r"[a-zA-Z0-9_-]+"
+_ENGINE_CATEGORIES = frozenset(
+    {"control", "utility", "io", "conversion", "measurement", "geometry", "inspection", "ai", "custom"}
+)
+_ENGINE_MAX_TIMEOUT_SECONDS = 86400
+
+
 def _build_engine_request(definition, *, invoke_url: str | None = None, name_suffix: str = "") -> dict:
     """Map a canonical manifest to the engine registration request.
 
-    Vocabulary adapter (DA-2666 semantics): the manifest's ``slug`` is the
-    engine's ``name`` input; the manifest's display ``name`` is the engine's
-    ``label``. A client-sent ``slug`` key is NEVER included (the engine 422s
-    on it by design).
+    Delegates the field mapping to the shipped, engine-boundary-tested
+    ``build_registry_payload`` (single source of truth — the engine request
+    is ``extra="forbid"``), then applies the CLI-only name suffix.
     """
-    payload: dict = {
-        "name": definition.slug + name_suffix,
-        "label": definition.name,
-        "description": definition.description,
-        "version": definition.version,
-        "input_schema": definition.input_schema,
-        "output_schema": definition.output_schema,
-        "category": definition.category,
-        "token_cost": definition.token_cost,
-        "timeout_seconds": definition.timeout_seconds,
-    }
-    if definition.styles is not None:
-        payload["styles"] = definition.styles.model_dump()
-    if getattr(definition, "deprecation", None) is not None:
-        payload["deprecation"] = definition.deprecation.model_dump()
-    constraints = {
-        key: getattr(definition, key)
-        for key in ("minimum_sdk_version", "maximum_sdk_version", "docs_url", "changelog_url")
-        if getattr(definition, key, None) is not None
-    }
-    if constraints:
-        payload["constraints"] = constraints
-    if invoke_url:
-        payload["invoke_type"] = "http"
-        payload["invoke_url"] = invoke_url
+    from canvastekk_workflow_sdk.registry import build_registry_payload
+
+    payload = build_registry_payload(definition, invoke_url=invoke_url)
+    if name_suffix:
+        payload["name"] = definition.slug + name_suffix
     return payload
 
 
-def _probe_definition(definition) -> dict:
+def _probe_definition(definition, *, name_suffix: str = "") -> dict:
     """Offline registration probes: 'passes locally ⇔ passes registration'.
 
     Runs the manifest probes from ``_validate_definition`` (model format,
     draft-7 schemas, file-field extensions) plus the engine-request mirror:
     the mapped payload must carry exactly the required keys, no client-side
-    ``slug`` key, and no keys outside the engine whitelist.
+    ``slug`` key, no keys outside the engine whitelist, and values inside the
+    engine's request domain (category enum, timeout ceiling, name pattern —
+    mirroring the engine's RegisterWorkflowNodeRequest validators).
     """
     report = _validate_definition(definition)
     report["probes"] = ["manifest", "engine-request-mirror"]
 
-    payload = _build_engine_request(definition)
+    payload = _build_engine_request(definition, name_suffix=name_suffix)
     missing = [k for k in _ENGINE_REQUEST_REQUIRED if payload.get(k) in (None, "", [], {})]
     if missing:
         report["valid"] = False
@@ -185,6 +174,17 @@ def _probe_definition(definition) -> dict:
     if extra:
         report["valid"] = False
         report["errors"].append(f"Engine request carries keys outside the engine whitelist: {extra}")
+    if definition.category not in _ENGINE_CATEGORIES:
+        report["valid"] = False
+        report["errors"].append(
+            f"category {definition.category!r} is outside the engine's enum {_ENGINE_CATEGORIES}"
+        )
+    if definition.timeout_seconds > _ENGINE_MAX_TIMEOUT_SECONDS:
+        report["valid"] = False
+        report["errors"].append(f"timeout_seconds {definition.timeout_seconds} exceeds the engine ceiling 86400")
+    if not re.fullmatch(_ENGINE_NAME_PATTERN, str(payload.get("name", ""))):
+        report["valid"] = False
+        report["errors"].append(f"engine name {payload.get('name')!r} does not match {_ENGINE_NAME_PATTERN}")
     return report
 
 
@@ -230,6 +230,11 @@ def _run_register(args: list[str]) -> int:
         print("Error: CANVASTEKK_REGISTRY_TOKEN is not set (service credential)", file=sys.stderr)
         return 2
 
+    name_suffix = _flag("--name-suffix") or ""
+    if name_suffix and not re.fullmatch(_ENGINE_NAME_PATTERN, name_suffix):
+        print(f"Error: --name-suffix {name_suffix!r} does not match {_ENGINE_NAME_PATTERN}", file=sys.stderr)
+        return 2
+
     use_json = "--json" in args
     try:
         definition = _load_definition(module_path)
@@ -240,7 +245,7 @@ def _run_register(args: list[str]) -> int:
     payload = _build_engine_request(
         definition,
         invoke_url=_flag("--invoke-url"),
-        name_suffix=_flag("--name-suffix") or "",
+        name_suffix=name_suffix,
     )
     base = engine_url.rstrip("/") + "/api/workflows/nodes/"
 
@@ -272,7 +277,7 @@ def _run_register(args: list[str]) -> int:
     except (urllib.error.URLError, OSError) as e:
         return _exit(6, f"Network error reaching {base}: {e}")
 
-    if status not in (200, 201):
+    if not 200 <= status < 300:
         return _exit(5, f"Unexpected HTTP {status} from engine")
 
     try:
@@ -531,10 +536,15 @@ def main() -> None:
 
     if len(args) < 2 or args[1].startswith("--"):
         print("Error: module path required (e.g., handler:definition)", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(2 if args[0] == "probe" else 1)
 
     module_path = args[1]
     use_json = "--json" in args
+
+    # DA-2603: probe distinguishes usage/load failures (exit 2) from
+    # validation failures (exit 1) — parity with the ts CLI. validate keeps
+    # its historical single exit-1 contract.
+    load_fail_code = 2 if args[0] == "probe" else 1
 
     try:
         definition = _load_definition(module_path)
@@ -543,7 +553,7 @@ def main() -> None:
             print(json.dumps({"valid": False, "errors": [str(e)], "warnings": []}, indent=2))
         else:
             print(f"Error loading definition: {e}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(load_fail_code)
 
     try:
         report_fn = _validate_definition if args[0] == "validate" else _probe_definition
