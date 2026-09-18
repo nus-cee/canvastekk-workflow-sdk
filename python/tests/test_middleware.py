@@ -14,9 +14,9 @@ from canvastekk_workflow_sdk.middleware import LoggingMiddleware, TimingMiddlewa
 
 class EchoNode(BaseNode):
     definition = WorkflowNodeManifest(
-        name="echo",
+        slug="echo",
         version="1.0.0",
-        title="Echo",
+        name="Echo",
         description="Returns input unchanged",
         input_schema={"type": "object", "properties": {"message": {"type": "string"}}},
         output_schema={"type": "object", "properties": {"message": {"type": "string"}}},
@@ -28,9 +28,9 @@ class EchoNode(BaseNode):
 
 class FailingNode(BaseNode):
     definition = WorkflowNodeManifest(
-        name="failing",
+        slug="failing",
         version="1.0.0",
-        title="Failing",
+        name="Failing",
         description="Always fails",
         input_schema={"type": "object"},
         output_schema={"type": "object"},

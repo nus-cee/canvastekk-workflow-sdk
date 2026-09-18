@@ -10,9 +10,9 @@ from canvastekk_workflow_sdk.router import create_multi_node_app
 
 class EchoNode(BaseNode):
     definition = WorkflowNodeManifest(
-        name="echo",
+        slug="echo",
         version="1.0.0",
-        title="Echo",
+        name="Echo",
         description="Returns input unchanged",
         input_schema={"type": "object", "properties": {"message": {"type": "string"}}},
         output_schema={"type": "object", "properties": {"message": {"type": "string"}}},
@@ -24,9 +24,9 @@ class EchoNode(BaseNode):
 
 class ReverseNode(BaseNode):
     definition = WorkflowNodeManifest(
-        name="reverse",
+        slug="reverse",
         version="1.0.0",
-        title="Reverse",
+        name="Reverse",
         description="Reverses input string",
         input_schema={"type": "object", "properties": {"text": {"type": "string"}}},
         output_schema={"type": "object", "properties": {"result": {"type": "string"}}},
@@ -38,9 +38,9 @@ class ReverseNode(BaseNode):
 
 class UpperNode(BaseNode):
     definition = WorkflowNodeManifest(
-        name="upper",
+        slug="upper",
         version="1.0.0",
-        title="Upper",
+        name="Upper",
         description="Converts to uppercase",
         input_schema={"type": "object", "properties": {"text": {"type": "string"}}},
         output_schema={"type": "object", "properties": {"result": {"type": "string"}}},
@@ -130,13 +130,13 @@ class TestMultiNodeRouter:
         assert response1.status_code == 200
         data1 = response1.json()
         assert data1["id"] == "echo-v1.0.0"
-        assert data1["name"] == "echo"
+        assert data1["slug"] == "echo"
 
         response2 = client.get("/reverse/manifest")
         assert response2.status_code == 200
         data2 = response2.json()
         assert data2["id"] == "reverse-v1.0.0"
-        assert data2["name"] == "reverse"
+        assert data2["slug"] == "reverse"
 
     def test_each_nodes_execute_endpoint_works_under_prefix(self) -> None:
         """Test that each node's /execute endpoint works under prefix."""
@@ -253,13 +253,13 @@ class TestMultiNodeRouter:
         assert response1.status_code == 200
         data1 = response1.json()
         assert data1["id"] == "echo-v1.0.0"
-        assert data1["name"] == "echo"
+        assert data1["slug"] == "echo"
 
         response2 = client.get("/reverse/manifest")
         assert response2.status_code == 200
         data2 = response2.json()
         assert data2["id"] == "reverse-v1.0.0"
-        assert data2["name"] == "reverse"
+        assert data2["slug"] == "reverse"
 
     def test_global_dependencies_applied_to_all_nodes(self) -> None:
         """Test that global dependencies are applied to all nodes."""

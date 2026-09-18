@@ -208,7 +208,7 @@ def create_node_app(
             has_auth_dependency = True
 
     default_kwargs: dict[str, Any] = {
-        "title": node.definition.title,
+        "title": node.definition.name,
         "version": node.definition.version,
         "description": node.definition.description,
         "openapi_tags": _NODE_OPENAPI_TAGS,
@@ -437,7 +437,7 @@ def create_node_app(
         Get node's self-description (manifest).
 
         Returns the WorkflowNodeManifest which includes:
-        - Identity (id, name, version, title, description)
+        - Identity (id, slug, name, version, description)
         - Schema (input_schema, output_schema)
         - Cost (token_cost)
         - Retry defaults

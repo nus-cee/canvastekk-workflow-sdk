@@ -418,9 +418,9 @@ class TestWorkflowRunner:
 
 class EchoNode(BaseNode):
     definition = WorkflowNodeManifest(
-        name="echo",
+        slug="echo",
         version="1.0.0",
-        title="Echo",
+        name="Echo",
         description="Returns input message",
         input_schema={"type": "object"},
         output_schema={"type": "object", "properties": {"message": {"type": "string"}}},
@@ -432,9 +432,9 @@ class EchoNode(BaseNode):
 
 class FailingNode(BaseNode):
     definition = WorkflowNodeManifest(
-        name="failing",
+        slug="failing",
         version="1.0.0",
-        title="Failing",
+        name="Failing",
         description="Always fails",
         input_schema={"type": "object"},
         output_schema={"type": "object"},
@@ -446,9 +446,9 @@ class FailingNode(BaseNode):
 
 class FileWriterNode(BaseNode):
     definition = WorkflowNodeManifest(
-        name="file-writer",
+        slug="file-writer",
         version="1.0.0",
-        title="File Writer",
+        name="File Writer",
         description="Writes a file to output_dir",
         input_schema={"type": "object"},
         output_schema={
@@ -465,9 +465,9 @@ class FileWriterNode(BaseNode):
 
 class FileReaderNode(BaseNode):
     definition = WorkflowNodeManifest(
-        name="file-reader",
+        slug="file-reader",
         version="1.0.0",
-        title="File Reader",
+        name="File Reader",
         description="Reads a file from file_path input",
         input_schema={
             "type": "object",
@@ -486,9 +486,9 @@ class FileReaderNode(BaseNode):
 
 class OutputDirCaptureNode(BaseNode):
     definition = WorkflowNodeManifest(
-        name="dir-capture",
+        slug="dir-capture",
         version="1.0.0",
-        title="Dir Capture",
+        name="Dir Capture",
         description="Captures output_dir path in outputs",
         input_schema={"type": "object"},
         output_schema={
@@ -804,9 +804,9 @@ class TestPerNodeOutputSubdirs:
 
         class CollisionNode(BaseNode):
             definition = WorkflowNodeManifest(
-                name="collision",
+                slug="collision",
                 version="1.0.0",
-                title="Collision",
+                name="Collision",
                 description="Writes result.txt",
                 input_schema={"type": "object"},
                 output_schema={"type": "object"},

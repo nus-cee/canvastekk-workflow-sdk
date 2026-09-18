@@ -11,9 +11,9 @@ from canvastekk_workflow_sdk.observability import ExecutionMetric, MetricsCollec
 class EchoNode(BaseNode):
     definition = WorkflowNodeManifest(
         id="echo-v1.0.0",
-        name="echo",
+        slug="echo",
         version="1.0.0",
-        title="Echo",
+        name="Echo",
         description="Returns input unchanged",
         input_schema={"type": "object", "properties": {"message": {"type": "string"}}},
         output_schema={"type": "object", "properties": {"message": {"type": "string"}}},
@@ -26,9 +26,9 @@ class EchoNode(BaseNode):
 class FailingNode(BaseNode):
     definition = WorkflowNodeManifest(
         id="fail-v1.0.0",
-        name="fail",
+        slug="fail",
         version="1.0.0",
-        title="Fail",
+        name="Fail",
         description="Always fails",
         input_schema={"type": "object"},
         output_schema={"type": "object"},

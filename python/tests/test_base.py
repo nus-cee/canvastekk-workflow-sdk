@@ -18,9 +18,9 @@ class EchoNode(BaseNode):
     """Simple echo node for testing."""
 
     definition = WorkflowNodeManifest(
-        name="echo",
+        slug="echo",
         version="1.0.0",
-        title="Echo",
+        name="Echo",
         description="Returns input unchanged",
         input_schema={
             "type": "object",
@@ -40,9 +40,9 @@ class FailingNode(BaseNode):
     """Node that always fails for testing."""
 
     definition = WorkflowNodeManifest(
-        name="failing",
+        slug="failing",
         version="1.0.0",
-        title="Failing",
+        name="Failing",
         description="Always fails",
         input_schema={"type": "object"},
         output_schema={"type": "object"},
@@ -56,9 +56,9 @@ class HealthyNode(BaseNode):
     """Node with custom health checks."""
 
     definition = WorkflowNodeManifest(
-        name="healthy",
+        slug="healthy",
         version="1.0.0",
-        title="Healthy",
+        name="Healthy",
         description="Has custom health checks",
         input_schema={"type": "object"},
         output_schema={"type": "object"},
@@ -78,9 +78,9 @@ class NodeIOErrorNode(BaseNode):
     """Node that raises NodeIOError."""
 
     definition = WorkflowNodeManifest(
-        name="io-err",
+        slug="io-err",
         version="1.0.0",
-        title="IO Error",
+        name="IO Error",
         description="Raises IO error",
         input_schema={"type": "object"},
         output_schema={"type": "object"},
@@ -94,9 +94,9 @@ class NodeTimeoutErrorNode(BaseNode):
     """Node that raises NodeTimeoutError."""
 
     definition = WorkflowNodeManifest(
-        name="timeout-err",
+        slug="timeout-err",
         version="1.0.0",
-        title="Timeout Error",
+        name="Timeout Error",
         description="Raises timeout",
         input_schema={"type": "object"},
         output_schema={"type": "object"},
@@ -110,9 +110,9 @@ class TokenReportingNode(BaseNode):
     """Node that reports token usage via context."""
 
     definition = WorkflowNodeManifest(
-        name="token",
+        slug="token",
         version="1.0.0",
-        title="Token",
+        name="Token",
         description="Reports token usage",
         input_schema={"type": "object"},
         output_schema={"type": "object"},
@@ -128,9 +128,9 @@ class ValidatedNode(BaseNode):
     """Node with required input fields for validation testing."""
 
     definition = WorkflowNodeManifest(
-        name="validated",
+        slug="validated",
         version="1.0.0",
-        title="Validated",
+        name="Validated",
         description="Has required inputs",
         input_schema={
             "type": "object",
@@ -351,9 +351,9 @@ class OutputValidationNode(BaseNode):
     """Node with strict output schema for validation testing."""
 
     definition = WorkflowNodeManifest(
-        name="output-val",
+        slug="output-val",
         version="1.0.0",
-        title="Output Validation",
+        name="Output Validation",
         description="Has strict output schema",
         input_schema={
             "type": "object",
@@ -378,9 +378,9 @@ class OutputValidationErrorNode(BaseNode):
     """Node that returns invalid output type."""
 
     definition = WorkflowNodeManifest(
-        name="output-err",
+        slug="output-err",
         version="1.0.0",
-        title="Output Error",
+        name="Output Error",
         description="Returns invalid output",
         input_schema={"type": "object"},
         output_schema={
@@ -397,9 +397,9 @@ class OutputMissingRequiredNode(BaseNode):
     """Node that returns missing required field."""
 
     definition = WorkflowNodeManifest(
-        name="output-missing",
+        slug="output-missing",
         version="1.0.0",
-        title="Output Missing",
+        name="Output Missing",
         description="Returns missing required field",
         input_schema={"type": "object"},
         output_schema={
@@ -417,9 +417,9 @@ class TrivialOutputSchemaNode(BaseNode):
     """Node with trivial output schema."""
 
     definition = WorkflowNodeManifest(
-        name="trivial",
+        slug="trivial",
         version="1.0.0",
-        title="Trivial",
+        name="Trivial",
         description="Has trivial output schema",
         input_schema={"type": "object"},
         output_schema={"type": "object"},
@@ -489,9 +489,9 @@ class TestLifecycleHooks:
 
         class LifecycleNode(BaseNode):
             definition = WorkflowNodeManifest(
-                name="lifecycle",
+                slug="lifecycle",
                 version="1.0.0",
-                title="Lifecycle",
+                name="Lifecycle",
                 description="Tests lifecycle hooks",
                 input_schema={"type": "object"},
                 output_schema={"type": "object"},
@@ -531,9 +531,9 @@ class TestLifecycleHooks:
 
         class ShutdownNode(BaseNode):
             definition = WorkflowNodeManifest(
-                name="shutdown",
+                slug="shutdown",
                 version="1.0.0",
-                title="Shutdown",
+                name="Shutdown",
                 description="Tests shutdown hook",
                 input_schema={"type": "object"},
                 output_schema={"type": "object"},
@@ -577,9 +577,9 @@ class TestLifecycleHooks:
 
         class OrderedLifecycleNode(BaseNode):
             definition = WorkflowNodeManifest(
-                name="ordered",
+                slug="ordered",
                 version="1.0.0",
-                title="Ordered",
+                name="Ordered",
                 description="Tests hook order",
                 input_schema={"type": "object"},
                 output_schema={"type": "object"},
@@ -611,9 +611,9 @@ class TestLifecycleHooks:
 
         class FailingStartupNode(BaseNode):
             definition = WorkflowNodeManifest(
-                name="failing-startup",
+                slug="failing-startup",
                 version="1.0.0",
-                title="Failing Startup",
+                name="Failing Startup",
                 description="Tests startup exception",
                 input_schema={"type": "object"},
                 output_schema={"type": "object"},
@@ -641,9 +641,9 @@ class TestLifecycleHooks:
 
         class FailingShutdownNode(BaseNode):
             definition = WorkflowNodeManifest(
-                name="failing-shutdown",
+                slug="failing-shutdown",
                 version="1.0.0",
-                title="Failing Shutdown",
+                name="Failing Shutdown",
                 description="Tests shutdown exception",
                 input_schema={"type": "object"},
                 output_schema={"type": "object"},
@@ -671,9 +671,9 @@ class TestLifecycleHooks:
 
         class LifecycleTestNode(BaseNode):
             definition = WorkflowNodeManifest(
-                name="lifespan-test",
+                slug="lifespan-test",
                 version="1.0.0",
-                title="Lifespan Test",
+                name="Lifespan Test",
                 description="Tests lifespan with create_node_app",
                 input_schema={"type": "object"},
                 output_schema={"type": "object"},
@@ -712,9 +712,9 @@ class TestLifecycleHooks:
 
         class MultiLifecycleNode(BaseNode):
             definition = WorkflowNodeManifest(
-                name="multi-lifecycle",
+                slug="multi-lifecycle",
                 version="1.0.0",
-                title="Multi Lifecycle",
+                name="Multi Lifecycle",
                 description="Tests multiple contexts",
                 input_schema={"type": "object"},
                 output_schema={"type": "object"},

@@ -10,9 +10,9 @@ Quick Start:
 
     class MyNode(BaseNode):
         definition = WorkflowNodeManifest(
-            name="my-node",
+            slug="my-node",
             version="1.0.0",
-            title="My Node",
+            name="My Node",
             description="Does something useful",
             input_schema={"type": "object", "properties": {"input": {"type": "string"}}},
             output_schema={"type": "object", "properties": {"output": {"type": "string"}}},

@@ -10,6 +10,7 @@ from __future__ import annotations
 import enum
 import json
 import re
+import warnings
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
@@ -24,6 +25,12 @@ if TYPE_CHECKING:
 
 _SLUG_PATTERN = re.compile(r"^[a-z]([a-z0-9-]*[a-z0-9])?$")
 _SEMVER_PATTERN = re.compile(r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
+
+_LEGACY_DEPRECATION_MSG = (
+    "NodeDefinition legacy construction (name=<slug>, title=<display>) is deprecated; "
+    "use slug=<id> and name=<display>. The legacy mapping keeps working but will be removed "
+    "in a future major version."
+)
 
 # fmt: off
 ColorPreset = Literal[
@@ -174,13 +181,13 @@ class WorkflowNodeManifest(BaseModel):
     """
 
     # Identity
-    name: str = Field(description="Slug for routing (e.g., 'segmentation')")
+    slug: str = Field(description="Slug for routing and identity (e.g., 'segmentation')")
     version: str = Field(
         description="Semantic version string (e.g., '1.2.0'). Must follow X.Y.Z format. "
         "The engine uses this version directly. Re-registering with the same version "
         "and changed data is rejected — bump the version for any schema changes."
     )
-    title: str = Field(description="Human-readable title (e.g., 'Point Cloud Segmentation')")
+    name: str = Field(description="Human-readable display name (e.g., 'Point Cloud Segmentation')")
     description: str = Field(description="What this node does")
 
     # Schema (JSON Schema - language agnostic)
@@ -283,15 +290,70 @@ class WorkflowNodeManifest(BaseModel):
     @computed_field  # type: ignore[misc]
     @property
     def id(self) -> str:
-        """Return the node identifier in the format 'name-vversion'."""
-        return f"{self.name}-v{self.version}"
+        """Return the node identifier in the format 'slug-vversion'."""
+        return f"{self.slug}-v{self.version}"
 
-    @field_validator("name")
+    @model_validator(mode="before")
     @classmethod
-    def _validate_name(cls, v: str) -> str:
+    def _map_legacy_vocabulary(cls, data: Any) -> Any:
+        """Resolve the legacy ``name``/``title`` construction vocabulary (DA-2627).
+
+        The manifest's identity field is ``slug`` and its display field is ``name``.
+        Because ``name`` changed meaning, compatibility is resolved here — at
+        construction, deterministically — never on the wire:
+
+        - ``slug`` absent AND both ``name`` and ``title`` present (legacy call):
+          ``slug = name``, display ``name = title``, with a DeprecationWarning.
+        - ``name`` only (no ``slug``, no ``title``): error — ambiguous in both
+          vocabularies; the message disambiguates.
+        - ``slug`` present AND ``title`` present: ``title`` is ignored with a
+          warning (display comes from ``name``).
+        - A ``slug ?? name`` fallback is deliberately NOT implemented: it would
+          silently map a lowercase display name into identity.
+
+        Raises:
+            ValueError: On the ambiguous name-only construction.
+        """
+        if not isinstance(data, dict):
+            return data
+
+        has_slug = "slug" in data
+        has_name = "name" in data
+        has_title = "title" in data
+
+        if not has_slug and has_name and has_title:
+            warnings.warn(
+                _LEGACY_DEPRECATION_MSG,
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            data = dict(data)
+            data["slug"] = data.pop("name")
+            data["name"] = data.pop("title")
+        elif not has_slug and has_name and not has_title:
+            raise ValueError(
+                f"NodeDefinition received name={data['name']!r} without slug or title — ambiguous. "
+                "Identity goes in slug=; display goes in name=. "
+                "(Legacy name=<slug>+title=<display> construction still works.)"
+            )
+        elif has_slug and has_title:
+            warnings.warn(
+                "NodeDefinition received both slug= and title=; title is ignored "
+                "(display name comes from name=).",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            data = dict(data)
+            data.pop("title", None)
+
+        return data
+
+    @field_validator("slug")
+    @classmethod
+    def _validate_slug(cls, v: str) -> str:
         if not _SLUG_PATTERN.fullmatch(v):
             raise ValueError(
-                f"Node name must be a lowercase slug (alphanumeric and hyphens only, no leading/trailing hyphens). Got: '{v}'"
+                f"Node slug must be a lowercase slug (alphanumeric and hyphens only, no leading/trailing hyphens). Got: '{v}'"
             )
         return v
 
@@ -435,9 +497,10 @@ def export_definition(
     as a clean JSON file.
 
     Field mapping:
-        WorkflowNodeManifest.title  -> label
+        WorkflowNodeManifest.name (display) -> label
+        WorkflowNodeManifest.slug -> registry identity (via build_registry_payload)
         WorkflowNodeManifest.default_retry -> retry
-        WorkflowNodeManifest.id (computed) -> intentionally omitted; registry derives its own identifier
+        WorkflowNodeManifest.id (computed, slug-derived) -> intentionally omitted; registry derives its own identifier
         WorkflowNodeManifest.version -> included as the node's semantic version; same version + changed data is rejected by the engine
 
     Args:

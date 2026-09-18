@@ -17,7 +17,7 @@ from canvastekk_workflow_sdk.diff import ManifestDiff, diff_manifests
 def _manifest(**overrides: object) -> dict:
     """Build a minimal manifest dict with optional overrides."""
     base: dict = {
-        "name": "test-node",
+        "slug": "test-node",
         "version": "1.0.0",
         "input_schema": {"type": "object", "properties": {}, "required": []},
         "output_schema": {"type": "object", "properties": {}},
@@ -90,21 +90,21 @@ class TestNonBreakingClassification:
         assert any("new output" in entry and "extra" in entry for entry in diff.non_breaking_changes)
 
     def test_metadata_only_change_is_not_breaking(self) -> None:
-        old = _manifest(title="Old Title")
+        old = _manifest(name="Old Title")
         new = _manifest(version="1.0.1", title="New Title")
 
         diff = diff_manifests(old, new)
 
         assert diff.breaking is False
-        assert any("metadata" in entry and "title" in entry for entry in diff.non_breaking_changes)
+        assert any("metadata" in entry and "name" in entry for entry in diff.non_breaking_changes)
 
 
 class TestVersionRules:
     """Same-version drift and breaking-without-MAJOR are errors."""
 
     def test_same_version_with_change_is_error(self) -> None:
-        old = _manifest(title="Old")
-        new = _manifest(title="New")
+        old = _manifest(name="Old")
+        new = _manifest(name="New")
 
         diff = diff_manifests(old, new)
 
@@ -148,15 +148,15 @@ class TestErrorCases:
     """Malformed inputs surface as errors, not exceptions (where reasonable)."""
 
     def test_name_mismatch_is_error(self) -> None:
-        old = _manifest(name="old-node")
-        new = _manifest(name="new-node", version="2.0.0")
+        old = _manifest(slug="old-node")
+        new = _manifest(slug="new-node", version="2.0.0")
 
         diff = diff_manifests(old, new)
 
-        assert any("name mismatch" in entry for entry in diff.errors)
+        assert any("slug mismatch" in entry for entry in diff.errors)
 
     def test_missing_version_is_error(self) -> None:
-        old = {"name": "test-node", "input_schema": {}}
+        old = {"slug": "test-node", "input_schema": {}}
         new = _manifest(version="1.1.0")
 
         diff = diff_manifests(old, new)
@@ -199,8 +199,8 @@ class TestVersionDowngradeAndParseGating:
     """DA-1955 review fixes: downgrade detection + parsed-version error gating."""
 
     def test_version_downgrade_is_error(self) -> None:
-        old = {"name": "n", "version": "2.0.0", "input_schema": {}}
-        new = {"name": "n", "version": "1.0.0", "input_schema": {}}
+        old = {"slug": "n", "version": "2.0.0", "input_schema": {}}
+        new = {"slug": "n", "version": "1.0.0", "input_schema": {}}
         diff = diff_manifests(old, new)
 
         assert diff.errors == [
@@ -208,8 +208,8 @@ class TestVersionDowngradeAndParseGating:
         ]
 
     def test_unparsable_version_no_same_version_error(self) -> None:
-        old = {"name": "n", "version": "1.0", "input_schema": {}}
-        new = {"name": "n", "version": "1.0", "input_schema": {}, "title": "T"}
+        old = {"slug": "n", "version": "1.0", "input_schema": {}}
+        new = {"slug": "n", "version": "1.0", "input_schema": {}, "name": "T"}
         diff = diff_manifests(old, new)
 
         assert len(diff.errors) == 1
@@ -217,8 +217,8 @@ class TestVersionDowngradeAndParseGating:
         assert "same version" not in diff.errors[0]
 
     def test_missing_version_no_same_version_error(self) -> None:
-        old = {"name": "n", "input_schema": {}}
-        new = {"name": "n", "input_schema": {}, "title": "T"}
+        old = {"slug": "n", "input_schema": {}}
+        new = {"slug": "n", "input_schema": {}, "name": "T"}
         diff = diff_manifests(old, new)
 
         assert diff.errors == ["both manifests must carry a 'version' field"]

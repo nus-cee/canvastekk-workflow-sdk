@@ -434,12 +434,12 @@ class BaseNode(ABC):
         replacement = dep.replacement_slug or "unspecified"
         if dep.sunset_date is not None and datetime.now(UTC).date() > dep.sunset_date:
             raise NodeConfigurationError(
-                f"Node '{self.definition.name}' was sunset on {dep.sunset_date.isoformat()} "
+                f"Node '{self.definition.slug}' was sunset on {dep.sunset_date.isoformat()} "
                 f"and refuses to run; migrate to '{replacement}' ({dep.notice})"
             )
         logger.warning(
             "Node '%s' is deprecated (since %s): %s — migrate to '%s'",
-            self.definition.name,
+            self.definition.slug,
             dep.deprecated_at.isoformat() if dep.deprecated_at else "unknown date",
             dep.notice,
             replacement,
@@ -498,7 +498,7 @@ class BaseNode(ABC):
                 ExecutionMetric(
                     run_id=context.run_id,
                     node_id=context.node_id,
-                    node_name=self.definition.name,
+                    node_name=self.definition.slug,
                     status="pass",
                     duration_ms=duration_ms,
                     token_usage=token_usage,
@@ -592,7 +592,7 @@ class BaseNode(ABC):
             ExecutionMetric(
                 run_id=request.run_id,
                 node_id=request.node_id,
-                node_name=self.definition.name,
+                node_name=self.definition.slug,
                 status="fail",
                 duration_ms=duration_ms,
                 error_type=type(error).__name__,
