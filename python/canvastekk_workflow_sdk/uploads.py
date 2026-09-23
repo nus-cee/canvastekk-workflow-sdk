@@ -12,7 +12,7 @@ import os
 import threading
 import time
 import warnings
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
 import httpx
 from pydantic import BaseModel, Field
@@ -47,7 +47,7 @@ class UploadSession(BaseModel):
     ``status`` GET → ``{"upload_id", "uploaded_parts": [...]}``.
     """
 
-    kind: str = Field(
+    kind: Literal["multipart-upload-session"] = Field(
         default="multipart-upload-session",
         description="Discriminator; always 'multipart-upload-session'.",
     )
@@ -85,6 +85,12 @@ def _warn_legacy_presigned_upload() -> None:
     (the default warnings registry dedups by location — standard
     filtering is the ONLY silencing mechanism, no env flag). Operators
     get one ``logger.warning`` per process.
+
+    ``stacklevel=3`` blames the DIRECT caller of ``upload_file`` — in
+    production that is the router seam (``upload_outputs``), because
+    output uploads run in the router after ``execute()`` returns and
+    node-package frames are not in that stack; for direct callers the
+    blamed frame is their exact call site.
     """
     global _operator_warning_emitted
     warnings.warn(

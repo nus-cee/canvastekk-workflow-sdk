@@ -25,6 +25,7 @@ batches (DA-2882).
 from __future__ import annotations
 
 import logging
+import os
 import time
 from base64 import b64encode
 from concurrent.futures import ThreadPoolExecutor
@@ -48,10 +49,6 @@ _DEFAULT_RETRY_ATTEMPTS = 3
 _DEFAULT_RETRY_BACKOFFS: tuple[float, ...] = (1.0, 2.0)
 _DEFAULT_RESUME_ATTEMPTS = 1
 _DEFAULT_MAX_PARALLEL_PARTS = 4
-
-
-class MultipartUploadError(NodeIOError):
-    """A session-based multipart upload failed after retries/resume."""
 
 
 def _parse_etag(raw: str | None) -> str:
@@ -327,9 +324,12 @@ def upload_via_session(
             buffered bytes).
 
     Raises:
-        MultipartUploadError: On part-PUT failure (after retries and
-            resume) or local I/O failure — after the abort attempt.
-        NodeExecutionError: On initiate/complete control-plane failure.
+        NodeIOError: On part-PUT failure (after retries and resume) or
+            local I/O failure — after the abort attempt.
+        NodeExecutionError: On a malformed initiate bundle or part-count
+            mismatch. Raw ``httpx.HTTPStatusError`` on control-plane
+            non-2xx (the router converts any exception into
+            ``fail``/``UPLOAD_FAILED``, DA-1711).
     """
     size = _file_size(file_path)
     bundle = _initiate(session, size, content_type)
@@ -451,8 +451,6 @@ def upload_via_session(
 
 def _file_size(file_path: str) -> int:
     """Return the file's size, wrapping OS errors as :class:`NodeIOError`."""
-    import os
-
     try:
         return os.path.getsize(file_path)
     except OSError as exc:

@@ -17,6 +17,7 @@ import httpx
 import pytest
 
 from canvastekk_workflow_sdk import LegacyPresignedUploadWarning, UploadSession
+from canvastekk_workflow_sdk.exceptions import NodeIOError
 from canvastekk_workflow_sdk.multipart import upload_via_session
 from canvastekk_workflow_sdk.request import NodeExecutionRequest
 from canvastekk_workflow_sdk.uploads import S3PresignedUploader
@@ -148,6 +149,36 @@ class TestDeprecationWarning:
             warnings.filterwarnings("ignore", category=LegacyPresignedUploadWarning)
             uploader.upload_file(str(f), "https://presigned-3")
         assert not [w for w in silenced if issubclass(w.category, LegacyPresignedUploadWarning)]
+
+    def test_warning_deduped_per_call_site(self, tmp_path, monkeypatch):
+        """Under the DEFAULT filter the registry dedups by location:
+        two calls at one site → one warning; a second site → fires."""
+        f = tmp_path / "out.bin"
+        f.write_bytes(b"data")
+        monkeypatch.setattr(
+            httpx,
+            "put",
+            lambda url, **k: httpx.Response(200, request=httpx.Request("PUT", url)),
+        )
+        uploader = S3PresignedUploader()
+
+        def same_site() -> None:
+            uploader.upload_file(str(f), "https://p1")
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("default")
+            same_site()
+            same_site()
+        assert len(caught) == 1
+
+        def second_site() -> None:
+            uploader.upload_file(str(f), "https://p2")
+
+        with warnings.catch_warnings(record=True) as caught2:
+            warnings.simplefilter("default")
+            second_site()
+            second_site()
+        assert len(caught2) == 1
 
     def test_session_path_emits_no_warning(self, tmp_path, monkeypatch):
         f = tmp_path / "out.bin"
@@ -326,3 +357,43 @@ class TestMachinery:
             {"part_number": 1, "etag": "server-e1"},
             {"part_number": 2, "etag": "e2"},
         ]
+
+    def test_status_upload_id_mismatch_aborts_and_reraises_original(self, tmp_path, monkeypatch):
+        f = tmp_path / "big.bin"
+        f.write_bytes(b"m" * 8)
+        aborted: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            path = request.url.path
+            if path.endswith("/initiate"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "upload_id": "uid-real",
+                        "part_size": 4,
+                        "part_urls": ["https://s3/m1", "https://s3/m2"],
+                    },
+                )
+            if request.url.host == "s3":
+                return httpx.Response(500, text="part boom")
+            if path.endswith("/status"):
+                # Mismatched upload_id — resume impossible.
+                return httpx.Response(200, json={"upload_id": "uid-OTHER", "uploaded_parts": []})
+            if path.endswith("/abort"):
+                aborted.append("called")
+                return httpx.Response(200)
+            raise AssertionError(f"unexpected call: {request.url}")
+
+        self._wire(monkeypatch, handler)
+        with pytest.raises(NodeIOError) as exc_info:
+            upload_via_session(
+                _session(),
+                str(f),
+                max_parallel_parts=1,
+                retry_attempts=1,
+                resume_attempts=1,
+            )
+        # The ORIGINAL part failure is re-raised, not the mismatch error.
+        assert "S3 PUT failed for part 1" in str(exc_info.value)
+        assert "upload_id mismatch" not in str(exc_info.value)
+        assert aborted == ["called"]

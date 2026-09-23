@@ -102,21 +102,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _upload_to_presigned(file_path: str, target: UploadTarget) -> None:
-    """Upload a local file to an engine upload target (DA-2886).
-
-    Args:
-        file_path: Path to the local file to upload.
-        target: Presigned URL string (legacy) or upload-session
-            descriptor (multipart).
-
-    Raises:
-        httpx.HTTPStatusError: Legacy path — if the upload fails.
-        NodeIOError: Session path — after retries/resume/abort.
-    """
-    get_default_uploader().upload_file(file_path, target)
-
-
 def _upload_outputs_to_s3(
     response: NodeExecutionResponse,
     upload_urls: dict[str, UploadTarget],
