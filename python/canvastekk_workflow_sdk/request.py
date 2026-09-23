@@ -10,6 +10,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from canvastekk_workflow_sdk.uploads import UploadTarget
+
 
 class NodeExecutionRequest(BaseModel):
     """
@@ -43,10 +45,9 @@ class NodeExecutionRequest(BaseModel):
         for field_name in ("run_id", "node_id"):
             value = getattr(self, field_name)
             if ".." in value or value.strip(".") != value or not value.strip("."):
-                raise ValueError(
-                    f"{field_name} must not contain dot segments (got {value!r})"
-                )
+                raise ValueError(f"{field_name} must not contain dot segments (got {value!r})")
         return self
+
     inputs: dict[str, Any] = Field(
         default_factory=dict,
         description="Input values (may include signed URLs for file access)",
@@ -66,9 +67,13 @@ class NodeExecutionRequest(BaseModel):
         default=None,
         description="For async execution - URL to POST result to when complete",
     )
-    output_upload_url: dict[str, str] | None = Field(
+    output_upload_url: dict[str, UploadTarget] | None = Field(
         default=None,
-        description="Mapping of output field name to pre-signed S3 PUT URL for uploading output files",
+        description=(
+            "Mapping of output field name to an upload target: a pre-signed "
+            "S3 PUT URL string (legacy, deprecated) or a multipart upload "
+            "session descriptor (DA-2886/DA-2887)"
+        ),
     )
 
     model_config = ConfigDict(

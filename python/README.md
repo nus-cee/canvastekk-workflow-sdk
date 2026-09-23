@@ -223,7 +223,7 @@ The payload sent to `POST /execute`:
 | `node_id` | `str` | Yes | Node instance ID in the workflow |
 | `inputs` | `dict` | No | Input values (validated against `input_schema`) |
 | `callback_url` | `str` | No | URL to POST result to (for async execution) |
-| `output_upload_url` | `dict[str, str]` | No | Mapping of output field name to pre-signed S3 PUT URL |
+| `output_upload_url` | `dict[str, str \| dict]` | No | Mapping of output field name to an upload target: pre-signed S3 PUT URL string (legacy, deprecated) or multipart upload-session descriptor (see [Output Upload](#output-upload)) |
 | `account_id` | `int \| None` | No | Active account ID — **engine-controlled**: the SDK sets it exclusively from the `X-Account-Id` request header; any body-supplied value is stripped. Bounds: 1…2⁶³−1 |
 
 ### X-Account-Id header (v0.24.0+)
@@ -450,7 +450,26 @@ def execute(self, inputs: dict, context: ExecutionContext) -> dict:
 
 ### Output Upload
 
-The engine provides presigned PUT URLs via the `output_upload_url` field in the request. The SDK uploads file outputs automatically after successful execution:
+The engine provides upload targets via the `output_upload_url` field in the request. The SDK uploads file outputs automatically after successful execution. A target is either:
+
+- **Plain presigned PUT URL string (legacy, deprecated)** — single PUT with the S3 5 GB ceiling. Emits a per-call-site `LegacyPresignedUploadWarning` (`DeprecationWarning` subclass; filter with `warnings.filterwarnings("ignore", category=LegacyPresignedUploadWarning)`). Removed in SDK v1.0 — upgrade the engine (DA-2887) to stop seeing it.
+- **Multipart upload-session descriptor (v0.29+)** — the engine's multipart lane. The SDK lazily redeems the session token, PUTs parts in bounded parallel batches with per-part `Content-MD5`, retries per part, resumes from server-side upload status after a failure, and aborts cleanly. No size ceiling beyond the engine's own part policy; node code needs **zero changes** (the router, not the developer, performs uploads).
+
+Session descriptor wire contract (snake_case, matching the execute wire):
+
+```json
+{
+  "kind": "multipart-upload-session",
+  "session_token": "<opaque, TTL-bound>",
+  "initiate_url": "POST {size, content_type} -> {upload_id, part_size, part_urls: [...]}",
+  "complete_url": "POST {upload_id, parts: [{part_number, etag}]} -> 200",
+  "abort_url": "POST {upload_id} (best-effort)",
+  "status_url": "GET -> {upload_id, uploaded_parts: [...]}",
+  "expires_at": "<ISO-8601, informational>"
+}
+```
+
+Failure semantics are unchanged from DA-1711: a terminal upload failure produces `fail`/`UPLOAD_FAILED` at the router layer (outside `ErrorOutputNode`).
 
 ```python
 definition = WorkflowNodeManifest(
