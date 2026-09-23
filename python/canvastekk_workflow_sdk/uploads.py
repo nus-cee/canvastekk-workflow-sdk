@@ -56,9 +56,7 @@ class UploadSession(BaseModel):
     complete_url: str
     abort_url: str
     status_url: str
-    expires_at: str | None = Field(
-        default=None, description="ISO-8601 expiry (informational)."
-    )
+    expires_at: str | None = Field(default=None, description="ISO-8601 expiry (informational).")
 
 
 #: An upload target: legacy presigned-URL string or session descriptor.
@@ -105,7 +103,6 @@ def _warn_legacy_presigned_upload() -> None:
                 "yet provide multipart upload sessions (DA-2887). SDK path "
                 "removal target: v1.0."
             )
-
 
 
 @runtime_checkable
@@ -285,9 +282,7 @@ class S3PresignedUploader:
             value = response.outputs[field_name]
             if not isinstance(value, str):
                 logger.error("Output field '%s' value is not a string: %s", field_name, type(value).__name__)
-                raise NodeIOError(
-                    f"Output field '{field_name}' value is not a string: {type(value).__name__}"
-                )
+                raise NodeIOError(f"Output field '{field_name}' value is not a string: {type(value).__name__}")
 
             if not os.path.isfile(value):
                 logger.error("Output field '%s' value is not a local file: %s", field_name, value)

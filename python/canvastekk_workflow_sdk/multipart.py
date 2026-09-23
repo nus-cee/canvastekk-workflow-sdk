@@ -71,9 +71,7 @@ def _parse_etag(raw: str | None) -> str:
         NodeExecutionError: If ``raw`` is ``None`` or empty after cleaning.
     """
     if not raw:
-        raise NodeExecutionError(
-            "S3 part PUT returned no ETag — cannot confirm multipart upload"
-        )
+        raise NodeExecutionError("S3 part PUT returned no ETag — cannot confirm multipart upload")
     cleaned = raw.strip()
     if cleaned.startswith("W/"):
         cleaned = cleaned[2:]
@@ -112,8 +110,7 @@ def _read_part_chunk(
     chunk = fh.read(part_size)
     if not chunk:
         raise NodeIOError(
-            f"file shrank during upload: part {part_number} read 0 bytes "
-            f"from {file_path} at offset {offset}",
+            f"file shrank during upload: part {part_number} read 0 bytes from {file_path} at offset {offset}",
             path=file_path,
         )
     return chunk
@@ -171,11 +168,7 @@ def _put_one_part(
         except httpx.HTTPError as exc:
             last_exc = exc
             if attempt < retry_attempts:
-                backoff = (
-                    retry_backoffs[attempt - 1]
-                    if attempt - 1 < len(retry_backoffs)
-                    else retry_backoffs[-1]
-                )
+                backoff = retry_backoffs[attempt - 1] if attempt - 1 < len(retry_backoffs) else retry_backoffs[-1]
                 logger.warning(
                     "S3 part %d/%d PUT attempt %d failed: %s — retrying in %.1fs",
                     part_number,
@@ -194,8 +187,7 @@ def _put_one_part(
                 if body:
                     detail = f" — {body}"
             raise NodeIOError(
-                f"S3 PUT failed for part {part_number}/{total_parts} after "
-                f"{retry_attempts} attempts: {exc}{detail}",
+                f"S3 PUT failed for part {part_number}/{total_parts} after {retry_attempts} attempts: {exc}{detail}",
                 path=file_path,
             ) from exc
 
@@ -253,15 +245,13 @@ def _reconcile_resume(
             status = res.json()
     except Exception as exc:
         logger.warning(
-            "upload-status query failed during resume: %s — cannot resume, "
-            "failing the upload",
+            "upload-status query failed during resume: %s — cannot resume, failing the upload",
             exc,
         )
         raise failure from exc
     if status.get("upload_id") != upload_id:
         logger.warning(
-            "upload-status upload_id mismatch (expected %s, got %s) — cannot "
-            "resume, failing the upload",
+            "upload-status upload_id mismatch (expected %s, got %s) — cannot resume, failing the upload",
             upload_id,
             status.get("upload_id"),
         )
@@ -271,9 +261,7 @@ def _reconcile_resume(
         number = part.get("part_number")
         if number in part_numbers:
             confirmed_by_number[number] = part
-    confirmed = sorted(
-        confirmed_by_number.values(), key=lambda part: part["part_number"]
-    )
+    confirmed = sorted(confirmed_by_number.values(), key=lambda part: part["part_number"])
     remaining = sorted(part_numbers - confirmed_by_number.keys())
     return confirmed, remaining
 
@@ -351,15 +339,11 @@ def upload_via_session(
     part_numbers = list(range(1, len(part_urls) + 1))
     total_parts = len(part_numbers)
     if total_parts == 0:
-        raise NodeExecutionError(
-            f"engine returned 0 part URLs for {file_path} ({size} bytes) — "
-            "cannot upload"
-        )
+        raise NodeExecutionError(f"engine returned 0 part URLs for {file_path} ({size} bytes) — cannot upload")
     url_by_number = dict(zip(part_numbers, part_urls, strict=True))
 
     logger.info(
-        "Starting multipart session upload file=%s size=%d parts=%d "
-        "part_size=%d",
+        "Starting multipart session upload file=%s size=%d parts=%d part_size=%d",
         file_path,
         size,
         total_parts,
@@ -398,10 +382,7 @@ def upload_via_session(
                     # the only place fh is touched. A local read failure
                     # (file shrank) is NOT resumable; it propagates to the
                     # abort path below.
-                    chunks = [
-                        _read_part_chunk(fh, n, part_size, file_path)
-                        for n in batch
-                    ]
+                    chunks = [_read_part_chunk(fh, n, part_size, file_path) for n in batch]
                     try:
                         # Executor.map preserves input order; the memory
                         # ceiling is batch_size × part_size buffered.
@@ -456,8 +437,7 @@ def upload_via_session(
         key=lambda part: part["part_number"],
     )
     logger.info(
-        "All %d parts uploaded — completing multipart session upload "
-        "(upload_id=%s)",
+        "All %d parts uploaded — completing multipart session upload (upload_id=%s)",
         total_parts,
         upload_id,
     )
@@ -494,16 +474,8 @@ def _initiate(session: UploadSession, size: int, content_type: str) -> dict[str,
         try:
             bundle = res.json()
         except ValueError as exc:
-            raise NodeExecutionError(
-                f"initiate response is not JSON: {exc}"
-            ) from exc
-    missing = [
-        k
-        for k in ("upload_id", "part_size", "part_urls")
-        if not bundle.get(k)
-    ]
+            raise NodeExecutionError(f"initiate response is not JSON: {exc}") from exc
+    missing = [k for k in ("upload_id", "part_size", "part_urls") if not bundle.get(k)]
     if missing:
-        raise NodeExecutionError(
-            f"initiate response missing fields: {', '.join(missing)}"
-        )
+        raise NodeExecutionError(f"initiate response missing fields: {', '.join(missing)}")
     return bundle

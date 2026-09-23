@@ -45,10 +45,9 @@ class NodeExecutionRequest(BaseModel):
         for field_name in ("run_id", "node_id"):
             value = getattr(self, field_name)
             if ".." in value or value.strip(".") != value or not value.strip("."):
-                raise ValueError(
-                    f"{field_name} must not contain dot segments (got {value!r})"
-                )
+                raise ValueError(f"{field_name} must not contain dot segments (got {value!r})")
         return self
+
     inputs: dict[str, Any] = Field(
         default_factory=dict,
         description="Input values (may include signed URLs for file access)",

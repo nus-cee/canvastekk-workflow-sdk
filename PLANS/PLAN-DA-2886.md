@@ -107,3 +107,7 @@ snake_case to match the execute-request wire (`output_upload_url` itself is snak
 - **Schema drift between SDK and engine implementations** — mitigated by the Wire Contract block (the documented source both tickets code against) + DA-2887 building immediately after against this module.
 - **Warnings spam in node packages** — default-filter dedup is per (message, category, module, lineno); the operator log is once-per-process with a lock.
 - **Port fidelity** — the nodes machinery is 925-test-pinned; porting verbatim (renames only: CDS client → session URLs) and re-pinning each behavior in SDK tests.
+
+## Gate Trace
+
+- GATE 2d8655f tier=full ruff="check clean (post-format on touched files)" pytest="717 passed (706 + 11 new)" note="machinery ported from nodes cds_multipart; contract documented in PLAN Wire Contract + README + author guide"

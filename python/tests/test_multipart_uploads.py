@@ -147,9 +147,7 @@ class TestDeprecationWarning:
         with warnings.catch_warnings(record=True) as silenced:
             warnings.filterwarnings("ignore", category=LegacyPresignedUploadWarning)
             uploader.upload_file(str(f), "https://presigned-3")
-        assert not [
-            w for w in silenced if issubclass(w.category, LegacyPresignedUploadWarning)
-        ]
+        assert not [w for w in silenced if issubclass(w.category, LegacyPresignedUploadWarning)]
 
     def test_session_path_emits_no_warning(self, tmp_path, monkeypatch):
         f = tmp_path / "out.bin"
