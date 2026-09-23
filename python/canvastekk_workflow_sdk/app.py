@@ -34,7 +34,7 @@ from canvastekk_workflow_sdk.logging import configure_logging
 from canvastekk_workflow_sdk.middleware import SDKVersionMiddleware
 from canvastekk_workflow_sdk.request import NodeExecutionRequest
 from canvastekk_workflow_sdk.response import HealthResponse, NodeExecutionResponse
-from canvastekk_workflow_sdk.uploads import get_default_uploader
+from canvastekk_workflow_sdk.uploads import UploadTarget, get_default_uploader
 
 # Registry of cancel events for in-flight timed executions (cooperative
 # cancellation — see BaseNode._set_cancel_event / context.cancel_event).
@@ -102,33 +102,34 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _upload_to_presigned(file_path: str, presigned_url: str) -> None:
-    """Upload a local file to an S3 pre-signed PUT URL.
-
-    Uses httpx for HTTP requests.
+def _upload_to_presigned(file_path: str, target: UploadTarget) -> None:
+    """Upload a local file to an engine upload target (DA-2886).
 
     Args:
         file_path: Path to the local file to upload.
-        presigned_url: Pre-signed S3 PUT URL.
+        target: Presigned URL string (legacy) or upload-session
+            descriptor (multipart).
 
     Raises:
-        httpx.HTTPStatusError: If the upload fails.
+        httpx.HTTPStatusError: Legacy path — if the upload fails.
+        NodeIOError: Session path — after retries/resume/abort.
     """
-    get_default_uploader().upload_file(file_path, presigned_url)
+    get_default_uploader().upload_file(file_path, target)
 
 
 def _upload_outputs_to_s3(
     response: NodeExecutionResponse,
-    upload_urls: dict[str, str],
+    upload_urls: dict[str, UploadTarget],
     file_output_fields: list[str],
 ) -> None:
-    """Upload file output files to S3 via pre-signed URLs.
+    """Upload file outputs via engine upload targets (DA-2886).
 
     Delegates to the default ``S3PresignedUploader`` instance.
 
     Args:
         response: The node execution response containing output values.
-        upload_urls: Mapping of output field name to pre-signed PUT URL.
+        upload_urls: Mapping of output field name to upload target
+            (presigned URL string or session descriptor).
         file_output_fields: Output field names that produce files.
     """
     get_default_uploader().upload_outputs(response, upload_urls, file_output_fields)

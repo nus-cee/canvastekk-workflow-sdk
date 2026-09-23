@@ -85,7 +85,14 @@ from canvastekk_workflow_sdk.request import NodeExecutionRequest
 from canvastekk_workflow_sdk.response import HealthResponse, NodeExecutionResponse
 from canvastekk_workflow_sdk.router import create_multi_node_app
 from canvastekk_workflow_sdk.testing import LocalFileServer, serve_files
-from canvastekk_workflow_sdk.uploads import OutputUploader, S3PresignedUploader, get_default_uploader
+from canvastekk_workflow_sdk.uploads import (
+    LegacyPresignedUploadWarning,
+    OutputUploader,
+    S3PresignedUploader,
+    UploadSession,
+    UploadTarget,
+    get_default_uploader,
+)
 from canvastekk_workflow_sdk.workflow import (
     EdgeType,
     HttpExecutor,
@@ -141,6 +148,9 @@ __all__ = [
     "RegistrationError",
     "RetryConfig",
     "S3PresignedUploader",
+    "UploadSession",
+    "UploadTarget",
+    "LegacyPresignedUploadWarning",
     "SDKVersionMiddleware",
     "StructuredJsonFormatter",
     "TimingMiddleware",
