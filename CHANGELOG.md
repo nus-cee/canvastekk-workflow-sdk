@@ -2,11 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.29.0] - 2026-09-23
+
+### Features
+
+- **uploads**: Multipart session uploader + legacy single-PUT deprecation [DA-2886] (#71)
+
+
 ## [0.28.2] - 2026-09-18
 
 ### Miscellaneous Tasks
 
 - **release**: Attach TypeScript tarball to GitHub Releases [DA-2677]
+- **release**: Prepare v0.28.2
 
 
 ## [0.28.1] - 2026-09-18
