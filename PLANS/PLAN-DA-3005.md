@@ -1,4 +1,4 @@
-# PLAN: Document UploadSession file-input lane in node skills — canvastekk-workflow-sdk
+# PLAN: Document UploadSession file-output upload lane in node skills — canvastekk-workflow-sdk
 
 **Branch**: feat/DA-3005
 **Issue**: https://betekk.atlassian.net/browse/DA-3005
@@ -9,7 +9,7 @@
 - [x] Both bundled skills document the `UploadTarget = str | UploadSession` union (`uploads.py:63`): engine-minted `UploadSession` (multipart standard, DA-2885/2886) vs legacy presigned-PUT string (deprecated, `LegacyPresignedUploadWarning`, removed in v1.0)
 - [x] Skills teach pass-through discipline: never assume the target is a string; never construct `UploadSession` manually
 - [x] Repo mirrors updated in lockstep (byte-identical to bundled); frontmatter untouched (exactly `name` + `description`)
-- [ ] Gates genuinely green: full pytest (deps provisioned via `poetry install`), ruff, `poetry build`
+- [x] Gates genuinely green: full pytest (deps provisioned via `poetry install`), ruff, `poetry build`
 
 ## Dependency & Consumer Map
 
@@ -60,3 +60,9 @@ DA-3003 (resync) — merged (b3a5254) so edits land on already-synced copies.
 ## Gate trace
 
 GATE reviewfix tier=full lint=t typecheck=- build=t unit=t e2e=- (docs-only content change; ruff pass; full suite 721 passed with deps provisioned; wheel built)
+
+- [x] **1.3** (review fix) Warning-frequency wording (registry-dedup), line-218 mapping comment, silencing import, PLAN title
+    — **Why:** "each use emits" contradicts uploads.py:84-87 dedup; :218 was stale presigned-only; snippet lacked import path
+    — **Done when:** all copies consistent, dedup wording accurate, PLAN title correct
+    — **Consumers affected:** docs readers
+    — **Done:** applied to canonical + mirror (byte-parity preserved); PLAN ticked; files: 2 SKILL.md pairs + PLAN; fixes: review WARN 1 + NOTEs
