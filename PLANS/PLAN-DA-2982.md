@@ -48,18 +48,26 @@
     — **Done:** `grep -in "subagent|opencode|.claude|openai codex"` over all four bodies → zero hits; no fallback lines needed; files: none; fixes: none
 
 ### Phase 2: Flip scaffold code and docs
-- [ ] **2.1** Change `_init_skills` destination to `.agents/skills` in `python/canvastekk_workflow_sdk/__main__.py` (docstrings at ~355/358, dest at ~367, CLI help wording at ~520)
+- [x] **2.1** Change `_init_skills` destination to `.agents/skills` in `python/canvastekk_workflow_sdk/__main__.py` (docstrings at ~355/358, dest at ~367, CLI help wording at ~520)
     — **Why:** otherwise `sdk init` keeps scaffolding the dead `.opencode/skills` location in consumer projects
     — **Done when:** `git grep -n "opencode.*skills" python/` returns no `.opencode/skills` dest; new dest is `.agents/skills`
     — **Consumers affected:** CLI `init` users
-- [ ] **2.2** Update `README.md` references (layout tree ~385, manual install cp commands ~405-406) to `.agents/skills`
+    — **Done:** dest flipped to `target_dir / ".agents" / "skills"`; docstring + CLI help reworded harness-neutral; files: `python/canvastekk_workflow_sdk/__main__.py`; fixes: none
+- [x] **2.2** Update `README.md` references (layout tree ~385, manual install cp commands ~405-406) to `.agents/skills`
     — **Why:** instructions must match the shipped reality
     — **Done when:** `rg '\.opencode/skills' README.md` is empty
     — **Consumers affected:** developers
-- [ ] **2.3** Repo-wide residual check: `git grep -n '\.opencode/skills'` over tracked files excluding `PLANS/`
+    — **Done:** tree + global-copy commands now target `.agents/skills` / `~/.agents/skills` (shared by OpenCode + pi); "OpenCode-compatible" prose line neutralized to Agent Skills standard; files: `README.md`; fixes: none
+- [x] **2.3** Repo-wide residual check: `git grep -n '\.opencode/skills'` over tracked files excluding `PLANS/`
     — **Why:** catches any reference the two steps above missed
     — **Done when:** zero hits outside `PLANS/`
     — **Consumers affected:** none
+    — **Done:** zero hits (exit 1); files: none; fixes: none
+
+## Gate trace
+
+GATE d4f313f tier=light lint=t typecheck=- build=- unit=inconclusive e2e=- (Phase 1: md-only after body-restore fix; ruff pass)
+GATE phase2 tier=light lint=t typecheck=- build=- unit=inconclusive e2e=- (ruff pass; py_compile pass; pytest INCONCLUSIVE: all 25 test modules fail collection on missing ambient deps — identical on pristine origin/main; change is string-literal-only)
 
 ### Phase 3: Gates and verification
 - [ ] **3.1** Run repo gates: `ruff check python` + `pytest` (from `python/`)

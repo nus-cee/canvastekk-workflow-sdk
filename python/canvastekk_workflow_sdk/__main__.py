@@ -352,10 +352,10 @@ def _get_bundled_skills_dir():
 
 
 def _init_skills(target_dir: Path, *, include_agents_md: bool = False, force: bool = False) -> None:
-    """Copy bundled skill files into *target_dir*/.opencode/skills/.
+    """Copy bundled skill files into *target_dir*/.agents/skills/.
 
     Args:
-        target_dir: Project root where .opencode/ will be created.
+        target_dir: Project root where .agents/ will be created.
         include_agents_md: Also write AGENTS.md in *target_dir*.
         force: Overwrite existing files without prompting.
     """
@@ -364,7 +364,7 @@ def _init_skills(target_dir: Path, *, include_agents_md: bool = False, force: bo
             print("Error: bundled skills not found in package", file=sys.stderr)
             sys.exit(1)
 
-        skills_dest = target_dir / ".opencode" / "skills"
+        skills_dest = target_dir / ".agents" / "skills"
         created: list[str] = []
         skipped: list[str] = []
 
@@ -517,7 +517,7 @@ def main() -> None:
 
     Supports:
       ``validate <module:attribute> [--json]`` — validate a node manifest.
-      ``init [--agents-md] [--force]`` — scaffold opencode skills into your project.
+      ``init [--agents-md] [--force]`` — scaffold agent skills into your project (.agents/skills).
       ``--version`` — print SDK version.
       ``--help`` — print usage information.
     """
