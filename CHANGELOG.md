@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.30.0] - 2026-09-25
+
+### Features
+
+- **python**: Return freed heap to OS at end of node invocation (DA-3009) (#76)
+
+
 ## [0.29.4] - 2026-09-25
 
 ### Documentation
 
 - **skills**: Document UploadSession upload-target lane in node skills (DA-3005) (#75)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.29.4
 
 
 ## [0.29.3] - 2026-09-25
