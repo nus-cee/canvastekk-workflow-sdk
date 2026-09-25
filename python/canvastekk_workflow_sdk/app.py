@@ -73,6 +73,10 @@ def _release_freed_heap() -> None:
     ``gc.collect()`` + ``malloc_trim(0)`` returns the freed heap once per
     execution. Silent no-op off glibc;
     ``CANVASTEKK_SDK_MEMORY_TRIM=0`` opts out.
+
+    The unlocked module-global memoization below is deliberately race-tolerant:
+    worst case under concurrent first executions is one redundant dlopen or
+    one invocation skipping its trim — both self-heal on the next call.
     """
     global _LIBC_HANDLE, _LIBC_RESOLVED
     if os.environ.get("CANVASTEKK_SDK_MEMORY_TRIM", "1").strip().lower() in {"0", "false", "no"}:

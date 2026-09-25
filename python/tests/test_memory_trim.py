@@ -96,13 +96,14 @@ class TestReleaseFreedHeap:
         fake = _FakeLibc()
         with (
             patch("ctypes.util.find_library", return_value="libc.so.6"),
-            patch("ctypes.CDLL", return_value=fake),
+            patch("ctypes.CDLL", return_value=fake) as fake_cdll,
             patch.object(app_module.gc, "collect") as gc_collect,
         ):
             app_module._release_freed_heap()
             app_module._release_freed_heap()
         gc_collect.assert_called()
-        assert fake.calls == 2  # each call trims; loader ran once (memoized)
+        fake_cdll.assert_called_once()  # loader memoized — dlopen cost paid once
+        assert fake.calls == 2  # each call trims
 
     def test_missing_malloc_trim_symbol_disables_trim(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("CANVASTEKK_SDK_MEMORY_TRIM", raising=False)
@@ -167,6 +168,37 @@ class TestExecuteTrimsExactlyOnce:
         # The SDK converts node errors to a fail response (HTTP 200, status="fail")
         assert response.status_code == 200
         assert response.json()["status"] == "fail"
+        assert calls == [1]
+
+    def test_timeout_path_trims_once(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """NodeTimeoutError propagates through the finally — the production
+        poisoning scenario (heavy invocation outlives its budget)."""
+        calls: list[int] = []
+        monkeypatch.setattr(app_module, "_release_freed_heap", lambda: calls.append(1))
+
+        class SlowNode(BaseNode):
+            definition = WorkflowNodeManifest(
+                slug="slow-trim",
+                version="1.0.0",
+                name="SlowTrim",
+                description="Sleeps past its budget",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+                timeout_seconds=0.2,
+            )
+
+            def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
+                import time
+
+                time.sleep(1.0)
+                return {}
+
+        client = TestClient(create_node_app(SlowNode()), raise_server_exceptions=False)
+        response = client.post(
+            "/execute",
+            json={"run_id": "test-run", "node_id": "test-node", "inputs": {}},
+        )
+        assert response.status_code >= 400
         assert calls == [1]
 
     def test_validation_short_circuit_does_not_trim(self, monkeypatch: pytest.MonkeyPatch) -> None:

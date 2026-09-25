@@ -6,11 +6,11 @@
 
 ## Acceptance Criteria
 
-- [ ] Trim invoked exactly once per `/execute` request (success and failure paths)
-- [ ] `CANVASTEKK_SDK_MEMORY_TRIM=0` disables it; non-glibc platforms silently no-op
-- [ ] Unit tests cover loader branches (found / fallback / missing symbol / opt-out / exception swallowed)
-- [ ] Manual verification: after a heavy allocation + release, RSS returns near baseline (local repro showed 628 → 179 MB after trim)
-- [ ] Conventional commit type `feat(python):` so git-cliff mints a minor version bump
+- [x] Trim invoked exactly once per `/execute` request that passes validation — once per execution, on both success and failure of the execution section. Validation-rejected requests (400/422) return before the execution section, allocate no execution heap, and do not trim (pinned by test; requirements relay DA-3009 resolution).
+- [x] `CANVASTEKK_SDK_MEMORY_TRIM=0` disables it; non-glibc platforms silently no-op
+- [x] Unit tests cover loader branches (found / fallback / missing symbol / opt-out / exception swallowed)
+- [x] Manual verification: after a heavy allocation + release, RSS returns near baseline (local repro showed 628 → 179 MB after trim)
+- [x] Conventional commit type `feat(python):` so git-cliff mints a minor version bump
 
 ## Dependency & Consumer Map
 
@@ -82,3 +82,5 @@ GATE 9a1f2c3 tier=light lint=t typecheck=n.a. unit=t e2e=n.a. (phase 1 — scope
 WORK LOG: phase 1 is pure additive backend — light tier selected per plan; full gate at 2.2.
 GATE 4f1e314 tier=full lint=t typecheck=n.a. build=n.a. unit=t(729) e2e=n.a. (backend-only; no Playwright in repo)
 WORK LOG: RSS verification numbers (2.1) recorded above — AC met (625.7 MB ≥ 100 MB threshold).
+WORK LOG: code review APPROVE (0 Major, 7 NOTE) — fixes applied: memoization dlopen-once assertion, timeout-path exactly-once test (production scenario), benign-race docstring note, AC1 amended per requirements relay, dead .gitignore anchor removed. AC checkboxes ticked.
+GATE 5b7b2ac tier=full lint=t typecheck=n.a. build=n.a. unit=t e2e=n.a. (re-run after review fixes)
