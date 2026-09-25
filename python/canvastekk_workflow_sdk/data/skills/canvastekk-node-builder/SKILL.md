@@ -123,7 +123,6 @@ from canvastekk_workflow_sdk import WorkflowNodeManifest, RetryConfig, WorkflowN
 
 definition = WorkflowNodeManifest(
     # === REQUIRED ===
-    id="segment-v1.0.0",              # Unique: "{name}-v{version}"
     slug="segment",                    # Slug for routing (lowercase, hyphens)
     version="1.0.0",                   # Semantic version
     name="Point Cloud Segmentation",  # Human-readable title
@@ -774,7 +773,7 @@ Before considering a node complete, verify ALL of these:
 | Calling `validate_file_input()` on auto-downloaded files | Auto-called by the SDK after download. Only call it yourself for manually downloaded files |
 | Definition inside `__init__()` | Must be a class-level attribute for `__init_subclass__` validation |
 | Missing `app = Node().create_app()` | Required at module level for uvicorn: `handler:app` |
-| Reading entire large file into memory | Use `httpx.stream()` with `iter_bytes(chunk_size=65536)` |
+| Loading a large downloaded file fully into memory | Chunk-read the local path (`open(path, "rb")` iteration) — `httpx.stream()` + `iter_bytes()` only for manual URL downloads |
 | Missing `x-maxSizeBytes` | Add size limits to prevent OOM on unexpected large inputs |
 | Using `self.definition` vs module `definition` | Module-level `definition` enables CLI validation; `self.definition` accesses it in execute() |
 | Not setting `follow_redirects=True` | Presigned URLs may redirect; always pass `follow_redirects=True` to httpx |
