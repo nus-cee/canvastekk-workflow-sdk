@@ -26,22 +26,26 @@
 ## Implementation Phases
 
 ### Phase 1: Move and normalize skills
-- [ ] **1.1** `git mv .opencode/skills .agents/skills` so both harnesses discover the skills natively
+- [x] **1.1** `git mv .opencode/skills .agents/skills` so both harnesses discover the skills natively
     — **Why:** `.opencode/skills/` is OpenCode-only; `.agents/skills/` is the standard location both OpenCode v2 and pi scan with zero config
     — **Done when:** `git ls-files .agents/skills` shows both `SKILL.md` files; `.opencode/skills` is absent from the tree
     — **Consumers affected:** in-repo agent sessions; DA-2983 re-copy source path
-- [ ] **1.2** Normalize `.agents/skills/*/SKILL.md` frontmatter to exactly `name` + `description` (drop `license`, `compatibility`, `metadata`)
+    — **Done:** clean renames via `mkdir -p .agents && git mv`; both SKILL.md tracked at new path; `.opencode/skills` gone; files: `.agents/skills/**`; fixes: none
+- [x] **1.2** Normalize `.agents/skills/*/SKILL.md` frontmatter to exactly `name` + `description` (drop `license`, `compatibility`, `metadata`)
     — **Why:** `compatibility: opencode` is a harness leak; OpenCode hard-requires name == directory, pi warns on drift; portable subset is the migration contract
     — **Done when:** `head -4` of each file shows only the two fields; names match directory names
     — **Consumers affected:** none (content-neutral fields dropped)
-- [ ] **1.3** Apply the same frontmatter normalization to `python/canvastekk_workflow_sdk/data/skills/*/SKILL.md`
+    — **Done:** both files rebuilt to `---`/`name`/`description`/`---`; names match dirs; files: `.agents/skills/*/SKILL.md`; fixes: none
+- [x] **1.3** Apply the same frontmatter normalization to `python/canvastekk_workflow_sdk/data/skills/*/SKILL.md`
     — **Why:** these are the copies the wheel ships and `sdk init` scaffolds into consumer projects, where pi/OpenCode will load them at `.agents/skills`
     — **Done when:** both bundled files carry exactly `name` + `description`
     — **Consumers affected:** wheel consumers of `sdk init`
-- [ ] **1.4** Grep all four SKILL.md bodies for OpenCode-only tool/subagent assumptions; add one "or perform the steps directly" fallback line where found
+    — **Done:** both bundled files rebuilt to the two-field header (each keeps its own description text); files: `python/canvastekk_workflow_sdk/data/skills/*/SKILL.md`; fixes: none
+- [x] **1.4** Grep all four SKILL.md bodies for OpenCode-only tool/subagent assumptions; add one "or perform the steps directly" fallback line where found
     — **Why:** the skills must be executable by any harness, not just OpenCode's agent roster
     — **Done when:** no skill body references OpenCode-specific subagents/tools without a fallback
     — **Consumers affected:** none
+    — **Done:** `grep -in "subagent|opencode|.claude|openai codex"` over all four bodies → zero hits; no fallback lines needed; files: none; fixes: none
 
 ### Phase 2: Flip scaffold code and docs
 - [ ] **2.1** Change `_init_skills` destination to `.agents/skills` in `python/canvastekk_workflow_sdk/__main__.py` (docstrings at ~355/358, dest at ~367, CLI help wording at ~520)
