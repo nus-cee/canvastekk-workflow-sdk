@@ -939,3 +939,22 @@ def test_execute_with_mocked_download():
 | point  | Point3D       | Yes      | A point on the plane              |
 | normal | Point3D       | Yes      | Unit normal vector                |
 | label  | str or None   | No       | Optional label (e.g., "floor")    |
+
+## Upload targets: `str | UploadSession`
+
+Output upload targets come from the engine and are either a multipart
+`UploadSession` descriptor (current standard) or a legacy presigned PUT URL
+string (deprecated — emits `LegacyPresignedUploadWarning`; removed in SDK
+v1.0). Your node never constructs one:
+
+```python
+def execute(self, inputs: dict, context: ExecutionContext) -> dict:
+    out = context.output_path("result.parquet")
+    # ... write the file ...
+    return {"output_file": str(out)}   # SDK uploads; handles str | UploadSession
+```
+
+Rules: pass targets through untouched — no string slicing, concatenation, or
+`startswith("http")` checks; no URL prefetch or persistence. The SDK
+redeems `UploadSession` lazily (initiate → parallel part PUTs → complete,
+resume via status; see `uploads.py` / `multipart.py`).
