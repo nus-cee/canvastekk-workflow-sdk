@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.29.4] - 2026-09-25
+
+### Documentation
+
+- **skills**: Document UploadSession upload-target lane in node skills (DA-3005) (#75)
+
+
 ## [0.29.3] - 2026-09-25
 
 ### Testing
 
 - **cli**: Pin sdk init scaffold destination to .agents/skills (DA-3004) (#74)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.29.3
 
 
 ## [0.29.2] - 2026-09-25
