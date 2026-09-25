@@ -83,4 +83,4 @@ WORK LOG: phase 1 is pure additive backend — light tier selected per plan; ful
 GATE 4f1e314 tier=full lint=t typecheck=n.a. build=n.a. unit=t(729) e2e=n.a. (backend-only; no Playwright in repo)
 WORK LOG: RSS verification numbers (2.1) recorded above — AC met (625.7 MB ≥ 100 MB threshold).
 WORK LOG: code review APPROVE (0 Major, 7 NOTE) — fixes applied: memoization dlopen-once assertion, timeout-path exactly-once test (production scenario), benign-race docstring note, AC1 amended per requirements relay, dead .gitignore anchor removed. AC checkboxes ticked.
-GATE 5b7b2ac tier=full lint=t typecheck=n.a. build=n.a. unit=t e2e=n.a. (re-run after review fixes)
+GATE d1d8c70 tier=full lint=t typecheck=n.a. build=n.a. unit=t e2e=n.a. (re-run after review fixes)
