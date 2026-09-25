@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.30.1] - 2026-09-25
+
+### Miscellaneous Tasks
+
+- **skills**: Add skill-mirror drift guard; canonical example cleanup (DA-3026) (#77)
+
+
 ## [0.30.0] - 2026-09-25
 
 ### Features
 
 - **python**: Return freed heap to OS at end of node invocation (DA-3009) (#76)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.30.0
 
 
 ## [0.29.4] - 2026-09-25
