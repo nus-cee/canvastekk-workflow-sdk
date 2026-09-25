@@ -11,12 +11,14 @@ Creates a FastAPI application with standard node endpoints:
 from __future__ import annotations
 
 import asyncio
+import gc
 import hashlib
 import inspect
 import logging
 import os
 import re
 import shutil
+import sys
 import threading
 from collections.abc import Sequence
 from contextlib import asynccontextmanager
@@ -52,6 +54,51 @@ _ACCOUNT_ID_MAX_DIGITS = 19
 # Default request body limit — parity with the TypeScript SDK's 50 MB
 # express.json limit. Override with CANVASTEKK_MAX_BODY_BYTES.
 DEFAULT_MAX_BODY_BYTES = 50 * 1024 * 1024
+
+# DA-3009: memoized glibc handle for the post-execution heap trim. None is
+# cached after the first resolve on platforms without malloc_trim (musl,
+# non-linux) so the lookup cost is paid at most once per process.
+_LIBC_HANDLE: Any = None
+_LIBC_RESOLVED = False
+
+
+def _release_freed_heap() -> None:
+    """Return freed glibc heap to the OS after each execution (DA-3009).
+
+    Python frees objects but glibc keeps the heap mapped, so a warm Lambda
+    sandbox's RSS stays at the high-water mark of its heaviest invocation.
+    Subsequent invocations in that sandbox then run under kernel reclaim
+    pressure (observed in dev: ~100x slower I/O, ~15x slower compute, and a
+    900s activity timeout on work that takes ~40s on a healthy sandbox).
+    ``gc.collect()`` + ``malloc_trim(0)`` returns the freed heap once per
+    execution. Silent no-op off glibc;
+    ``CANVASTEKK_SDK_MEMORY_TRIM=0`` opts out.
+    """
+    global _LIBC_HANDLE, _LIBC_RESOLVED
+    if os.environ.get("CANVASTEKK_SDK_MEMORY_TRIM", "1").strip().lower() in {"0", "false", "no"}:
+        return
+    if sys.platform != "linux":
+        return
+    if not _LIBC_RESOLVED:
+        _LIBC_RESOLVED = True
+        try:
+            import ctypes
+            import ctypes.util
+
+            name = ctypes.util.find_library("c") or "libc.so.6"
+            handle: Any = ctypes.CDLL(name)
+            if not hasattr(handle, "malloc_trim"):
+                handle = None
+        except Exception:  # defensive — exotic platforms must never 500
+            handle = None
+        _LIBC_HANDLE = handle
+    if _LIBC_HANDLE is None:
+        return
+    try:
+        gc.collect()
+        _LIBC_HANDLE.malloc_trim(0)
+    except Exception:
+        logging.getLogger(__name__).debug("Post-execution heap trim skipped", exc_info=True)
 
 
 class _BodySizeLimitMiddleware:  # ASGI middleware (Starlette style)
@@ -331,69 +378,75 @@ def create_node_app(
                 content={"detail": "Request body failed validation"},
             )
 
-        timeout = node.definition.timeout_seconds
-        if timeout and timeout > 0:
-            cancel_event = threading.Event()
-            cancel_key = id(exec_request)
+        try:
+            timeout = node.definition.timeout_seconds
+            if timeout and timeout > 0:
+                cancel_event = threading.Event()
+                cancel_key = id(exec_request)
 
-            def _run_with_cancel() -> Any:
-                # Publish the cancel event on a module-level registry so the
-                # BaseNode run() inside the worker thread can pick it up.
-                _ACTIVE_CANCELS[cancel_key] = cancel_event
+                def _run_with_cancel() -> Any:
+                    # Publish the cancel event on a module-level registry so the
+                    # BaseNode run() inside the worker thread can pick it up.
+                    _ACTIVE_CANCELS[cancel_key] = cancel_event
+                    try:
+                        node._set_cancel_event(cancel_event)
+                        return node.run(exec_request)
+                    finally:
+                        _ACTIVE_CANCELS.pop(cancel_key, None)
+                        node._set_cancel_event(None)
+
                 try:
-                    node._set_cancel_event(cancel_event)
-                    return node.run(exec_request)
+                    response = await asyncio.wait_for(
+                        asyncio.to_thread(_run_with_cancel),
+                        timeout=timeout,
+                    )
+                except TimeoutError:
+                    cancel_event.set()
+                    raise NodeTimeoutError(timeout)
                 finally:
                     _ACTIVE_CANCELS.pop(cancel_key, None)
-                    node._set_cancel_event(None)
+            else:
+                response = await asyncio.to_thread(node.run, exec_request)
 
+            if exec_request.output_upload_url and response.status == "pass":
+                file_output_fields = node.definition.file_output_fields
+                if file_output_fields:
+                    try:
+                        await asyncio.to_thread(
+                            _upload_outputs_to_s3,
+                            response,
+                            exec_request.output_upload_url,
+                            file_output_fields,
+                        )
+                    except Exception as exc:
+                        # A declared file output that could not be uploaded means
+                        # the engine would receive a local path it cannot fetch —
+                        # fail the execution instead of silently passing (4.1).
+                        logging.getLogger(__name__).error("Output upload failed: %s", exc)
+                        response = response.model_copy(
+                            update={
+                                "status": "fail",
+                                "error": f"Output upload failed: {exc}",
+                                "error_code": "UPLOAD_FAILED",
+                            }
+                        )
+
+            # Clean up the per-execution temp dir AFTER uploads have completed —
+            # long-running node servers otherwise accumulate downloads/outputs
+            # in /tmp until disk exhaustion (DA-1711 4.4).
             try:
-                response = await asyncio.wait_for(
-                    asyncio.to_thread(_run_with_cancel),
-                    timeout=timeout,
-                )
-            except TimeoutError:
-                cancel_event.set()
-                raise NodeTimeoutError(timeout)
-            finally:
-                _ACTIVE_CANCELS.pop(cancel_key, None)
-        else:
-            response = await asyncio.to_thread(node.run, exec_request)
+                output_dir = Path("/tmp") / exec_request.run_id / exec_request.node_id
+                if output_dir.is_dir() and output_dir.exists():
+                    shutil.rmtree(output_dir, ignore_errors=True)
+            except Exception:
+                logging.getLogger(__name__).debug("Post-execution temp cleanup skipped", exc_info=True)
 
-        if exec_request.output_upload_url and response.status == "pass":
-            file_output_fields = node.definition.file_output_fields
-            if file_output_fields:
-                try:
-                    await asyncio.to_thread(
-                        _upload_outputs_to_s3,
-                        response,
-                        exec_request.output_upload_url,
-                        file_output_fields,
-                    )
-                except Exception as exc:
-                    # A declared file output that could not be uploaded means
-                    # the engine would receive a local path it cannot fetch —
-                    # fail the execution instead of silently passing (4.1).
-                    logging.getLogger(__name__).error("Output upload failed: %s", exc)
-                    response = response.model_copy(
-                        update={
-                            "status": "fail",
-                            "error": f"Output upload failed: {exc}",
-                            "error_code": "UPLOAD_FAILED",
-                        }
-                    )
+            return response
 
-        # Clean up the per-execution temp dir AFTER uploads have completed —
-        # long-running node servers otherwise accumulate downloads/outputs
-        # in /tmp until disk exhaustion (DA-1711 4.4).
-        try:
-            output_dir = Path("/tmp") / exec_request.run_id / exec_request.node_id
-            if output_dir.is_dir() and output_dir.exists():
-                shutil.rmtree(output_dir, ignore_errors=True)
-        except Exception:
-            logging.getLogger(__name__).debug("Post-execution temp cleanup skipped", exc_info=True)
-
-        return response
+        finally:
+            # DA-3009: return freed glibc heap to the OS — both success and
+            # exception paths trim exactly once, after the response is built.
+            _release_freed_heap()
 
     @router.get(
         "/health",

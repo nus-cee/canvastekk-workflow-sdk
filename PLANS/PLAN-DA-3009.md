@@ -25,17 +25,20 @@ Consumer map is thin (no in-repo downstream modules — consumers are external n
 
 ### Phase 1: Trim helper + execute() wiring
 
-- [ ] **1.1** Add module imports (`gc`, `sys`) and `_release_freed_heap()` helper in `python/canvastekk_workflow_sdk/app.py`: memoized `ctypes.CDLL` load (`ctypes.util.find_library("c")` → fallback `"libc.so.6"`), `hasattr(libc, "malloc_trim")` guard, `sys.platform != "linux"` early return, `CANVASTEKK_SDK_MEMORY_TRIM=0` opt-out, all exceptions swallowed at debug level.
+- [x] **1.1** Add module imports (`gc`, `sys`) and `_release_freed_heap()` helper in `python/canvastekk_workflow_sdk/app.py`: memoized `ctypes.CDLL` load (`ctypes.util.find_library("c")` → fallback `"libc.so.6"`), `hasattr(libc, "malloc_trim")` guard, `sys.platform != "linux"` early return, `CANVASTEKK_SDK_MEMORY_TRIM=0` opt-out, all exceptions swallowed at debug level.
+    — **Done:** helper `_release_freed_heap` added (memoized CDLL, find_library→libc.so.6 fallback, hasattr guard, linux-only, env opt-out); files: python/canvastekk_workflow_sdk/app.py; fixes: none
     — **Why:** the helper must exist and be import-safe on every platform before the handler can call it.
     — **Done when:** `python3 -c "from canvastekk_workflow_sdk.app import _release_freed_heap"` succeeds and ruff passes.
     — **Consumers affected:** none yet (helper unused until 1.2).
 
-- [ ] **1.2** Wrap the `execute()` execution section — from `timeout = node.definition.timeout_seconds` through `return response` — in `try: … finally: _release_freed_heap()` so both success and exception paths trim exactly once. Early 400/422 validation returns stay outside (nothing allocated).
+- [x] **1.2** Wrap the `execute()` execution section — from `timeout = node.definition.timeout_seconds` through `return response` — in `try: … finally: _release_freed_heap()` so both success and exception paths trim exactly once. Early 400/422 validation returns stay outside (nothing allocated).
+    — **Done:** execution section (timeout → return response) wrapped in try/finally with single trim; files: python/canvastekk_workflow_sdk/app.py; fixes: initial wrap script dropped the `return response` line (slice bug) — caught by gate, restored
     — **Why:** heavy allocations happen inside `node.run()`; both success and error unwinds leave freed-but-retained glibc heap that poisons warm Lambda sandboxes (DA-3009 evidence: 8 MB of 453 MB returned by gc alone).
     — **Done when:** `rg -n "_release_freed_heap" python/canvastekk_workflow_sdk/app.py` shows the call inside a `finally:` reached by both the success `return response` and exception propagation.
     — **Consumers affected:** all node lambdas (behavior: one extra gc+trim after each execution; env-gated opt-out).
 
-- [ ] **1.3** Add unit tests (new `python/tests/test_memory_trim.py`): opt-out env skips trim; non-linux platform skips; glibc path calls `malloc_trim` once after `gc.collect` (fake CDLL via monkeypatch); missing `malloc_trim` symbol no-ops; exception inside helper is swallowed. Plus one integration-flavored test: a trivial node app served via the SDK app factory triggers the helper exactly once per `/execute` call (monkeypatched helper counter).
+- [x] **1.3** Add unit tests (new `python/tests/test_memory_trim.py`): opt-out env skips trim; non-linux platform skips; glibc path calls `malloc_trim` once after `gc.collect` (fake CDLL via monkeypatch); missing `malloc_trim` symbol no-ops; exception inside helper is swallowed. Plus one integration-flavored test: a trivial node app served via the SDK app factory triggers the helper exactly once per `/execute` call (monkeypatched helper counter).
+    — **Done:** 10 tests in python/tests/test_memory_trim.py (5 loader branches + fallback + exactly-once success/error/validation-short-circuit + real-glibc smoke); files: python/tests/test_memory_trim.py; fixes: fake-libc lambda never counted calls (bound method now); error path asserts status=fail body (SDK returns HTTP 200 fail envelope)
     — **Why:** AC demands branch coverage and exactly-once semantics; the exactly-once test guards the finally placement against future refactors.
     — **Done when:** `poetry run pytest tests/test_memory_trim.py -v` green with all five loader branches + exactly-once assertion.
     — **Consumers affected:** CI coverage gate.
@@ -73,4 +76,5 @@ None (first ticket of the wave). Consumers: DA-3013/3014/3015/3016/3017 pin bump
 
 ## Trace
 
-(appended during execution)
+GATE 9a1f2c3 tier=light lint=t typecheck=n.a. unit=t e2e=n.a. (phase 1 — scoped: app.py, test_memory_trim.py, test_app.py; 81 passed)
+WORK LOG: phase 1 is pure additive backend — light tier selected per plan; full gate at 2.2.
