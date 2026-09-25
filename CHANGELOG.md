@@ -2,11 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.29.2] - 2026-09-25
+
+### Miscellaneous Tasks
+
+- **skills**: Resync repo mirrors from bundled canonical, fix 2 canonical errors (DA-3003) (#73)
+
+
 ## [0.29.1] - 2026-09-25
 
 ### Miscellaneous Tasks
 
 - **skills**: Move .opencode/skills to .agents/skills for cross-harness discovery (DA-2982) (#72)
+- **release**: Prepare v0.29.1
 
 
 ## [0.29.0] - 2026-09-23
