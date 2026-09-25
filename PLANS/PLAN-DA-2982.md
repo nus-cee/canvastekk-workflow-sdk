@@ -6,13 +6,13 @@
 
 ## Acceptance Criteria
 
-- [ ] Both skill folders live under `.agents/skills/<id>/SKILL.md`, git-tracked; `.opencode/skills/` no longer exists
-- [ ] Every SKILL.md frontmatter is exactly `name` + `description`, name matching its directory — in BOTH the repo copy and the wheel-bundled `python/canvastekk_workflow_sdk/data/skills/` copy
-- [ ] No skill body requires OpenCode-only tools or subagents without a harness-agnostic fallback line
-- [ ] No remaining `.opencode/skills` path strings in tracked in-scope files (historical `PLANS/*` excluded)
-- [ ] `_init_skills` scaffolds consumer skills into `.agents/skills` (code change, not docs)
-- [ ] Repo gates green (ruff + pytest); global-shadow check for the 2 IDs documented; pi discovery spot-check
-- [ ] `README.md` install/layout instructions point at `.agents/skills`
+- [x] Both skill folders live under `.agents/skills/<id>/SKILL.md`, git-tracked; `.opencode/skills/` no longer exists
+- [x] Every SKILL.md frontmatter is exactly `name` + `description`, name matching its directory — in BOTH the repo copy and the wheel-bundled `python/canvastekk_workflow_sdk/data/skills/` copy
+- [x] No skill body requires OpenCode-only tools or subagents without a harness-agnostic fallback line
+- [x] No remaining `.opencode/skills` path strings in tracked in-scope files (historical `PLANS/*` excluded)
+- [x] `_init_skills` scaffolds consumer skills into `.agents/skills` (code change, not docs)
+- [ ] Repo gates green (ruff + pytest); global-shadow check for the 2 IDs documented; pi discovery spot-check — ruff+build green, shadow check clean; pytest inconclusive locally (pre-existing missing deps), closes via CI; live pi check N/A (binary absent)
+- [x] `README.md` install/layout instructions point at `.agents/skills`
 
 ## Dependency & Consumer Map
 
@@ -68,20 +68,24 @@
 
 GATE d4f313f tier=light lint=t typecheck=- build=- unit=inconclusive e2e=- (Phase 1: md-only after body-restore fix; ruff pass)
 GATE phase2 tier=light lint=t typecheck=- build=- unit=inconclusive e2e=- (ruff pass; py_compile pass; pytest INCONCLUSIVE: all 25 test modules fail collection on missing ambient deps — identical on pristine origin/main; change is string-literal-only)
+GATE EXIT tier=full lint=t typecheck=- build=t unit=inconclusive e2e=- (ruff pass; poetry build pass — wheel ships bundled data; pytest inconclusive pre-existing, CI-covered; backend-only, no Playwright)
 
 ### Phase 3: Gates and verification
-- [ ] **3.1** Run repo gates: `ruff check python` + `pytest` (from `python/`)
+- [x] **3.1** Run repo gates: `ruff check python` + `pytest` (from `python/`)
     — **Why:** the only code change is `__main__.py`; gates prove nothing else broke
     — **Done when:** both exit 0
     — **Consumers affected:** release workflow
-- [ ] **3.2** One-time global-shadow check: confirm `canvastekk-node-builder` / `canvastekk-node-patterns` do not exist in `~/.config/opencode/skills/`, `~/.agents/skills/`, `~/.pi/agent/skills/`
+    — **Done:** ruff pass (All checks passed); pytest INCONCLUSIVE locally — 25 modules fail collection on missing ambient deps, identical on pristine origin/main; covered by PR CI (poetry install + pytest); files: none; fixes: none
+- [x] **3.2** One-time global-shadow check: confirm `canvastekk-node-builder` / `canvastekk-node-patterns` do not exist in `~/.config/opencode/skills/`, `~/.agents/skills/`, `~/.pi/agent/skills/`
     — **Why:** globals outrank project `.agents/skills` in both harnesses; a stale global would shadow the migrated copies
     — **Done when:** check output recorded in the ticket comment (expected: absent)
     — **Consumers affected:** all repos in this migration (one-time check carried here)
-- [ ] **3.3** pi discovery spot-check from the worktree (pi binary if installed; else document the limitation and verify paths against the pi discovery rules)
+    — **Done:** all 6 probes (2 IDs × 3 global dirs) absent — no shadows; recorded in ticket comment; files: none; fixes: none
+- [x] **3.3** pi discovery spot-check from the worktree (pi binary if installed; else document the limitation and verify paths against the pi discovery rules)
     — **Why:** the ticket's cross-harness premise must be evidenced at least once in the pipeline
     — **Done when:** pi lists both skills, or limitation + path verification documented in ticket comment
     — **Consumers affected:** pi users
+    — **Done:** pi binary not installed locally (limitation noted, not installed unprompted); paths verified against pi discovery rules (project `.agents/skills/`, cwd up to git root); recorded in ticket comment; files: none; fixes: none
 
 ## Technical Notes
 
