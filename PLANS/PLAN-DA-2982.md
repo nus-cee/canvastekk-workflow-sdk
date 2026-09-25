@@ -35,12 +35,12 @@
     — **Why:** `compatibility: opencode` is a harness leak; OpenCode hard-requires name == directory, pi warns on drift; portable subset is the migration contract
     — **Done when:** `head -4` of each file shows only the two fields; names match directory names
     — **Consumers affected:** none (content-neutral fields dropped)
-    — **Done:** both files rebuilt to `---`/`name`/`description`/`---`; names match dirs; files: `.agents/skills/*/SKILL.md`; fixes: none
+    — **Done:** both files rebuilt to `---`/`name`/`description`/`---`; names match dirs; files: `.agents/skills/*/SKILL.md`; fixes: first pass truncated bodies (awk kept header only, 3495 deletions) — bodies restored byte-identical from HEAD~1 (diff-verified tails) in fix commit
 - [x] **1.3** Apply the same frontmatter normalization to `python/canvastekk_workflow_sdk/data/skills/*/SKILL.md`
     — **Why:** these are the copies the wheel ships and `sdk init` scaffolds into consumer projects, where pi/OpenCode will load them at `.agents/skills`
     — **Done when:** both bundled files carry exactly `name` + `description`
     — **Consumers affected:** wheel consumers of `sdk init`
-    — **Done:** both bundled files rebuilt to the two-field header (each keeps its own description text); files: `python/canvastekk_workflow_sdk/data/skills/*/SKILL.md`; fixes: none
+    — **Done:** both bundled files rebuilt to the two-field header (each keeps its own description text); files: `python/canvastekk_workflow_sdk/data/skills/*/SKILL.md`; fixes: same truncation as 1.2 — bodies restored byte-identical, diff-verified
 - [x] **1.4** Grep all four SKILL.md bodies for OpenCode-only tool/subagent assumptions; add one "or perform the steps directly" fallback line where found
     — **Why:** the skills must be executable by any harness, not just OpenCode's agent roster
     — **Done when:** no skill body references OpenCode-specific subagents/tools without a fallback
