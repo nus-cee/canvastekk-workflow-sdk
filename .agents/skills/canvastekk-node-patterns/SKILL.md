@@ -24,7 +24,7 @@ Load this skill when:
 - You need a specific code pattern for a CanvasTEKK node type (point cloud, measurement, inference, etc.)
 - A user asks "how do I use InstanceSet/MeasurementSet/PlaneSet in a node?"
 - You need to add authentication, middleware, or webhooks to an existing node
-- You want example code for file I/O (note: SDK auto-downloads presigned URL file inputs before execute())
+- You want example code for testing file I/O with mocked presigned URLs
 - The `canvastekk-node-builder` skill has been loaded and you need domain-specific patterns
 
 This skill complements `canvastekk-node-builder` — load both when creating a node from scratch.
@@ -52,9 +52,9 @@ from canvastekk_workflow_sdk.exceptions import NodeExecutionError
 
 definition = WorkflowNodeManifest(
     id="segment-v1.0.0",
-    name="segment",
+    slug="segment",
     version="1.0.0",
-    title="Point Cloud Segmentation",
+    name="Point Cloud Segmentation",
     description="Segments a point cloud file into detected object instances",
     input_schema={
         "type": "object",
@@ -100,12 +100,12 @@ class SegmentNode(BaseNode):
     definition = definition
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-        # NOTE: Standard file inputs are auto-downloaded by the SDK.
-        # inputs["point_cloud"] is already a local path.
-        local_path = Path(inputs["point_cloud"])
+        # File inputs are auto-downloaded by SDK before execute()
+        local_path = Path(inputs["point_cloud"])  # SDK provides local path
         threshold = inputs.get("confidence_threshold", 0.5)
 
-        # Auto-validated by SDK before execute() is called
+        # Process input file (SDK already validated against x-accept/x-maxSizeBytes)
+        context.report_progress(0.1, "Processing point cloud")
 
         # Process point cloud (replace with actual ML inference)
         context.report_progress(0.3, "Running segmentation")
@@ -152,10 +152,9 @@ class SegmentNode(BaseNode):
             ),
         ]
 
-    # NOTE: _download helper is only needed for non-file URL downloads.
-    # Standard file inputs (format: "file") are auto-downloaded by the SDK.
     @staticmethod
     def _download(url: str, dest: Path) -> None:
+        """Download helper for non-file URLs only (e.g., external APIs)."""
         with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
             resp.raise_for_status()
             with open(dest, "wb") as f:
@@ -187,9 +186,9 @@ from canvastekk_workflow_sdk.exceptions import NodeIOError
 
 definition = WorkflowNodeManifest(
     id="measure-v1.0.0",
-    name="measure",
+    slug="measure",
     version="1.0.0",
-    title="Measurement",
+    name="Measurement",
     description="Computes dimensional measurements from detected instances",
     input_schema={
         "type": "object",
@@ -228,9 +227,11 @@ class MeasureNode(BaseNode):
     definition = definition
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-        # NOTE: Standard file inputs are auto-downloaded by the SDK.
-        # inputs["instances"] is already a local path.
+        # File inputs are auto-downloaded by SDK before execute()
         local_path = Path(inputs["instances"])
+
+        # Parse InstanceSet (SDK already validated against x-accept/x-maxSizeBytes)
+        context.report_progress(0.1, "Loading instances")
 
         try:
             instance_set = InstanceSet.load_json(local_path)
@@ -278,10 +279,9 @@ class MeasureNode(BaseNode):
             "measurement_count": len(measurements),
         }
 
-    # NOTE: _download helper is only needed for non-file URL downloads.
-    # Standard file inputs (format: "file") are auto-downloaded by the SDK.
     @staticmethod
     def _download(url: str, dest: Path) -> None:
+        """Download helper for non-file URLs only (e.g., external APIs)."""
         with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
             resp.raise_for_status()
             with open(dest, "wb") as f:
@@ -307,9 +307,9 @@ from canvastekk_workflow_sdk.contracts import Plane, PlaneSet, Point3D
 
 definition = WorkflowNodeManifest(
     id="plane-detect-v1.0.0",
-    name="plane-detect",
+    slug="plane-detect",
     version="1.0.0",
-    title="Plane Detection",
+    name="Plane Detection",
     description="Detects planar surfaces (floor, ceiling, walls) in a point cloud",
     input_schema={
         "type": "object",
@@ -348,11 +348,10 @@ class PlaneDetectNode(BaseNode):
     definition = definition
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-    # NOTE: Standard file inputs are auto-downloaded by the SDK.
-    # inputs["point_cloud"] is already a local path.
-    local_path = Path(inputs["point_cloud"])
+        # File inputs are auto-downloaded by SDK before execute()
+        local_path = Path(inputs["point_cloud"])
+        context.report_progress(0.1, "Processing point cloud")  # SDK already validated
 
-        # Auto-validated by SDK before execute() is called
         context.report_progress(0.4, "Detecting planes")
         planes = self._detect_planes(local_path)
 
@@ -376,10 +375,9 @@ class PlaneDetectNode(BaseNode):
             Plane(point=Point3D(x=0, y=0, z=2800), normal=Point3D(x=0, y=0, z=-1), label="ceiling"),
         ]
 
-    # NOTE: _download helper is only needed for non-file URL downloads.
-    # Standard file inputs (format: "file") are auto-downloaded by the SDK.
     @staticmethod
     def _download(url: str, dest: Path) -> None:
+        """Download helper for non-file URLs only (e.g., external APIs)."""
         with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
             resp.raise_for_status()
             with open(dest, "wb") as f:
@@ -405,9 +403,9 @@ from canvastekk_workflow_sdk.exceptions import NodeConfigurationError, NodeExecu
 
 definition = WorkflowNodeManifest(
     id="infer-v1.0.0",
-    name="infer",
+    slug="infer",
     version="1.0.0",
-    title="Model Inference",
+    name="Model Inference",
     description="Runs ML model inference on input data",
     input_schema={
         "type": "object",
@@ -480,11 +478,9 @@ class InferenceNode(BaseNode):
         if self.model is None:
             raise NodeConfigurationError("Model not loaded — startup may have failed")
 
-        # NOTE: Standard file inputs are auto-downloaded by the SDK.
-        # inputs["input_data"] is already a local path.
+        # File inputs are auto-downloaded by SDK before execute()
         local_path = Path(inputs["input_data"])
-
-        # Auto-validated by SDK before execute() is called
+        context.report_progress(0.1, "Processing input data")  # SDK already validated
 
         context.report_progress(0.3, "Running inference")
         try:
@@ -504,10 +500,9 @@ class InferenceNode(BaseNode):
         import json
         return json.dumps({"status": "ok", "predictions": []})
 
-    # NOTE: _download helper is only needed for non-file URL downloads.
-    # Standard file inputs (format: "file") are auto-downloaded by the SDK.
     @staticmethod
     def _download(url: str, dest: Path) -> None:
+        """Download helper for non-file URLs only (e.g., external APIs)."""
         with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
             resp.raise_for_status()
             with open(dest, "wb") as f:
@@ -529,9 +524,9 @@ from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeMani
 
 definition = WorkflowNodeManifest(
     id="uppercase-v1.0.0",
-    name="uppercase",
+    slug="uppercase",
     version="1.0.0",
-    title="Uppercase",
+    name="Uppercase",
     description="Converts input text to uppercase",
     input_schema={
         "type": "object",
@@ -687,9 +682,9 @@ from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeMani
 
 definition = WorkflowNodeManifest(
     id="convert-v1.0.0",
-    name="convert",
+    slug="convert",
     version="1.0.0",
-    title="Format Converter",
+    name="Format Converter",
     description="Converts point cloud files between formats (PLY, PCD, XYZ)",
     input_schema={
         "type": "object",
@@ -734,12 +729,11 @@ class ConvertNode(BaseNode):
     definition = definition
 
     def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-        # NOTE: Standard file inputs are auto-downloaded by the SDK.
-        # inputs["input_file"] is already a local path.
+        # File inputs are auto-downloaded by SDK before execute()
         input_path = Path(inputs["input_file"])
         output_format = inputs.get("output_format", "xyz")
 
-        # Auto-validated by SDK before execute() is called
+        context.report_progress(0.1, "Converting format")  # SDK already validated
 
         context.report_progress(0.5, f"Converting to {output_format}")
         output_path = context.output_path(f"output.{output_format}")
@@ -758,10 +752,9 @@ class ConvertNode(BaseNode):
         output_path.write_bytes(data)
         return 1000  # placeholder point count
 
-    # NOTE: _download helper is only needed for non-file URL downloads.
-    # Standard file inputs (format: "file") are auto-downloaded by the SDK.
     @staticmethod
     def _download(url: str, dest: Path) -> None:
+        """Download helper for non-file URLs only (e.g., external APIs)."""
         with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
             resp.raise_for_status()
             with open(dest, "wb") as f:
@@ -777,9 +770,6 @@ app = ConvertNode().create_app()
 ## Testing Patterns
 
 ### Testing File Download with Mocked httpx
-
-# NOTE: Auto-download can be tested by providing local file paths directly.
-# Mock httpx.stream only when testing non-file URL scenarios.
 
 ```python
 from pathlib import Path
@@ -860,8 +850,8 @@ def test_measurement_set_helpers():
     """Test MeasurementSet lookup helpers."""
     ms = MeasurementSet(
         measurements=[
-            Measurement(name="height", value=2800.0, unit="mm"),
-            Measurement(name="width", value=5000.0, unit="mm"),
+            Measurement(slug="height", value=2800.0, unit="mm"),
+            Measurement(slug="width", value=5000.0, unit="mm"),
         ],
     )
 
@@ -896,8 +886,6 @@ def test_execute_with_mocked_download():
     """Test the full HTTP stack with mocked file download."""
     from unittest.mock import patch
 
-    # NOTE: Auto-download can be tested by providing local file paths directly.
-    # Mock httpx.stream only when testing non-file URL scenarios.
     with patch("handler.httpx.stream") as mock_stream:
         # Set up mock
         mock_stream.return_value = make_mock_stream_response(b"test data")

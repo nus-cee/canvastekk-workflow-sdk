@@ -1,6 +1,6 @@
 ---
 name: canvastekk-node-builder
-description: Create CanvasTEKK workflow nodes with correct SDK patterns, schemas, file I/O, Dockerfiles, and tests. Covers BaseNode, WorkflowNodeManifest, ExecutionContext, contracts, and the complete node creation workflow from analysis to CLI validation.
+description: Create CanvasTEKK workflow nodes with correct SDK patterns, schemas, file I/O, Dockerfiles, and tests. Covers BaseNode, WorkflowNodeManifest, ExecutionContext, contracts, and the complete node creation workflow from analysis to CLI validation. File inputs are auto-downloaded by the SDK before execute().
 ---
 
 ## What I do
@@ -11,7 +11,7 @@ I guide the complete creation of CanvasTEKK Workflow Engine nodes using the Pyth
 - A 7-step node creation workflow from requirements analysis to CLI validation
 - Code templates for all required files (handler.py, Dockerfile, pyproject.toml, tests)
 - JSON Schema patterns for input/output definitions including file fields
-- File I/O patterns (auto-download pipeline, validate_file_input, output_path, downloads_dir)
+- File I/O patterns (presigned URL downloads, validate_file_input, output_path)
 - Data contract patterns (InstanceSet, MeasurementSet, PlaneSet)
 - A validation checklist and catalog of common mistakes to avoid
 
@@ -123,9 +123,10 @@ from canvastekk_workflow_sdk import WorkflowNodeManifest, RetryConfig, WorkflowN
 
 definition = WorkflowNodeManifest(
     # === REQUIRED ===
-    name="segment",                    # Slug for routing (lowercase, alphanumeric, hyphens)
-    version="1.0.0",                   # Semantic version (X.Y.Z)
-    title="Point Cloud Segmentation",  # Human-readable title
+    id="segment-v1.0.0",              # Unique: "{name}-v{version}"
+    slug="segment",                    # Slug for routing (lowercase, hyphens)
+    version="1.0.0",                   # Semantic version
+    name="Point Cloud Segmentation",  # Human-readable title
     description="Segments a point cloud into instances",  # What this node does
     input_schema={...},                # JSON Schema (Draft 7)
     output_schema={...},               # JSON Schema (Draft 7)
@@ -319,7 +320,7 @@ Before writing any code, determine:
 2. **Input types**: What data does it accept? (point cloud files, JSON contracts, text parameters, numbers)
 3. **Output types**: What does it produce? (files, JSON data, contracts, metrics)
 4. **Category**: `transform` (data conversion), `inference` (ML/AI), `utility` (general), `control-flow` (orchestrator-level)
-5. **File I/O needed**: Does it use file inputs? (SDK auto-downloads presigned URLs.) Does it write output files?
+5. **File I/O needed**: Does it receive file inputs (auto-downloaded by SDK)? Does it write output files?
 6. **Contracts needed**: Will it produce or consume InstanceSet, MeasurementSet, PlaneSet?
 7. **Special needs**: Model loading at startup? GPU access? Authentication? Custom health checks?
 8. **Timeout**: How long might execution take? (default: 30s, increase for heavy computation)
@@ -401,13 +402,12 @@ Follow this structure exactly:
 
 from pathlib import Path
 
-import httpx
 from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest
 
 definition = WorkflowNodeManifest(
-    name="{{name}}",
+    slug="{{name}}",
     version="{{version}}",
-    title="{{title}}",
+    name="{{title}}",
     description="{{description}}",
     input_schema={...},  # From Step 2
     output_schema={...},  # From Step 2
@@ -424,13 +424,9 @@ class {{ClassName}}(BaseNode):
         context.report_progress(0.1, "Starting {{title}}")
 
         # === FILE INPUT PATTERN ===
-        # File inputs are auto-downloaded by the SDK before execute() is called.
-        # inputs["file_field"] is already a local file path.
-        # No manual download or validation needed for standard file inputs.
-
-        cloud_path = Path(inputs.get("file_field", ""))
-        if cloud_path.exists():
-            data = cloud_path.read_bytes()
+        # File inputs are auto-downloaded by SDK to context.downloads_dir
+        # Use local file paths directly (SDK already validated against x-accept/x-maxSizeBytes):
+        # local_path = Path(inputs["file_field"])  # SDK provides local path
 
         # === BUSINESS LOGIC ===
         # Process inputs here
@@ -444,17 +440,6 @@ class {{ClassName}}(BaseNode):
 
         context.report_progress(1.0, "Complete")
         return {}
-
-    # NOTE: Standard file inputs are auto-downloaded by the SDK.
-    # Only use manual download for non-file URLs or opt-out scenarios.
-    @staticmethod
-    def _download(url: str, dest: Path) -> None:
-        """Optional: Manual download for non-file URLs only."""
-        with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as resp:
-            resp.raise_for_status()
-            with open(dest, "wb") as f:
-                for chunk in resp.iter_bytes(chunk_size=65536):
-                    f.write(chunk)
 
 
 app = {{ClassName}}().create_app()
@@ -553,7 +538,7 @@ class Test{{ClassName}}Unit:
     def test_definition_fields(self):
         """Verify WorkflowNodeManifest has all required fields."""
         assert definition.id == "{{name}}-v{{version}}"
-        assert definition.name == "{{name}}"
+        assert definition.slug == "{{name}}"
         assert definition.version == "{{version}}"
         assert definition.input_schema
         assert definition.output_schema
@@ -667,21 +652,22 @@ pytest tests/ -v
 
 ### How File Inputs Work
 
-1. The workflow engine sends a presigned GET URL as the field value (a string)
-2. The SDK **automatically downloads** the file to `context.downloads_dir`
-3. The SDK **auto-validates** with `validate_file_input()` against `x-accept` and `x-maxSizeBytes`
-4. `execute()` receives the **local file path** (not the URL)
+1. The workflow engine sends a presigned GET URL as the field value
+2. The SDK downloads the file to `context.downloads_dir` before calling `execute()`
+3. The SDK validates the downloaded file against `x-accept` and `x-maxSizeBytes` constraints
+4. The node receives a local file path in `inputs` (not the URL)
+5. The node processes the file
 
 ```python
 def execute(self, inputs: dict, context: ExecutionContext) -> dict:
-    # File inputs are auto-downloaded by the SDK before execute() is called
-    cloud_path = Path(inputs["point_cloud"])
+    # 1. Get the local file path from inputs (SDK already downloaded)
+    local_path = Path(inputs["point_cloud"])  # SDK provides local path
 
-    # Access download metadata if needed
-    meta = context.metadata.get("point_cloud", {})
-    # meta = {"original_url": "...", "local_path": "...", "size_bytes": 12345}
+    # 2. Process the file (SDK already validated constraints)
+    # ... your logic here ...
+```
 
-    # No manual download or validation needed
+**Note:** Manual download with `httpx.stream()` is only needed for non-file URLs or opt-out scenarios.
 
 ### How File Outputs Work
 
@@ -727,9 +713,9 @@ Before considering a node complete, verify ALL of these:
 - [ ] Docstring describes the node's purpose
 
 ### WorkflowNodeManifest
-- [ ] `id` is NOT provided manually — it is auto-derived from `name` + `version` as `{name}-v{version}`
-- [ ] `name` is a valid slug: lowercase alphanumeric characters and hyphens only (e.g., `point-cloud-segment`)
-- [ ] `version` follows semantic versioning (e.g., `1.0.0`)
+- [ ] `id` follows `{name}-v{version}` format (e.g., `segment-v1.0.0`)
+- [ ] `name` is a lowercase slug with hyphens (e.g., `point-cloud-segment`)
+- [ ] `version` is semver (e.g., `1.0.0`)
 - [ ] `title` is human-readable (e.g., `Point Cloud Segmentation`)
 - [ ] `description` explains what the node does
 - [ ] `category` is one of: `transform`, `inference`, `utility`, `control-flow`
@@ -744,8 +730,7 @@ Before considering a node complete, verify ALL of these:
 - [ ] Required fields are listed in `"required": [...]`
 
 ### File I/O
-- [ ] File inputs use `format: "file"` with `x-accept` and `x-maxSizeBytes` (SDK auto-downloads and validates)
-- [ ] Manual downloads only for non-file URLs (standard file inputs handled automatically)
+- [ ] File input values are used as local paths (SDK auto-downloaded and validated)
 - [ ] Output files use `context.output_path(filename)` (never hardcoded paths)
 - [ ] Output file paths returned as `str(output_path)` in outputs dict
 
@@ -777,10 +762,10 @@ Before considering a node complete, verify ALL of these:
 | `type: "object"` on file field | Use `type: "string"` — the value is a presigned URL string |
 | Hardcoding `/tmp/` output paths | Use `context.output_path(filename)` — SDK auto-creates and uploads |
 | Using `urllib` for downloads | Use `httpx` (SDK dependency, supports streaming/timeout/redirects) |
-| Not calling `validate_file_input()` | Auto-called by SDK after download. Only needed for manually downloaded files |
+| Not calling `validate_file_input()` | Always call after download: `self.definition.validate_file_input(field, path)` |
 | Definition inside `__init__()` | Must be a class-level attribute for `__init_subclass__` validation |
 | Missing `app = Node().create_app()` | Required at module level for uvicorn: `handler:app` |
-| Reading entire large file into memory | Use chunked reading from the auto-downloaded local path |
+| Reading entire large file into memory | Use `httpx.stream()` with `iter_bytes(chunk_size=65536)` |
 | Missing `x-maxSizeBytes` | Add size limits to prevent OOM on unexpected large inputs |
 | Using `self.definition` vs module `definition` | Module-level `definition` enables CLI validation; `self.definition` accesses it in execute() |
 | Not setting `follow_redirects=True` | Presigned URLs may redirect; always pass `follow_redirects=True` to httpx |
