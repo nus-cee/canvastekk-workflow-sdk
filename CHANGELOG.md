@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.29.1] - 2026-09-25
+
+### Miscellaneous Tasks
+
+- **skills**: Move .opencode/skills to .agents/skills for cross-harness discovery (DA-2982) (#72)
+
+
 ## [0.29.0] - 2026-09-23
 
 ### Features
 
 - **uploads**: Multipart session uploader + legacy single-PUT deprecation [DA-2886] (#71)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.29.0
 
 
 ## [0.28.2] - 2026-09-18
