@@ -363,7 +363,7 @@ errors (4xx) fail immediately — they are deterministic.
 
 ### AI Agent Setup
 
-The SDK bundles OpenCode-compatible skills that teach coding agents (opencode, Claude Code, Cursor, etc.) how to create CanvasTEKK workflow nodes correctly — without reading docs.
+The SDK bundles portable agent skills (Agent Skills standard) that teach coding agents how to create CanvasTEKK workflow nodes correctly — without reading docs.
 
 **One-command setup** in your node project:
 
@@ -382,7 +382,7 @@ This creates:
 
 ```
 my-node-project/
-├── .opencode/skills/
+├── .agents/skills/
 │   ├── canvastekk-node-builder/SKILL.md    # Primary creation skill
 │   └── canvastekk-node-patterns/SKILL.md   # Domain pattern library
 └── AGENTS.md                               # Skill routing + conventions
@@ -400,12 +400,17 @@ my-node-project/
 **Global setup** (works across all projects):
 
 ```bash
-# Run init in any directory, then copy skills to global config
+# Run init in any directory, then copy skills to the shared global skills dir
+# (both OpenCode and pi discover ~/.agents/skills)
 python -m canvastekk_workflow_sdk init
-cp -r .opencode/skills/canvastekk-node-builder ~/.config/opencode/skills/
-cp -r .opencode/skills/canvastekk-node-patterns ~/.config/opencode/skills/
-rm -rf .opencode
+cp -r .agents/skills/canvastekk-node-builder ~/.agents/skills/
+cp -r .agents/skills/canvastekk-node-patterns ~/.agents/skills/
+rm -rf .agents
 ```
+
+> **Upgrading from an SDK version that scaffolded `.opencode/skills/`?**
+> Remove the legacy copy first (`rm -rf .opencode/skills`), otherwise both
+> copies stay discoverable and coding agents see each skill twice.
 
 ## Examples
 
