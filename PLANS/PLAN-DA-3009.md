@@ -45,12 +45,14 @@ Consumer map is thin (no in-repo downstream modules — consumers are external n
 
 ### Phase 2: Verification + exit gate
 
-- [ ] **2.1** Manual RSS verification per AC: script allocates ~500 MB, drops it, runs `_release_freed_heap()`, asserts RSS after trim is ≥100 MB lower than before (run with repo venv; record numbers in PLAN trace).
+- [x] **2.1** Manual RSS verification per AC: script allocates ~500 MB, drops it, runs `_release_freed_heap()`, asserts RSS after trim is ≥100 MB lower than before (run with repo venv; record numbers in PLAN trace).
+    — **Done:** arena-retention repro through the SDK helper — 10k×64KB C buffers: peak 673.6 MB, after free+gc 672.6 MB (1 MB returned by gc), after trim 46.9 MB (**625.7 MB returned to OS**); fixes: first repro used a single 500 MB mmap allocation (auto-unmapped, no retention) — redone with sub-mmap-threshold allocations
     — **Why:** the unit tests prove call semantics; this proves the actual OS-level effect the ticket exists for.
     — **Done when:** recorded before/after RSS numbers show the drop; command output pasted into the PLAN trace block.
     — **Consumers affected:** none.
 
-- [ ] **2.2** Exit gate (full): `poetry run ruff check canvastekk_workflow_sdk/ tests/` + `poetry run pytest -v --cov=canvastekk_workflow_sdk` (mirrors `.github/workflows/ci-python.yml`). Append gate memo `GATE <short-sha> tier=full` to the PLAN trace block.
+- [x] **2.2** Exit gate (full): `poetry run ruff check canvastekk_workflow_sdk/ tests/` + `poetry run pytest -v --cov=canvastekk_workflow_sdk` (mirrors `.github/workflows/ci-python.yml`). Append gate memo `GATE <short-sha> tier=full` to the PLAN trace block.
+    — **Done:** ruff clean (whole sdk + tests), pytest 729 passed, coverage 84%; files: gate memo below; fixes: none
     — **Why:** pipeline Step 10 requires a green `tier=full` memo on the final pushed SHA.
     — **Done when:** both commands exit 0 and the memo line is appended.
     — **Consumers affected:** PR CI parity.
@@ -78,3 +80,5 @@ None (first ticket of the wave). Consumers: DA-3013/3014/3015/3016/3017 pin bump
 
 GATE 9a1f2c3 tier=light lint=t typecheck=n.a. unit=t e2e=n.a. (phase 1 — scoped: app.py, test_memory_trim.py, test_app.py; 81 passed)
 WORK LOG: phase 1 is pure additive backend — light tier selected per plan; full gate at 2.2.
+GATE 4f1e314 tier=full lint=t typecheck=n.a. build=n.a. unit=t(729) e2e=n.a. (backend-only; no Playwright in repo)
+WORK LOG: RSS verification numbers (2.1) recorded above — AC met (625.7 MB ≥ 100 MB threshold).
