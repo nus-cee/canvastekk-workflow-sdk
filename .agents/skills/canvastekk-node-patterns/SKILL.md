@@ -949,7 +949,7 @@ context.metadata[field_name] = {
 ```
 
 Read these in `execute()` for audit trails or size-based branching. Manual
-`httpx.stream()` downloads are for non-file URLs only.
+`httpx.stream()` downloads are for non-file URLs or opt-out scenarios only.
 
 ## Upload targets: `str | UploadSession`
 

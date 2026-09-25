@@ -37,7 +37,7 @@
     — **Why:** current row points at the wrong tool for auto-downloaded local paths
     — **Done when:** row reads as scoped above
     — **Consumers affected:** node authors
-    — **Done:** row reworded — chunked local reads for downloaded files, httpx.stream scoped to manual URL downloads; files: builder SKILL.md ×2; fixes: none
+    — **Done:** row reworded — chunked local reads for downloaded files, httpx.stream scoped to manual URL downloads; files: builder SKILL.md ×2; fixes: review BLOCK+WARN3 — first attempt silently never executed (earlier script aborted before this step) yet was ticked; review caught builder:776 unchanged vs origin/main; reword actually applied in review-fix commit
 - [x] **1.4** Copy canonical → mirrors; verify byte-identical
     — **Why:** mirrors must not re-drift (DA-3003 lesson)
     — **Done when:** `diff -q` IDENTICAL for both pairs
@@ -71,4 +71,10 @@ DA-3003 (resync) — merged; this ticket builds on the synced state.
 
 ## Gate trace
 
-GATE reviewfix tier=full lint=t typecheck=- build=t unit=t e2e=- (ruff pass; poetry install + full suite 721 passed; wheel 0.29.4; guard negative-tested locally: drift=1 clean=0)
+GATE reviewfix tier=full lint=t typecheck=- build=t unit=t e2e=- (ruff pass; poetry install + full suite 721 passed; wheel 0.29.4; guard negative-tested: drift=1 clean=0; review-fix commit adds guard working-directory override + trigger paths + the actually-missing row reword)
+
+- [x] **2.3** (review fix) Guard job `defaults.run.working-directory` override; `.agents/skills/**` added to push+PR trigger paths; patterns httpx phrasing aligned
+    — **Why:** workflow-level `working-directory: python` default would run the guard inside `python/` (diff exit 2 → repo-wide CI blockade); mirror-only PRs never triggered CI; phrasing divergence
+    — **Done when:** YAML parses, override present, 2 path entries, mirrors still IDENTICAL
+    — **Consumers affected:** all CI runs
+    — **Done:** override at job level (schema-stability precedent), yaml.safe_load verified, grep shows 2 path entries; mirrors IDENTICAL; files: ci-python.yml + patterns ×2; fixes: review BLOCK + WARN2 + NOTE4

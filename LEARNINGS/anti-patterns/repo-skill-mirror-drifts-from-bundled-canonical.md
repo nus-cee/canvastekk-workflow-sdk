@@ -22,3 +22,12 @@ itself load the stale-teaching mirror.
 Single-source the content: one canonical copy, with the other derived
 (build step or symlink-equivalent), or delete the mirror and rely on the
 bundled copy. Follow-up candidate from DA-2982 review.
+
+## Resolution (2026-09-25, DA-3026)
+
+Resolved with a CI `diff -r` guard job (`skill-mirror-guard` in
+`.github/workflows/ci-python.yml`) instead of single-sourcing — zero build
+complexity; recursion auto-covers future skill dirs. Residual gap at merge
+time: `.agents/skills/**` added to trigger paths so mirror-only PRs run the
+guard. Canonical content errors found during the resync were fixed in the
+same ticket (Measurement example, validate_file_input row).

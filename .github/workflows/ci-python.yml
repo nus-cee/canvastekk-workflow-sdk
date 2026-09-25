@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - 'python/**'
+      - '.agents/skills/**'
       - '.github/workflows/ci-python.yml'
   pull_request:
     branches: [main]
     paths:
       - 'python/**'
+      - '.agents/skills/**'
       - '.github/workflows/ci-python.yml'
 
 defaults:
@@ -149,6 +151,9 @@ jobs:
   skill-mirror-guard:
     name: Skill mirrors match bundled canonical
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v6
       - name: diff -r .agents/skills vs python/canvastekk_workflow_sdk/data/skills
