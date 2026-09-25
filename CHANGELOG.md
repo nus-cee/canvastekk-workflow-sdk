@@ -2,11 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.29.3] - 2026-09-25
+
+### Testing
+
+- **cli**: Pin sdk init scaffold destination to .agents/skills (DA-3004) (#74)
+
+
 ## [0.29.2] - 2026-09-25
 
 ### Miscellaneous Tasks
 
 - **skills**: Resync repo mirrors from bundled canonical, fix 2 canonical errors (DA-3003) (#73)
+- **release**: Prepare v0.29.2
 
 
 ## [0.29.1] - 2026-09-25
