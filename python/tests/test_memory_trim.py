@@ -184,13 +184,13 @@ class TestExecuteTrimsExactlyOnce:
                 description="Sleeps past its budget",
                 input_schema={"type": "object"},
                 output_schema={"type": "object"},
-                timeout_seconds=0.2,
+                timeout_seconds=1,
             )
 
             def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
                 import time
 
-                time.sleep(1.0)
+                time.sleep(2.0)
                 return {}
 
         client = TestClient(create_node_app(SlowNode()), raise_server_exceptions=False)
