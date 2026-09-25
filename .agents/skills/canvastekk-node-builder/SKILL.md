@@ -762,7 +762,7 @@ Before considering a node complete, verify ALL of these:
 | `type: "object"` on file field | Use `type: "string"` — the value is a presigned URL string |
 | Hardcoding `/tmp/` output paths | Use `context.output_path(filename)` — SDK auto-creates and uploads |
 | Using `urllib` for downloads | Use `httpx` (SDK dependency, supports streaming/timeout/redirects) |
-| Not calling `validate_file_input()` | Always call after download: `self.definition.validate_file_input(field, path)` |
+| Calling `validate_file_input()` on auto-downloaded files | Auto-called by the SDK after download. Only call it yourself for manually downloaded files |
 | Definition inside `__init__()` | Must be a class-level attribute for `__init_subclass__` validation |
 | Missing `app = Node().create_app()` | Required at module level for uvicorn: `handler:app` |
 | Reading entire large file into memory | Use `httpx.stream()` with `iter_bytes(chunk_size=65536)` |

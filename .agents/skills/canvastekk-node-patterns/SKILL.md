@@ -850,8 +850,8 @@ def test_measurement_set_helpers():
     """Test MeasurementSet lookup helpers."""
     ms = MeasurementSet(
         measurements=[
-            Measurement(slug="height", value=2800.0, unit="mm"),
-            Measurement(slug="width", value=5000.0, unit="mm"),
+            Measurement(name="height", value=2800.0, unit="mm"),
+            Measurement(name="width", value=5000.0, unit="mm"),
         ],
     )
 
