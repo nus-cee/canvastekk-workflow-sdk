@@ -145,3 +145,11 @@ jobs:
             echo "::error::Add the 'major' label to acknowledge, or revert the breaking changes."
             exit 1
           fi
+
+  skill-mirror-guard:
+    name: Skill mirrors match bundled canonical
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: diff -r .agents/skills vs python/canvastekk_workflow_sdk/data/skills
+        run: diff -r .agents/skills python/canvastekk_workflow_sdk/data/skills

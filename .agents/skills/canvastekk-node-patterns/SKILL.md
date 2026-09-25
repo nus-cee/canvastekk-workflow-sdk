@@ -51,7 +51,6 @@ from canvastekk_workflow_sdk.contracts import (
 from canvastekk_workflow_sdk.exceptions import NodeExecutionError
 
 definition = WorkflowNodeManifest(
-    id="segment-v1.0.0",
     slug="segment",
     version="1.0.0",
     name="Point Cloud Segmentation",
@@ -185,7 +184,6 @@ from canvastekk_workflow_sdk.contracts import (
 from canvastekk_workflow_sdk.exceptions import NodeIOError
 
 definition = WorkflowNodeManifest(
-    id="measure-v1.0.0",
     slug="measure",
     version="1.0.0",
     name="Measurement",
@@ -306,7 +304,6 @@ from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeMani
 from canvastekk_workflow_sdk.contracts import Plane, PlaneSet, Point3D
 
 definition = WorkflowNodeManifest(
-    id="plane-detect-v1.0.0",
     slug="plane-detect",
     version="1.0.0",
     name="Plane Detection",
@@ -402,7 +399,6 @@ from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeMani
 from canvastekk_workflow_sdk.exceptions import NodeConfigurationError, NodeExecutionError
 
 definition = WorkflowNodeManifest(
-    id="infer-v1.0.0",
     slug="infer",
     version="1.0.0",
     name="Model Inference",
@@ -523,7 +519,6 @@ A pure data transform node with no file uploads/downloads.
 from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest
 
 definition = WorkflowNodeManifest(
-    id="uppercase-v1.0.0",
     slug="uppercase",
     version="1.0.0",
     name="Uppercase",
@@ -681,7 +676,6 @@ import httpx
 from canvastekk_workflow_sdk import BaseNode, ExecutionContext, WorkflowNodeManifest, WorkflowNodeStyles
 
 definition = WorkflowNodeManifest(
-    id="convert-v1.0.0",
     slug="convert",
     version="1.0.0",
     name="Format Converter",
@@ -939,6 +933,23 @@ def test_execute_with_mocked_download():
 | point  | Point3D       | Yes      | A point on the plane              |
 | normal | Point3D       | Yes      | Unit normal vector                |
 | label  | str or None   | No       | Optional label (e.g., "floor")    |
+
+## File-input download facts: `context.metadata`
+
+File inputs marked `"format": "file"` are auto-downloaded by the SDK before
+`execute()` — your handler receives a local path. After download+validation,
+the SDK records facts per field in `context.metadata` (see `base.py`):
+
+```python
+context.metadata[field_name] = {
+    "original_url": value,       # the input URL string
+    "local_path": str(local_path),
+    "size_bytes": file_size,
+}
+```
+
+Read these in `execute()` for audit trails or size-based branching. Manual
+`httpx.stream()` downloads are for non-file URLs only.
 
 ## Upload targets: `str | UploadSession`
 

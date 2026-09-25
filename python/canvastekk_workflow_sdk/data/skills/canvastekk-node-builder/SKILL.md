@@ -123,7 +123,6 @@ from canvastekk_workflow_sdk import WorkflowNodeManifest, RetryConfig, WorkflowN
 
 definition = WorkflowNodeManifest(
     # === REQUIRED ===
-    id="segment-v1.0.0",              # Unique: "{name}-v{version}"
     slug="segment",                    # Slug for routing (lowercase, hyphens)
     version="1.0.0",                   # Semantic version
     name="Point Cloud Segmentation",  # Human-readable title
