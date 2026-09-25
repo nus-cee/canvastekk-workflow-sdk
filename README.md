@@ -408,6 +408,10 @@ cp -r .agents/skills/canvastekk-node-patterns ~/.agents/skills/
 rm -rf .agents
 ```
 
+> **Upgrading from an SDK version that scaffolded `.opencode/skills/`?**
+> Remove the legacy copy first (`rm -rf .opencode/skills`), otherwise both
+> copies stay discoverable and coding agents see each skill twice.
+
 ## Examples
 
 | Example | Directory | Description |

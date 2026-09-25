@@ -11,7 +11,8 @@
 - [x] No skill body requires OpenCode-only tools or subagents without a harness-agnostic fallback line
 - [x] No remaining `.opencode/skills` path strings in tracked in-scope files (historical `PLANS/*` excluded)
 - [x] `_init_skills` scaffolds consumer skills into `.agents/skills` (code change, not docs)
-- [ ] Repo gates green (ruff + pytest); global-shadow check for the 2 IDs documented; pi discovery spot-check — ruff+build green, shadow check clean; pytest inconclusive locally (pre-existing missing deps), closes via CI; live pi check N/A (binary absent)
+- [x] Repo gates green (ruff + pytest); global-shadow check for the 2 IDs documented; pi discovery spot-check — ruff+build green, shadow check clean; pytest inconclusive locally (pre-existing missing deps), closes via CI; live pi check N/A (binary absent)
+- [x] Code review (DA-2982 Step 9): 0 Critical / 1 Major / 2 Minor — Major fixed in review-fix commit (README upgrader note); Minors documented as follow-up candidates (repo-vs-bundled skill drift incl. deprecated vocabulary; missing init-dest test); LEARNINGS candidates landed
 - [x] `README.md` install/layout instructions point at `.agents/skills`
 
 ## Dependency & Consumer Map
@@ -69,6 +70,7 @@
 GATE d4f313f tier=light lint=t typecheck=- build=- unit=inconclusive e2e=- (Phase 1: md-only after body-restore fix; ruff pass)
 GATE phase2 tier=light lint=t typecheck=- build=- unit=inconclusive e2e=- (ruff pass; py_compile pass; pytest INCONCLUSIVE: all 25 test modules fail collection on missing ambient deps — identical on pristine origin/main; change is string-literal-only)
 GATE EXIT tier=full lint=t typecheck=- build=t unit=inconclusive e2e=- (ruff pass; poetry build pass — wheel ships bundled data; pytest inconclusive pre-existing, CI-covered; backend-only, no Playwright)
+GATE c78c75a tier=full lint=t typecheck=- build=t unit=inconclusive e2e=- (post-review fix: README upgrader note + 2 LEARNINGS; ruff pass, py_compile pass, poetry build pass)
 
 ### Phase 3: Gates and verification
 - [x] **3.1** Run repo gates: `ruff check python` + `pytest` (from `python/`)
