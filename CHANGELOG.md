@@ -2,11 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.30.2] - 2026-09-25
+
+### Documentation
+
+- **typescript**: WASM worker pattern for heavy nodes (DA-3010) (#78)
+
+
 ## [0.30.1] - 2026-09-25
 
 ### Miscellaneous Tasks
 
 - **skills**: Add skill-mirror drift guard; canonical example cleanup (DA-3026) (#77)
+- **release**: Prepare v0.30.1
 
 
 ## [0.30.0] - 2026-09-25
