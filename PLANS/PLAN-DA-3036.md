@@ -8,7 +8,8 @@
 
 - [x] Zero bare `poetry` invocations in `.github/workflows/ci-python.yml` and `release.yml` (all become `python -m poetry ...`)
 - [x] Zero unpinned / <2.2 installs: ci-python.yml :38,:105 and release.yml :53 all read `pip install "poetry>=2.2"`
-- [x] Both workflow YAMLs parse; local gates green (ruff + full pytest + poetry build); PR CI green
+- [x] Both workflow YAMLs parse; local gates green (ruff + full pytest + poetry build)
+- [ ] PR CI green — ci-python.yml is validated by the PR run; release.yml triggers on push to main only, so its first real run is the next release (post-merge); noted as accepted residual
 
 ## Dependency & Consumer Map
 
@@ -44,13 +45,15 @@
     — **Consumers affected:** release pipeline
 
 ### Phase 3: Gates
-- [x] **3.1** `yaml.safe_load` both files; grep assertions (0 bare, 0 unpinned, 0 `1.8.5`); ruff + full pytest + `poetry build` from `python/`
+- [x] **3.1** `yaml.safe_load` both files; grep assertions (0 bare, 0 unpinned, 0 `1.8.5`); ruff + full pytest + `poetry build` from `python/` — re-run after lock regen: 732 passed
     — **Why:** workflow-only diff; PR CI self-validates, local gates prove nothing else broke
     — **Done when:** all green
     — **Consumers affected:** release workflow
     — **Done:** YAML valid x2; GATES-PASS (poetry install + full pytest suite + wheel 0.30.1 built) via background run after 2 env restarts; files: none; fixes: none
 
 ## Technical Notes
+- **Lock-regen policy (review WARN1):** release step uses `python -m poetry lock --regenerate` — behavior-identical to the 1.8.5 step (full re-resolve at release). Poetry 2.x bare `lock` defaults to no-update, which would have silently frozen transitive deps. Pinning-at-release remains a possible future policy change (follow-up ticket material), NOT smuggled into this standardization.
+- **Reviewed lock-format regen (review WARN2):** python/poetry.lock regenerated with poetry 2.4.1 (format 2.0 → 2.1) IN this PR — diff is format/hash-only, zero version changes (verified); removes the 2.x-CI-reads-1.x-lock window from every schema-stability run.
 - `python -m poetry` requires install and invocation to share the interpreter — guaranteed by `actions/setup-python@v6` pinning 3.12 in every job that uses poetry.
 - Release lock regen with poetry 2.x may rewrite `poetry.lock` format on the next release run — expected and one-time (consumers are all 2.x).
 
@@ -62,4 +65,4 @@
 
 ## Gate trace
 
-GATE full lint=- typecheck=- build=t unit=t e2e=- workflow=CI-self-validating (ruff+721-suite+wheel ran clean in python/; YAML safe_load x2; exit gate = PR CI exercising the changed workflows)
+GATE reviewfix tier=full lint=- typecheck=- build=t unit=t e2e=- workflow=CI-self-validating (post-lock-regen: poetry install + FULL suite 732 passed + wheel 0.30.1; lock 2.4.1 format-only regen, zero version drift; YAML x2; release.yml gated at next release — push-only trigger)
