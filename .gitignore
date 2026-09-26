@@ -5,7 +5,7 @@ __pycache__/
 *.egg
 dist/
 build/
-.venv/
+.venv*/
 .ruff_cache/
 .pytest_cache/
 *.so
