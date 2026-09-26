@@ -2,11 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.31.0] - 2026-09-26
+
+### Features
+
+- **cli**: Registry-convergence subcommand (DA-3086) (#80)
+
+
 ## [0.30.3] - 2026-09-26
 
 ### Miscellaneous Tasks
 
 - Standardize poetry — >=2.2 floor + python -m poetry module invocation (DA-3036) (#79)
+- **release**: Prepare v0.30.3
 
 
 ## [0.30.2] - 2026-09-25
