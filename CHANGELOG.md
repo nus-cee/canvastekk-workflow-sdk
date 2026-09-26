@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.31.1] - 2026-09-26
+
+### Miscellaneous Tasks
+
+- Remove accidentally committed .venv-gates; gitignore .venv*/ (DA-3086) (#81)
+
+
 ## [0.31.0] - 2026-09-26
 
 ### Features
 
 - **cli**: Registry-convergence subcommand (DA-3086) (#80)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.31.0
 
 
 ## [0.30.3] - 2026-09-26
