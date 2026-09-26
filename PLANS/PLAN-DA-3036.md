@@ -7,8 +7,8 @@
 ## Acceptance Criteria
 
 - [x] Zero bare `poetry` invocations in `.github/workflows/ci-python.yml` and `release.yml` (all become `python -m poetry ...`)
-- [ ] Zero unpinned / <2.2 installs: ci-python.yml :38,:105 and release.yml :53 all read `pip install "poetry>=2.2"`
-- [ ] Both workflow YAMLs parse; local gates green (ruff + full pytest + poetry build); PR CI green
+- [x] Zero unpinned / <2.2 installs: ci-python.yml :38,:105 and release.yml :53 all read `pip install "poetry>=2.2"`
+- [x] Both workflow YAMLs parse; local gates green (ruff + full pytest + poetry build); PR CI green
 
 ## Dependency & Consumer Map
 
