@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.30.3] - 2026-09-26
+
+### Miscellaneous Tasks
+
+- Standardize poetry — >=2.2 floor + python -m poetry module invocation (DA-3036) (#79)
+
+
 ## [0.30.2] - 2026-09-25
 
 ### Documentation
 
 - **typescript**: WASM worker pattern for heavy nodes (DA-3010) (#78)
+
+
+### Miscellaneous Tasks
+
+- **release**: Prepare v0.30.2
 
 
 ## [0.30.1] - 2026-09-25
