@@ -50,12 +50,12 @@ jobs:
 
       - name: Install Poetry
         if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
-        run: pip install poetry==1.8.5
+        run: pip install "poetry>=2.2"
 
       - name: Update poetry.lock
         if: steps.git-cliff.outputs.version != '' && hashFiles('python/pyproject.toml') != ''
         working-directory: python
-        run: poetry lock
+        run: python -m poetry lock
 
       - name: Commit, tag and push
         if: steps.git-cliff.outputs.version != ''
@@ -118,8 +118,7 @@ jobs:
           rm -rf dist/
 
           # Build wheel from the tagged commit
-          poetry build
-
+          python -m poetry build
           # Verify the built wheel contains expected symbols (prevents stale wheel bug [DA-1302])
           echo "Verifying wheel contents..."
           WHEEL_FILE=$(ls dist/*.whl)
