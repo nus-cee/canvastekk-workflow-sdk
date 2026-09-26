@@ -7,7 +7,14 @@ import json
 from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 
-from canvastekk_workflow_sdk.__main__ import _build_engine_request, _probe_definition, _run_register
+import pytest
+
+from canvastekk_workflow_sdk.__main__ import (
+    _build_engine_request,
+    _probe_definition,
+    _run_register,
+    main,
+)
 from canvastekk_workflow_sdk.definition import WorkflowNodeManifest
 
 
@@ -216,3 +223,31 @@ class TestRegisterManifestFileInput:
     def test_manifest_missing_file_is_usage_error(self, tmp_path) -> None:
         with patch.dict("os.environ", {"CANVASTEKK_REGISTRY_TOKEN": "t"}):
             assert _run_register(["--manifest", str(tmp_path / "nope.json"), "--engine-url", "https://eng"]) == 2
+
+
+class TestRegistryConvergenceCommand:
+    """DA-3086: the registry-convergence subcommand routes to convergence.main."""
+
+    def test_help_exits_zero(self, capsys) -> None:
+        from canvastekk_workflow_sdk.convergence import main as convergence_main
+
+        with pytest.raises(SystemExit) as exc:
+            convergence_main(["--help"])
+        assert exc.value.code == 0
+        assert "--registry-base" in capsys.readouterr().out
+
+    def test_missing_required_args_exit_2(self) -> None:
+        from canvastekk_workflow_sdk.convergence import main as convergence_main
+
+        with pytest.raises(SystemExit) as exc:
+            convergence_main([])
+        assert exc.value.code == 2
+
+    def test_dispatch_delegates_with_argv(self, capsys) -> None:
+        from unittest.mock import patch
+
+        with patch("sys.argv", ["prog", "registry-convergence", "--help"]):
+            with pytest.raises(SystemExit) as exc:
+                main()
+        assert exc.value.code == 0
+        assert "--registry-base" in capsys.readouterr().out

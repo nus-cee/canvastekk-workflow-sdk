@@ -26,22 +26,26 @@ Key wiring facts (re-verified at origin/dev 2026-09-26, arch review F2): all thr
 ## Implementation Phases
 
 ### Phase 1: SDK subcommand
-- [ ] **1.1** Port the reference wholesale into `python/canvastekk_workflow_sdk/convergence.py` (zero logic changes: pagination, HEAD-ancestry history, invoke_url ownership, post-drain snapshot assert; argparse `main(argv)`; stdlib-only; token env `REGISTRY_SERVICE_TOKEN` preserved so the three workflow steps need no env change). Update the docstring to SDK absorption lineage (DA-3070 → DA-3071 → DA-3084 → DA-3086) and drop the per-repo framing.
+- [x] **1.1** Port the reference wholesale into `python/canvastekk_workflow_sdk/convergence.py` (zero logic changes: pagination, HEAD-ancestry history, invoke_url ownership, post-drain snapshot assert; argparse `main(argv)`; stdlib-only; token env `REGISTRY_SERVICE_TOKEN` preserved so the three workflow steps need no env change). Update the docstring to SDK absorption lineage (DA-3070 → DA-3071 → DA-3084 → DA-3086) and drop the per-repo framing.
     — **Why:** wholesale port satisfies the no-behavior-change AC; stdlib-only keeps the runner property.
     — **Done when:** module imports clean; docstring cites the lineage.
     — **Consumers affected:** CLI dispatch, tests, 3 deploy workflows.
-- [ ] **1.2** Wire the dispatch in `__main__.py`: `registry-convergence` → `convergence.main(argv)`; add the command to the top-level usage/help text and module docstring. Follow the `_run_register` conventions (help listing; exit codes: 0 ok · 1 assert failure/unhandled · 2 usage/token — arch F5: do NOT normalize the ported codes or streams; `::error::` stays on stdout).
+    — **Done:** wholesale port 249 lines, docstring lineage DA-3070→3071→3084→3086, zero logic changes; files: python/canvastekk_workflow_sdk/convergence.py; fixes: none
+- [x] **1.2** Wire the dispatch in `__main__.py`: `registry-convergence` → `convergence.main(argv)`; add the command to the top-level usage/help text and module docstring. Follow the `_run_register` conventions (help listing; exit codes: 0 ok · 1 assert failure/unhandled · 2 usage/token — arch F5: do NOT normalize the ported codes or streams; `::error::` stays on stdout).
     — **Why:** "next to register" — same entry point, same operator ergonomics.
     — **Done when:** `python -m canvastekk_workflow_sdk --help` lists it; `registry-convergence --help` works.
     — **Consumers affected:** CLI users; 3 workflows post-repin.
-- [ ] **1.3** Port the test matrix to `python/tests/test_convergence.py` (imports `canvastekk_workflow_sdk.convergence`): canonical parse edges, four-clause drain matrix, pagination, 404-tolerant DELETE, dry-run, git-history union (git via subprocess — present in CI), post-drain snapshot assert pass/fail. Add CLI dispatch tests to `python/tests/test_cli_register.py` (arch F6 — test_main.py doesn't exist): routing, `registry-convergence --help` exit 0, missing-required-arg exit 2. No --json tests (the port has no --json flag).
+    — **Done:** dispatch + help + module docstring wired; exit codes documented 0/1/2 (F5); files: python/canvastekk_workflow_sdk/__main__.py; fixes: none
+- [x] **1.3** Port the test matrix to `python/tests/test_convergence.py` (imports `canvastekk_workflow_sdk.convergence`): canonical parse edges, four-clause drain matrix, pagination, 404-tolerant DELETE, dry-run, git-history union (git via subprocess — present in CI), post-drain snapshot assert pass/fail. Add CLI dispatch tests to `python/tests/test_cli_register.py` (arch F6 — test_main.py doesn't exist): routing, `registry-convergence --help` exit 0, missing-required-arg exit 2. No --json tests (the port has no --json flag).
     — **Why:** ticket AC — tests cover drain/assert semantics.
     — **Done when:** suite passes locally; matrix covers the invariants (ownership scoping + post-drain snapshot).
     — **Consumers affected:** CI.
-- [ ] **1.4** Gates from `python/` (AGENTS.md:39): `poetry run ruff check canvastekk_workflow_sdk/ tests/` + `poetry run pytest -v` (full suite).
+    — **Done:** 21 semantics tests ported 1:1 (drift guard dropped) + 3 dispatch tests in test_cli_register.py (F6); files: python/tests/test_convergence.py, test_cli_register.py; fixes: none
+- [x] **1.4** Gates from `python/` (AGENTS.md:39): `poetry run ruff check canvastekk_workflow_sdk/ tests/` + `poetry run pytest -v` (full suite).
     — **Why:** repo's gate contract.
     — **Done when:** both exit 0.
     — **Consumers affected:** none.
+    — **Done:** ruff clean + full suite 755 passed/0 failed (venv-gates, poetry-equivalent commands); files: none (gate run); fixes: none
 
 ### Phase 2: SDK PR → merge → release
 - [ ] **2.1** Commit `feat(cli): registry-convergence subcommand (DA-3086)` (git-cliff minor bump → v0.31.0), PR to main, merge; verify release.yml produces v0.31.0 with the wheel asset named `canvastekk_workflow_sdk-0.31.0-py3-none-any.whl`.
@@ -82,6 +86,10 @@ Key wiring facts (re-verified at origin/dev 2026-09-26, arch review F2): all thr
 
 ## Plan Revisions (arch review 2026-09-26, REQUEST-CHANGES disposition)
 F1 IFC flag rewrite + gate wording · F2 wiring facts re-verified at origin/dev (all pins v0.30.0; CWN workflow URL v0.28.1 drift noted) · F3 poetry.lock regen in every repin PR · F4 CRS scaffold skill reseed fix · F5 exit-code/doc wording (no normalization) · F6 dispatch tests → test_cli_register.py · F7 CWN keeps scripts/__init__.py · F8 wheel content verification · F9 grep scoping.
+
+## Gate Trace
+
+GATE phase1 tier=full lint=t(ruff) typecheck=- build=- unit=t(pytest 755-passed) e2e=n.a — SDK python package
 
 ## Risks & Mitigation
 - Semantic drift in port → wholesale copy, tests ported 1:1, diff reviewed against reference.

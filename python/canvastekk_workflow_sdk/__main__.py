@@ -2,6 +2,7 @@
 
 Usage:
     python -m canvastekk_workflow_sdk validate <module_path> [--json]
+    python -m canvastekk_workflow_sdk registry-convergence --registry-base URL --invoke-base URL --slugs-file PATH
     python -m canvastekk_workflow_sdk init [--agents-md] [--force]
 """
 
@@ -533,6 +534,10 @@ def main() -> None:
             "  register <module:attribute> --engine-url URL [--invoke-url URL] [--name-suffix S] [--json]"
         )
         print("                                        Publish the manifest to the engine registry")
+        print(
+            "  registry-convergence --registry-base URL --invoke-base URL --slugs-file PATH"
+        )
+        print("                                        [--staged S] [--dry-run] — drain retired slugs and assert staged presence")
         print("  diff <old.json> <new.json> [--json]   Classify breaking changes between manifests")
         print("  init [--agents-md] [--force]          Scaffold AI agent skills into your project")
         print()
@@ -552,6 +557,11 @@ def main() -> None:
 
     if args[0] == "register":
         sys.exit(_run_register(args[1:]))
+
+    if args[0] == "registry-convergence":
+        from canvastekk_workflow_sdk.convergence import main as _convergence_main
+
+        sys.exit(_convergence_main(args[1:]))
 
     if args[0] == "diff":
         sys.exit(_run_diff(args[1:]))
